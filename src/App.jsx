@@ -483,6 +483,9 @@ export default function CuentaClaraApp() {
   const [goalForm, setGoalForm] = useState({ name: '', targetAmount: '', targetDate: '' });
   const [contributionInputs, setContributionInputs] = useState({});
 
+  const [pinForm, setPinForm] = useState({ newPin: '', confirmPin: '' });
+  const [pinMessage, setPinMessage] = useState(null); // { kind: 'success' | 'error', text }
+
   /* ---------- Carga inicial ---------- */
   useEffect(() => {
     (async () => {
@@ -718,6 +721,26 @@ export default function CuentaClaraApp() {
       }
       return next;
     });
+  }
+
+  async function handleSetPin(e) {
+    e.preventDefault();
+    setPinMessage(null);
+    if (!/^\d{6}$/.test(pinForm.newPin)) {
+      setPinMessage({ kind: 'error', text: 'El PIN debe tener exactamente 6 dígitos.' });
+      return;
+    }
+    if (pinForm.newPin !== pinForm.confirmPin) {
+      setPinMessage({ kind: 'error', text: 'Los dos PIN no coinciden.' });
+      return;
+    }
+    const { error } = await supabase.auth.updateUser({ password: pinForm.newPin });
+    if (error) {
+      setPinMessage({ kind: 'error', text: error.message });
+    } else {
+      setPinForm({ newPin: '', confirmPin: '' });
+      setPinMessage({ kind: 'success', text: 'Listo, tu PIN quedó configurado. La próxima vez entra con él.' });
+    }
   }
 
   function handleResetAll() {
@@ -1230,6 +1253,41 @@ export default function CuentaClaraApp() {
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="cc-card" style={{ marginTop: 16 }}>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>PIN de acceso</div>
+          <p className="cc-stat-sub" style={{ marginBottom: 12 }}>
+            Configura o cambia el PIN de 6 dígitos con el que entras a la app.
+          </p>
+          <form onSubmit={handleSetPin} style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 260 }}>
+            <div className="cc-field">
+              <label>Nuevo PIN</label>
+              <input
+                className="cc-input"
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                value={pinForm.newPin}
+                onChange={(e) => setPinForm((f) => ({ ...f, newPin: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
+              />
+            </div>
+            <div className="cc-field">
+              <label>Confirmar PIN</label>
+              <input
+                className="cc-input"
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                value={pinForm.confirmPin}
+                onChange={(e) => setPinForm((f) => ({ ...f, confirmPin: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
+              />
+            </div>
+            <button type="submit" className="cc-btn cc-btn-primary" style={{ alignSelf: 'flex-start' }}>Guardar PIN</button>
+            {pinMessage && (
+              <p style={{ fontSize: 13, color: pinMessage.kind === 'success' ? COLORS.income : COLORS.expense }}>{pinMessage.text}</p>
+            )}
+          </form>
         </div>
       </>
     );
