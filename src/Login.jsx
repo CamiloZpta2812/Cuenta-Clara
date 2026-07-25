@@ -1,38 +1,29 @@
 import React, { useState } from 'react';
 import { supabase } from './supabaseClient';
 
-const LAST_EMAIL_KEY = 'cuenta-clara-ultimo-correo';
+const APP_EMAIL = import.meta.env.VITE_APP_EMAIL;
 
 export default function Login() {
-  const [email, setEmail] = useState(() => {
-    try {
-      return localStorage.getItem(LAST_EMAIL_KEY) || '';
-    } catch {
-      return '';
-    }
-  });
-  const [sent, setSent] = useState(false);
+  const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    if (pin.length !== 6) {
+      setError('El PIN debe tener 6 dígitos.');
+      return;
+    }
+    if (!APP_EMAIL) {
+      setError('Falta configurar VITE_APP_EMAIL en las variables de entorno.');
+      return;
+    }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.origin },
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email: APP_EMAIL, password: pin });
     setLoading(false);
     if (error) {
-      setError(error.message);
-    } else {
-      try {
-        localStorage.setItem(LAST_EMAIL_KEY, email);
-      } catch {
-        // Si el navegador bloquea localStorage, simplemente no recordamos el correo.
-      }
-      setSent(true);
+      setError('PIN incorrecto. Intenta de nuevo.');
     }
   }
 
@@ -53,52 +44,51 @@ export default function Login() {
           background: '#fff',
           borderRadius: 14,
           padding: '32px 28px',
-          maxWidth: 360,
+          maxWidth: 320,
           width: '100%',
           boxShadow: '0 6px 18px rgba(32,43,56,.08)',
         }}
       >
         <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 22, margin: '0 0 4px 0' }}>Cuenta Clara</h1>
         <p style={{ color: '#5B6570', fontSize: 13.5, margin: '0 0 20px 0' }}>
-          Ingresa tu correo y te enviamos un enlace para entrar sin contraseña.
+          Ingresa tu PIN de 6 dígitos para entrar.
         </p>
-        {sent ? (
-          <p style={{ fontSize: 14 }}>
-            Revisa tu correo <strong>{email}</strong> y toca el enlace para entrar. Puedes cerrar esta pestaña.
-          </p>
-        ) : (
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <input
-              type="email"
-              required
-              placeholder="tu@correo.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={{
-                padding: '10px 12px',
-                borderRadius: 8,
-                border: '1px solid #DCD8C4',
-                fontSize: 14,
-              }}
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                padding: '10px 12px',
-                borderRadius: 8,
-                border: 'none',
-                background: '#202B38',
-                color: '#fff',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              {loading ? 'Enviando...' : 'Enviar enlace de acceso'}
-            </button>
-            {error ? <p style={{ color: '#B0524B', fontSize: 13 }}>{error}</p> : null}
-          </form>
-        )}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <input
+            type="password"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={6}
+            required
+            placeholder="••••••"
+            value={pin}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            style={{
+              padding: '10px 12px',
+              borderRadius: 8,
+              border: '1px solid #DCD8C4',
+              fontSize: 22,
+              letterSpacing: 6,
+              textAlign: 'center',
+            }}
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              padding: '10px 12px',
+              borderRadius: 8,
+              border: 'none',
+              background: '#202B38',
+              color: '#fff',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {loading ? 'Entrando...' : 'Entrar'}
+          </button>
+          {error ? <p style={{ color: '#B0524B', fontSize: 13 }}>{error}</p> : null}
+        </form>
       </div>
     </div>
   );
