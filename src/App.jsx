@@ -7,7 +7,7 @@ import {
   LayoutDashboard, ArrowLeftRight, CreditCard, PiggyBank, Plus, Trash2,
   AlertTriangle, TrendingUp, TrendingDown, Wallet, Utensils, Car, Home,
   Film, HeartPulse, GraduationCap, Zap, ShoppingBag, MoreHorizontal,
-  Briefcase, Laptop, CircleDollarSign, Check, Loader2, X, Landmark, Banknote,
+  Briefcase, Laptop, CircleDollarSign, Check, Loader2, X, Landmark, Banknote, Pencil, Settings,
 } from 'lucide-react';
 import { getItem, setItem } from './storage';
 import { supabase } from './supabaseClient';
@@ -45,6 +45,7 @@ const INCOME_CATEGORIES = [
 ];
 
 const ALL_CATEGORIES = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES];
+let categoryLabelOverrides = {};
 const MONTH_NAMES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const STORAGE_KEY = 'cuenta-clara-datos';
 
@@ -91,52 +92,12 @@ function fmtShort(n) {
   return `${Math.round(n)}`;
 }
 function getCategory(id) {
-  return ALL_CATEGORIES.find((c) => c.id === id) || EXPENSE_CATEGORIES[EXPENSE_CATEGORIES.length - 1];
+  const found = ALL_CATEGORIES.find((c) => c.id === id) || EXPENSE_CATEGORIES[EXPENSE_CATEGORIES.length - 1];
+  const customLabel = categoryLabelOverrides[found.id];
+  return customLabel ? { ...found, label: customLabel } : found;
 }
 function getPaymentMethod(id) {
   return PAYMENT_METHODS.find((p) => p.id === id) || PAYMENT_METHODS[0];
-}
-
-/* Datos de ejemplo tomados del extracto de junio 2026 anexado, para que puedas ver
-   cómo luce la pestaña de Tarjetas. Puedes editarlos o borrarlos cuando quieras. */
-function buildSeedData() {
-  const cardId = 'card-bancolombia-1679';
-  const card = { id: cardId, name: 'Bancolombia Mastercard', lastFour: '1679' };
-
-  const purchases = [
-    { date: '2026-06-02', desc: 'People Aventura', category: 'entretenimiento', amount: 108000 },
-    { date: '2026-06-04', desc: 'Pasarela Colombia', category: 'compras', amount: 165000 },
-    { date: '2026-06-15', desc: "Tostao Café y Pan", category: 'alimentacion', amount: 18240 },
-    { date: '2026-06-15', desc: 'Tiendas Ara', category: 'alimentacion', amount: 26900 },
-    { date: '2026-06-16', desc: 'Cinemas Monterrey', category: 'entretenimiento', amount: 103800 },
-    { date: '2026-06-16', desc: 'EDS Norte (gasolina)', category: 'transporte', amount: 20000 },
-    { date: '2026-06-17', desc: 'BC/Babalú Puerta del Norte', category: 'entretenimiento', amount: 94000 },
-    { date: '2026-06-18', desc: 'EDS Norte (gasolina)', category: 'transporte', amount: 20000 },
-    { date: '2026-06-20', desc: 'BC/Babalú Puerta del Norte', category: 'entretenimiento', amount: 117000 },
-    { date: '2026-06-20', desc: 'Éxito Bello', category: 'alimentacion', amount: 50300 },
-    { date: '2026-06-20', desc: "Repostería Pepo's Cake", category: 'alimentacion', amount: 58000 },
-    { date: '2026-06-22', desc: 'EDS Autopista Norte (gasolina)', category: 'transporte', amount: 20000 },
-    { date: '2026-06-22', desc: 'Finca Urbana Pets', category: 'compras', amount: 20700 },
-  ];
-  const transactions = purchases.map((p) => ({
-    id: uid(), type: 'gasto', category: p.category, amount: p.amount, date: p.date, note: p.desc, paymentMethod: 'credito', cardId, isFixed: false,
-  }));
-  transactions.push({ id: uid(), type: 'gasto', category: 'servicios', amount: 50960, date: '2026-06-30', note: 'Cuota de manejo', paymentMethod: 'credito', cardId, isFixed: true });
-  transactions.push({ id: uid(), type: 'gasto', category: 'deudas', amount: 154368.64, date: '2026-06-30', note: 'Intereses corrientes', paymentMethod: 'credito', cardId, isFixed: false });
-  transactions.push({ id: uid(), type: 'gasto', category: 'deudas', amount: 211782.04, date: '2026-06-03', note: 'Ajuste intereses/comisión', paymentMethod: 'credito', cardId, isFixed: false });
-
-  const debts = [{
-    id: uid(),
-    name: 'Tarjeta de crédito Bancolombia *1679',
-    totalAmount: 7404067.69,
-    interestRate: 2.0849,
-    monthlyPayment: 617005.64,
-    dueDay: 16,
-    startDate: '2026-06-01',
-    payments: [{ id: uid(), amount: 617005.64, date: '2026-06-01' }],
-  }];
-
-  return { transactions, debts, savingsGoals: [], creditCards: [card] };
 }
 
 function buildRecommendations(transactions, debts, savingsGoals) {
@@ -448,6 +409,7 @@ function Sidebar({ activeTab, onChangeTab, onReset, onSignOut, userEmail }) {
     { id: 'tarjetas', label: 'Tarjetas', Icon: Landmark },
     { id: 'deudas', label: 'Deudas', Icon: CreditCard },
     { id: 'ahorros', label: 'Ahorros', Icon: PiggyBank },
+    { id: 'categorias', label: 'Categorías', Icon: Settings },
   ];
   return (
     <div className="cc-sidebar">
@@ -499,14 +461,18 @@ export default function CuentaClaraApp() {
   const [debts, setDebts] = useState([]);
   const [savingsGoals, setSavingsGoals] = useState([]);
   const [creditCards, setCreditCards] = useState([]);
+  const [categoryLabels, setCategoryLabels] = useState({});
+  categoryLabelOverrides = categoryLabels;
 
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey());
 
   const [showTxForm, setShowTxForm] = useState(false);
+  const [editingTxId, setEditingTxId] = useState(null);
   const [txForm, setTxForm] = useState({ type: 'gasto', amount: '', category: 'alimentacion', date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false });
   const [txFilters, setTxFilters] = useState({ type: 'todos', month: 'todos', category: 'todas', paymentMethod: 'todos', fixed: 'todos' });
 
   const [showCardForm, setShowCardForm] = useState(false);
+  const [editingCardId, setEditingCardId] = useState(null);
   const [cardForm, setCardForm] = useState({ name: '', lastFour: '' });
 
   const [showDebtForm, setShowDebtForm] = useState(false);
@@ -528,20 +494,19 @@ export default function CuentaClaraApp() {
           setDebts((data.debts || []).map((d) => ({ ...d, payments: d.payments || [] })));
           setSavingsGoals((data.savingsGoals || []).map((g) => ({ ...g, contributions: g.contributions || [] })));
           setCreditCards(data.creditCards || []);
+          setCategoryLabels(data.categoryLabels || {});
         } else {
-          const seed = buildSeedData();
-          setTransactions(seed.transactions);
-          setDebts(seed.debts);
-          setSavingsGoals(seed.savingsGoals);
-          setCreditCards(seed.creditCards);
+          setTransactions([]);
+          setDebts([]);
+          setSavingsGoals([]);
+          setCreditCards([]);
         }
       } catch (err) {
-        // No hay datos guardados todavía, se empieza con el ejemplo del extracto.
-        const seed = buildSeedData();
-        setTransactions(seed.transactions);
-        setDebts(seed.debts);
-        setSavingsGoals(seed.savingsGoals);
-        setCreditCards(seed.creditCards);
+        // No hay datos guardados todavía; se empieza con la app vacía.
+        setTransactions([]);
+        setDebts([]);
+        setSavingsGoals([]);
+        setCreditCards([]);
       } finally {
         setLoading(false);
       }
@@ -553,13 +518,13 @@ export default function CuentaClaraApp() {
     if (loading) return;
     (async () => {
       try {
-        await setItem(STORAGE_KEY, JSON.stringify({ transactions, debts, savingsGoals, creditCards }));
+        await setItem(STORAGE_KEY, JSON.stringify({ transactions, debts, savingsGoals, creditCards, categoryLabels }));
         setSaveError(false);
       } catch (err) {
         setSaveError(true);
       }
     })();
-  }, [transactions, debts, savingsGoals, creditCards, loading]);
+  }, [transactions, debts, savingsGoals, creditCards, categoryLabels, loading]);
 
   /* ---------- Datos derivados ---------- */
   const monthsWindow = useMemo(() => getLastMonthKeys(6, currentMonthKey()), []);
@@ -603,7 +568,7 @@ export default function CuentaClaraApp() {
       const c = getCategory(id);
       return { name: c.label, value, color: c.color };
     }).sort((a, b) => b.value - a.value);
-  }, [transactions, selectedMonth]);
+  }, [transactions, selectedMonth, categoryLabels]);
 
   const equityEvolution = useMemo(() => monthsWindow.map((key) => {
     const ahorro = savingsGoals.reduce((sum, g) => sum + g.contributions.filter((c) => monthKeyFromDate(c.date) <= key).reduce((s, c) => s + c.amount, 0), 0);
@@ -623,10 +588,10 @@ export default function CuentaClaraApp() {
     .filter((t) => txFilters.fixed === 'todos' || (txFilters.fixed === 'fijo' ? t.isFixed : !t.isFixed))
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)), [transactions, txFilters]);
 
-  const recommendations = useMemo(() => buildRecommendations(transactions, debts, savingsGoals), [transactions, debts, savingsGoals]);
+  const recommendations = useMemo(() => buildRecommendations(transactions, debts, savingsGoals), [transactions, debts, savingsGoals, categoryLabels]);
   const status = getStatus(selMonthIncome, selMonthExpense);
-  const txFilterCategories = txFilters.type === 'ingreso' ? INCOME_CATEGORIES : txFilters.type === 'gasto' ? EXPENSE_CATEGORIES : ALL_CATEGORIES;
-  const txFormCategories = txForm.type === 'gasto' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+  const txFilterCategories = (txFilters.type === 'ingreso' ? INCOME_CATEGORIES : txFilters.type === 'gasto' ? EXPENSE_CATEGORIES : ALL_CATEGORIES).map((c) => getCategory(c.id));
+  const txFormCategories = (txForm.type === 'gasto' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES).map((c) => getCategory(c.id));
 
   /* ---------- Acciones ---------- */
   function handleAddTransaction(e) {
@@ -634,8 +599,7 @@ export default function CuentaClaraApp() {
     const amt = parseFloat(txForm.amount);
     if (!amt || amt <= 0) return;
     const isGasto = txForm.type === 'gasto';
-    setTransactions((prev) => [...prev, {
-      id: uid(),
+    const built = {
       type: txForm.type,
       amount: amt,
       category: txForm.category,
@@ -644,9 +608,34 @@ export default function CuentaClaraApp() {
       paymentMethod: isGasto ? txForm.paymentMethod : null,
       cardId: isGasto && txForm.paymentMethod === 'credito' ? (txForm.cardId || null) : null,
       isFixed: isGasto ? !!txForm.isFixed : false,
-    }]);
+    };
+    if (editingTxId) {
+      setTransactions((prev) => prev.map((t) => (t.id === editingTxId ? { ...t, ...built } : t)));
+      setEditingTxId(null);
+    } else {
+      setTransactions((prev) => [...prev, { id: uid(), ...built }]);
+    }
     setTxForm({ type: txForm.type, amount: '', category: txForm.type === 'gasto' ? EXPENSE_CATEGORIES[0].id : INCOME_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false });
     setShowTxForm(false);
+  }
+  function handleEditTransaction(t) {
+    setTxForm({
+      type: t.type,
+      amount: String(t.amount),
+      category: t.category,
+      date: t.date,
+      note: t.note || '',
+      paymentMethod: t.paymentMethod || 'efectivo',
+      cardId: t.cardId || '',
+      isFixed: !!t.isFixed,
+    });
+    setEditingTxId(t.id);
+    setShowTxForm(true);
+  }
+  function handleCancelTxForm() {
+    setEditingTxId(null);
+    setShowTxForm(false);
+    setTxForm({ type: 'gasto', amount: '', category: EXPENSE_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false });
   }
   function handleDeleteTransaction(id) { setTransactions((prev) => prev.filter((t) => t.id !== id)); }
 
@@ -696,11 +685,40 @@ export default function CuentaClaraApp() {
   function handleAddCard(e) {
     e.preventDefault();
     if (!cardForm.name.trim() || cardForm.lastFour.length !== 4) return;
-    setCreditCards((prev) => [...prev, { id: uid(), name: cardForm.name.trim(), lastFour: cardForm.lastFour }]);
+    if (editingCardId) {
+      setCreditCards((prev) => prev.map((c) => (c.id === editingCardId ? { ...c, name: cardForm.name.trim(), lastFour: cardForm.lastFour } : c)));
+      setEditingCardId(null);
+    } else {
+      setCreditCards((prev) => [...prev, { id: uid(), name: cardForm.name.trim(), lastFour: cardForm.lastFour }]);
+    }
     setCardForm({ name: '', lastFour: '' });
     setShowCardForm(false);
   }
+  function handleEditCard(card) {
+    setCardForm({ name: card.name, lastFour: card.lastFour });
+    setEditingCardId(card.id);
+    setShowCardForm(true);
+  }
+  function handleCancelCardForm() {
+    setEditingCardId(null);
+    setShowCardForm(false);
+    setCardForm({ name: '', lastFour: '' });
+  }
   function handleDeleteCard(id) { setCreditCards((prev) => prev.filter((c) => c.id !== id)); }
+
+  function handleUpdateCategoryLabel(id, rawLabel) {
+    const original = ALL_CATEGORIES.find((c) => c.id === id);
+    const trimmed = rawLabel.trim();
+    setCategoryLabels((prev) => {
+      const next = { ...prev };
+      if (!trimmed || trimmed === original.label) {
+        delete next[id];
+      } else {
+        next[id] = trimmed;
+      }
+      return next;
+    });
+  }
 
   function handleResetAll() {
     if (!window.confirm('¿Seguro que quieres borrar todos tus datos financieros? Esta acción no se puede deshacer.')) return;
@@ -810,7 +828,7 @@ export default function CuentaClaraApp() {
             <div className="cc-page-title">Movimientos</div>
             <p className="cc-page-sub" style={{ marginBottom: 0 }}>Todos tus ingresos y gastos registrados.</p>
           </div>
-          <button type="button" className="cc-btn cc-btn-primary" onClick={() => setShowTxForm((v) => !v)}>
+          <button type="button" className="cc-btn cc-btn-primary" onClick={() => (showTxForm ? handleCancelTxForm() : setShowTxForm(true))}>
             {showTxForm ? <X size={15} /> : <Plus size={15} />} {showTxForm ? 'Cancelar' : 'Nuevo movimiento'}
           </button>
         </div>
@@ -869,7 +887,8 @@ export default function CuentaClaraApp() {
               </>
             )}
             <div className="cc-form-actions">
-              <button type="submit" className="cc-btn cc-btn-primary">Guardar movimiento</button>
+              <button type="submit" className="cc-btn cc-btn-primary">{editingTxId ? 'Guardar cambios' : 'Guardar movimiento'}</button>
+              {editingTxId && <button type="button" className="cc-btn cc-btn-outline" onClick={handleCancelTxForm}>Cancelar edición</button>}
             </div>
           </form>
         )}
@@ -921,6 +940,9 @@ export default function CuentaClaraApp() {
                   <div className="cc-tx-amount" style={{ color: t.type === 'ingreso' ? COLORS.income : COLORS.expense }}>
                     {t.type === 'ingreso' ? '+' : '-'}{fmtCOP(t.amount)}
                   </div>
+                  <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => handleEditTransaction(t)} aria-label="Editar movimiento">
+                    <Pencil size={14} />
+                  </button>
                   <button type="button" className="cc-btn cc-btn-danger" onClick={() => handleDeleteTransaction(t.id)} aria-label="Eliminar movimiento">
                     <Trash2 size={15} />
                   </button>
@@ -942,7 +964,7 @@ export default function CuentaClaraApp() {
             <div className="cc-page-title">Tarjetas</div>
             <p className="cc-page-sub" style={{ marginBottom: 0 }}>Tus tarjetas de crédito y los movimientos hechos con cada una.</p>
           </div>
-          <button type="button" className="cc-btn cc-btn-primary" onClick={() => setShowCardForm((v) => !v)}>
+          <button type="button" className="cc-btn cc-btn-primary" onClick={() => (showCardForm ? handleCancelCardForm() : setShowCardForm(true))}>
             {showCardForm ? <X size={15} /> : <Plus size={15} />} {showCardForm ? 'Cancelar' : 'Nueva tarjeta'}
           </button>
         </div>
@@ -958,7 +980,8 @@ export default function CuentaClaraApp() {
               <input className="cc-input" type="text" inputMode="numeric" maxLength={4} placeholder="1679" value={cardForm.lastFour} onChange={(e) => setCardForm((f) => ({ ...f, lastFour: e.target.value.replace(/\D/g, '').slice(0, 4) }))} required />
             </div>
             <div className="cc-form-actions">
-              <button type="submit" className="cc-btn cc-btn-primary">Guardar tarjeta</button>
+              <button type="submit" className="cc-btn cc-btn-primary">{editingCardId ? 'Guardar cambios' : 'Guardar tarjeta'}</button>
+              {editingCardId && <button type="button" className="cc-btn cc-btn-outline" onClick={handleCancelCardForm}>Cancelar edición</button>}
             </div>
           </form>
         )}
@@ -976,7 +999,10 @@ export default function CuentaClaraApp() {
                     <div className="cc-goal-name">{card.name}</div>
                     <div className="cc-goal-meta">Terminada en {card.lastFour} · {cardTx.length} movimientos registrados</div>
                   </div>
-                  <button type="button" className="cc-btn cc-btn-danger" onClick={() => handleDeleteCard(card.id)} aria-label="Eliminar tarjeta"><Trash2 size={15} /></button>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => handleEditCard(card)} aria-label="Editar tarjeta"><Pencil size={14} /></button>
+                    <button type="button" className="cc-btn cc-btn-danger" onClick={() => handleDeleteCard(card.id)} aria-label="Eliminar tarjeta"><Trash2 size={15} /></button>
+                  </div>
                 </div>
                 <div className="cc-stat-sub" style={{ marginBottom: 12 }}>
                   Gastado en {monthLabel(selectedMonth)}: <span className="cc-mono" style={{ fontWeight: 600, color: 'var(--ink)' }}>{fmtCOP(monthTotal)}</span>
@@ -1163,6 +1189,52 @@ export default function CuentaClaraApp() {
     );
   }
 
+  /* ---------- Render: Categorías ---------- */
+  function renderCategorias() {
+    return (
+      <>
+        <div className="cc-page-title">Categorías</div>
+        <p className="cc-page-sub">Cambia el nombre de cada categoría como prefieras llamarla. Los íconos y colores no cambian.</p>
+
+        <div className="cc-card" style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>Categorías de gasto</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {EXPENSE_CATEGORIES.map((c) => (
+              <div key={c.id} className="cc-inline-form" style={{ marginTop: 0 }}>
+                <IconCircle Icon={c.icon} color={c.color} bg="var(--expense-soft)" size={28} iconSize={14} />
+                <input
+                  className="cc-input"
+                  type="text"
+                  defaultValue={getCategory(c.id).label}
+                  onBlur={(e) => handleUpdateCategoryLabel(c.id, e.target.value)}
+                  style={{ maxWidth: 220 }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="cc-card">
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>Categorías de ingreso</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {INCOME_CATEGORIES.map((c) => (
+              <div key={c.id} className="cc-inline-form" style={{ marginTop: 0 }}>
+                <IconCircle Icon={c.icon} color={c.color} bg="var(--income-soft)" size={28} iconSize={14} />
+                <input
+                  className="cc-input"
+                  type="text"
+                  defaultValue={getCategory(c.id).label}
+                  onBlur={(e) => handleUpdateCategoryLabel(c.id, e.target.value)}
+                  style={{ maxWidth: 220 }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </>
+    );
+  }
+
   if (loading) {
     return (
       <>
@@ -1197,6 +1269,7 @@ export default function CuentaClaraApp() {
           {activeTab === 'tarjetas' && renderTarjetas()}
           {activeTab === 'deudas' && renderDeudas()}
           {activeTab === 'ahorros' && renderAhorros()}
+          {activeTab === 'categorias' && renderCategorias()}
         </div>
       </div>
     </>

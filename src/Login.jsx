@@ -1,8 +1,16 @@
 import React, { useState } from 'react';
 import { supabase } from './supabaseClient';
 
+const LAST_EMAIL_KEY = 'cuenta-clara-ultimo-correo';
+
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => {
+    try {
+      return localStorage.getItem(LAST_EMAIL_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,6 +27,11 @@ export default function Login() {
     if (error) {
       setError(error.message);
     } else {
+      try {
+        localStorage.setItem(LAST_EMAIL_KEY, email);
+      } catch {
+        // Si el navegador bloquea localStorage, simplemente no recordamos el correo.
+      }
       setSent(true);
     }
   }
