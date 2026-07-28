@@ -319,8 +319,10 @@ const STYLES = `
 .cc-tx-note { font-size: 12px; color: var(--ink-soft); }
 .cc-tx-date { font-size: 11.5px; color: var(--ink-soft); font-family: 'IBM Plex Mono', monospace; }
 .cc-tx-amount { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 14px; margin-left: auto; }
-.cc-tag { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 99px; background: var(--paper); color: var(--ink-soft); font-family: 'IBM Plex Mono', monospace; }
+.cc-tag { display: inline-block; font-size: 11px; padding: 3px 8px; border-radius: 6px; background: var(--paper); color: var(--ink-soft); font-family: 'IBM Plex Mono', monospace; line-height: 1.4; max-width: 100%; }
 .cc-tag-fixed { background: var(--debt-soft); color: var(--debt); }
+.cc-tag-installment { background: var(--savings-soft); color: var(--savings); }
+.cc-tx-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
 .cc-checkbox-field { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink); font-weight: 500; }
 
 .cc-goal-card, .cc-debt-card { background: var(--card); border-radius: 14px; padding: 18px 20px; border: 1px solid rgba(32,43,56,0.04); box-shadow: 0 1px 2px rgba(32,43,56,.05); margin-bottom: 14px; }
@@ -352,6 +354,7 @@ const STYLES = `
   .cc-sidebar-footer { display: none; }
   .cc-main { padding: 20px 16px; }
   .cc-charts-grid { grid-template-columns: 1fr; }
+  .cc-form { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -465,7 +468,7 @@ export default function CuentaClaraApp() {
 
   const [showTxForm, setShowTxForm] = useState(false);
   const [editingTxId, setEditingTxId] = useState(null);
-  const [txForm, setTxForm] = useState({ type: 'gasto', amount: '', category: 'alimentacion', date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false });
+  const [txForm, setTxForm] = useState({ type: 'gasto', amount: '', category: 'alimentacion', date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '' });
   const [txFilters, setTxFilters] = useState({ type: 'todos', month: 'todos', category: 'todas', paymentMethod: 'todos', fixed: 'todos' });
 
   const [showCardForm, setShowCardForm] = useState(false);
@@ -600,6 +603,7 @@ export default function CuentaClaraApp() {
     const amt = parseFloat(txForm.amount);
     if (!amt || amt <= 0) return;
     const isGasto = txForm.type === 'gasto';
+    const isCreditoConCuotas = isGasto && txForm.paymentMethod === 'credito' && txForm.isInstallment;
     const built = {
       type: txForm.type,
       amount: amt,
@@ -609,6 +613,10 @@ export default function CuentaClaraApp() {
       paymentMethod: isGasto ? txForm.paymentMethod : null,
       cardId: isGasto && txForm.paymentMethod === 'credito' ? (txForm.cardId || null) : null,
       isFixed: isGasto ? !!txForm.isFixed : false,
+      isInstallment: isCreditoConCuotas,
+      totalInstallments: isCreditoConCuotas && txForm.totalInstallments ? parseInt(txForm.totalInstallments, 10) : null,
+      currentInstallment: isCreditoConCuotas && txForm.currentInstallment ? parseInt(txForm.currentInstallment, 10) : null,
+      interestRate: isCreditoConCuotas && txForm.interestRate !== '' ? parseFloat(txForm.interestRate) : null,
     };
     if (editingTxId) {
       setTransactions((prev) => prev.map((t) => (t.id === editingTxId ? { ...t, ...built } : t)));
@@ -616,7 +624,7 @@ export default function CuentaClaraApp() {
     } else {
       setTransactions((prev) => [...prev, { id: uid(), ...built }]);
     }
-    setTxForm({ type: txForm.type, amount: '', category: txForm.type === 'gasto' ? EXPENSE_CATEGORIES[0].id : INCOME_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false });
+    setTxForm({ type: txForm.type, amount: '', category: txForm.type === 'gasto' ? EXPENSE_CATEGORIES[0].id : INCOME_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '' });
     setShowTxForm(false);
   }
   function handleEditTransaction(t) {
@@ -629,6 +637,10 @@ export default function CuentaClaraApp() {
       paymentMethod: t.paymentMethod || 'efectivo',
       cardId: t.cardId || '',
       isFixed: !!t.isFixed,
+      isInstallment: !!t.isInstallment,
+      totalInstallments: t.totalInstallments != null ? String(t.totalInstallments) : '',
+      currentInstallment: t.currentInstallment != null ? String(t.currentInstallment) : '1',
+      interestRate: t.interestRate != null ? String(t.interestRate) : '',
     });
     setEditingTxId(t.id);
     setShowTxForm(true);
@@ -636,7 +648,7 @@ export default function CuentaClaraApp() {
   function handleCancelTxForm() {
     setEditingTxId(null);
     setShowTxForm(false);
-    setTxForm({ type: 'gasto', amount: '', category: EXPENSE_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false });
+    setTxForm({ type: 'gasto', amount: '', category: EXPENSE_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '' });
   }
   function handleDeleteTransaction(id) { setTransactions((prev) => prev.filter((t) => t.id !== id)); }
 
@@ -861,7 +873,7 @@ export default function CuentaClaraApp() {
               <button type="button" className={`cc-type-btn ${txForm.type === 'ingreso' ? 'active-ingreso' : ''}`} onClick={() => setTxForm((f) => ({ ...f, type: 'ingreso', category: INCOME_CATEGORIES[0].id }))}>Ingreso</button>
             </div>
             <div className="cc-field">
-              <label>Monto (COP)</label>
+              <label>{txForm.isInstallment ? 'Valor de la cuota mensual (COP)' : 'Monto (COP)'}</label>
               <input className="cc-input" type="number" min="0" step="100" placeholder="50000" value={txForm.amount} onChange={(e) => setTxForm((f) => ({ ...f, amount: e.target.value }))} required />
             </div>
             <div className="cc-field">
@@ -882,22 +894,48 @@ export default function CuentaClaraApp() {
               <>
                 <div className="cc-field">
                   <label>Medio de pago</label>
-                  <select className="cc-select" value={txForm.paymentMethod} onChange={(e) => setTxForm((f) => ({ ...f, paymentMethod: e.target.value, cardId: e.target.value === 'credito' ? f.cardId : '' }))}>
+                  <select className="cc-select" value={txForm.paymentMethod} onChange={(e) => setTxForm((f) => ({ ...f, paymentMethod: e.target.value, cardId: e.target.value === 'credito' ? f.cardId : '', isInstallment: e.target.value === 'credito' ? f.isInstallment : false }))}>
                     {PAYMENT_METHODS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                   </select>
                 </div>
                 {txForm.paymentMethod === 'credito' && (
-                  <div className="cc-field">
-                    <label>Tarjeta</label>
-                    {creditCards.length === 0 ? (
-                      <div className="cc-stat-sub">Sin tarjetas registradas. Agrégalas en la pestaña Tarjetas.</div>
-                    ) : (
-                      <select className="cc-select" value={txForm.cardId} onChange={(e) => setTxForm((f) => ({ ...f, cardId: e.target.value }))}>
-                        <option value="">Selecciona una tarjeta</option>
-                        {creditCards.map((c) => <option key={c.id} value={c.id}>{c.name} *{c.lastFour}</option>)}
-                      </select>
+                  <>
+                    <div className="cc-field">
+                      <label>Tarjeta</label>
+                      {creditCards.length === 0 ? (
+                        <div className="cc-stat-sub">Sin tarjetas registradas. Agrégalas en la pestaña Tarjetas.</div>
+                      ) : (
+                        <select className="cc-select" value={txForm.cardId} onChange={(e) => setTxForm((f) => ({ ...f, cardId: e.target.value }))}>
+                          <option value="">Selecciona una tarjeta</option>
+                          {creditCards.map((c) => <option key={c.id} value={c.id}>{c.name} *{c.lastFour}</option>)}
+                        </select>
+                      )}
+                    </div>
+                    <div className="cc-field" style={{ justifyContent: 'flex-end' }}>
+                      <label className="cc-checkbox-field" style={{ textTransform: 'none' }}>
+                        <input type="checkbox" checked={txForm.isInstallment} onChange={(e) => setTxForm((f) => ({ ...f, isInstallment: e.target.checked }))} />
+                        Es una compra en cuotas
+                      </label>
+                    </div>
+                    {txForm.isInstallment && (
+                      <>
+                        <div className="cc-field">
+                          <label>Número total de cuotas</label>
+                          <input className="cc-input" type="number" min="1" step="1" placeholder="12" value={txForm.totalInstallments} onChange={(e) => setTxForm((f) => ({ ...f, totalInstallments: e.target.value }))} />
+                        </div>
+                        <div className="cc-field">
+                          <label>Cuota actual</label>
+                          <input className="cc-input" type="number" min="1" step="1" placeholder="1" value={txForm.currentInstallment} onChange={(e) => setTxForm((f) => ({ ...f, currentInstallment: e.target.value }))} />
+                          <span className="cc-stat-sub" style={{ fontSize: 11 }}>Si es una compra vieja y ya vas en la cuota 7 de 10, escribe 7 aquí.</span>
+                        </div>
+                        <div className="cc-field">
+                          <label>Tasa de interés mensual % (opcional)</label>
+                          <input className="cc-input" type="number" min="0" step="0.01" placeholder="2.08" value={txForm.interestRate} onChange={(e) => setTxForm((f) => ({ ...f, interestRate: e.target.value }))} />
+                          <span className="cc-stat-sub" style={{ fontSize: 11 }}>Cada compra puede tener su propia tasa, distinta a la de otras compras.</span>
+                        </div>
+                      </>
                     )}
-                  </div>
+                  </>
                 )}
                 <div className="cc-field" style={{ justifyContent: 'flex-end' }}>
                   <label className="cc-checkbox-field" style={{ textTransform: 'none' }}>
@@ -952,11 +990,21 @@ export default function CuentaClaraApp() {
                     <div className="cc-tx-cat">{cat.label}</div>
                     <div className="cc-tx-note">
                       {t.note || '—'} · <span className="cc-tx-date">{t.date}</span>
-                      {t.type === 'gasto' && t.paymentMethod && (
-                        <> · <span className="cc-tag">{getPaymentMethod(t.paymentMethod).label}{t.cardId ? ` · ${cardLabel(t.cardId)}` : ''}</span></>
-                      )}
-                      {t.isFixed && <> · <span className="cc-tag cc-tag-fixed">Fijo</span></>}
                     </div>
+                    {(t.type === 'gasto' && t.paymentMethod) || t.isFixed || t.isInstallment ? (
+                      <div className="cc-tx-tags">
+                        {t.type === 'gasto' && t.paymentMethod && (
+                          <span className="cc-tag">{getPaymentMethod(t.paymentMethod).label}{t.cardId ? ` · ${cardLabel(t.cardId)}` : ''}</span>
+                        )}
+                        {t.isFixed && <span className="cc-tag cc-tag-fixed">Fijo</span>}
+                        {t.isInstallment && (
+                          <span className="cc-tag cc-tag-installment">
+                            Cuota {t.currentInstallment || '?'}/{t.totalInstallments || '?'}
+                            {t.interestRate != null ? ` · ${t.interestRate}% mensual` : ''}
+                          </span>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                   <div className="cc-tx-amount" style={{ color: t.type === 'ingreso' ? COLORS.income : COLORS.expense }}>
                     {t.type === 'ingreso' ? '+' : '-'}{fmtCOP(t.amount)}
@@ -1013,6 +1061,7 @@ export default function CuentaClaraApp() {
           creditCards.map((card) => {
             const cardTx = transactions.filter((t) => t.cardId === card.id).sort((a, b) => (a.date < b.date ? 1 : -1));
             const monthTotal = cardTx.filter((t) => monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0);
+            const installments = cardTx.filter((t) => t.isInstallment && t.totalInstallments);
             return (
               <div key={card.id} className="cc-card" style={{ marginBottom: 16 }}>
                 <div className="cc-goal-head">
@@ -1028,6 +1077,35 @@ export default function CuentaClaraApp() {
                 <div className="cc-stat-sub" style={{ marginBottom: 12 }}>
                   Gastado en {monthLabel(selectedMonth)}: <span className="cc-mono" style={{ fontWeight: 600, color: 'var(--ink)' }}>{fmtCOP(monthTotal)}</span>
                 </div>
+
+                {installments.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Compras en cuotas activas</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {installments.map((t) => {
+                        const remainingCuotas = Math.max(0, (t.totalInstallments || 0) - (t.currentInstallment || 0));
+                        const remainingAmount = remainingCuotas * t.amount;
+                        const pct = t.totalInstallments ? Math.min(100, Math.round(((t.currentInstallment || 0) / t.totalInstallments) * 100)) : 0;
+                        return (
+                          <div key={t.id} style={{ background: 'var(--paper)', borderRadius: 10, padding: '10px 12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+                              <span style={{ fontWeight: 600 }}>{t.note || getCategory(t.category).label}</span>
+                              <span className="cc-mono">Cuota {t.currentInstallment}/{t.totalInstallments}</span>
+                            </div>
+                            <div style={{ height: 6, borderRadius: 99, background: 'var(--paper-line)', overflow: 'hidden', marginBottom: 6 }}>
+                              <div style={{ height: '100%', width: `${pct}%`, background: COLORS.savings, borderRadius: 99 }} />
+                            </div>
+                            <div className="cc-stat-sub" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span>{fmtCOP(t.amount)}/mes{t.interestRate != null ? ` · ${t.interestRate}% mensual` : ''}</span>
+                              <span>Faltan {remainingCuotas} cuotas (~{fmtCOP(remainingAmount)})</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {cardTx.length === 0 ? (
                   <EmptyState Icon={CreditCard} title="Sin movimientos" text="Los gastos que registres con esta tarjeta aparecerán aquí." />
                 ) : (
@@ -1041,8 +1119,18 @@ export default function CuentaClaraApp() {
                             <div className="cc-tx-cat">{cat.label}</div>
                             <div className="cc-tx-note">
                               {t.note || '—'} · <span className="cc-tx-date">{t.date}</span>
-                              {t.isFixed && <> · <span className="cc-tag cc-tag-fixed">Fijo</span></>}
                             </div>
+                            {(t.isFixed || t.isInstallment) && (
+                              <div className="cc-tx-tags">
+                                {t.isFixed && <span className="cc-tag cc-tag-fixed">Fijo</span>}
+                                {t.isInstallment && (
+                                  <span className="cc-tag cc-tag-installment">
+                                    Cuota {t.currentInstallment || '?'}/{t.totalInstallments || '?'}
+                                    {t.interestRate != null ? ` · ${t.interestRate}% mensual` : ''}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                           <div className="cc-tx-amount" style={{ color: COLORS.expense }}>-{fmtCOP(t.amount)}</div>
                         </div>
