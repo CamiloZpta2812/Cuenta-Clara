@@ -228,7 +228,8 @@ const STYLES = `
   gap: 22px;
   min-height: 100vh;
 }
-.cc-brand { display: flex; flex-direction: column; gap: 2px; padding: 0 6px; }
+.cc-brand { display: flex; align-items: center; gap: 10px; padding: 0 6px; }
+.cc-brand-logo { font-size: 26px; line-height: 1; }
 .cc-brand-title { font-family: 'Fraunces', serif; font-weight: 700; font-size: 22px; letter-spacing: -0.01em; }
 .cc-brand-sub { font-size: 12px; color: var(--ink-soft); }
 .cc-nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
@@ -248,6 +249,9 @@ const STYLES = `
 .cc-main { flex: 1; padding: 28px 34px; max-width: 1180px; }
 .cc-page-title { font-family: 'Fraunces', serif; font-size: 24px; font-weight: 600; margin: 0 0 4px 0; }
 .cc-page-sub { color: var(--ink-soft); font-size: 14px; margin: 0 0 22px 0; }
+.cc-subtabs { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+.cc-subtab { padding: 8px 14px; border-radius: 999px; border: 1px solid var(--paper-line); background: var(--card); color: var(--ink-soft); font-size: 13px; font-weight: 600; cursor: pointer; }
+.cc-subtab.active { background: var(--ink); color: #fff; border-color: var(--ink); }
 
 .cc-banner {
   display: flex; align-items: center; gap: 8px;
@@ -339,9 +343,10 @@ const STYLES = `
 
 @media (max-width: 860px) {
   .cc-app { flex-direction: column; }
-  .cc-sidebar { width: 100%; min-height: auto; flex-direction: row; align-items: center; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--paper-line); padding: 14px; }
-  .cc-brand { display: none; }
-  .cc-nav { flex-direction: row; flex: none; }
+  .cc-sidebar { width: 100%; min-height: auto; flex-direction: column; align-items: stretch; border-right: none; border-bottom: 1px solid var(--paper-line); padding: 12px 14px; gap: 10px; }
+  .cc-brand { display: flex; align-items: center; text-align: left; padding: 0 2px; }
+  .cc-brand-sub { display: none; }
+  .cc-nav { flex-direction: row; flex: none; overflow-x: auto; gap: 2px; }
   .cc-nav-item { border-left: none; border-bottom: 3px solid transparent; white-space: nowrap; }
   .cc-nav-item.active { border-left: none; border-bottom: 3px solid var(--ink); }
   .cc-sidebar-footer { display: none; }
@@ -409,13 +414,16 @@ function Sidebar({ activeTab, onChangeTab, onReset, onSignOut, userEmail }) {
     { id: 'tarjetas', label: 'Tarjetas', Icon: Landmark },
     { id: 'deudas', label: 'Deudas', Icon: CreditCard },
     { id: 'ahorros', label: 'Ahorros', Icon: PiggyBank },
-    { id: 'categorias', label: 'Categorías', Icon: Settings },
+    { id: 'configuracion', label: 'Configuración', Icon: Settings },
   ];
   return (
     <div className="cc-sidebar">
       <div className="cc-brand">
-        <div className="cc-brand-title">Cuenta Clara</div>
-        <div className="cc-brand-sub">tu libro de finanzas personales</div>
+        <span className="cc-brand-logo" aria-hidden="true">📒</span>
+        <div>
+          <div className="cc-brand-title">Cuenta Clara</div>
+          <div className="cc-brand-sub">tu libro de finanzas personales</div>
+        </div>
       </div>
       <div className="cc-nav">
         {items.map((it) => (
@@ -429,17 +437,6 @@ function Sidebar({ activeTab, onChangeTab, onReset, onSignOut, userEmail }) {
             {it.label}
           </button>
         ))}
-      </div>
-      <div className="cc-sidebar-footer">
-        <button type="button" className="cc-btn cc-btn-danger cc-btn-sm" onClick={onReset}>
-          <Trash2 size={13} /> Borrar todos los datos
-        </button>
-        <div className="cc-sidebar-note">
-          {userEmail ? `Sesión: ${userEmail}` : ''} Tus datos se guardan de forma privada en tu cuenta.
-        </div>
-        <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={onSignOut}>
-          Cerrar sesión
-        </button>
       </div>
     </div>
   );
@@ -485,6 +482,7 @@ export default function CuentaClaraApp() {
 
   const [pinForm, setPinForm] = useState({ newPin: '', confirmPin: '' });
   const [pinMessage, setPinMessage] = useState(null); // { kind: 'success' | 'error', text }
+  const [configTab, setConfigTab] = useState('categorias');
 
   /* ---------- Carga inicial ---------- */
   useEffect(() => {
@@ -1212,83 +1210,124 @@ export default function CuentaClaraApp() {
     );
   }
 
-  /* ---------- Render: Categorías ---------- */
-  function renderCategorias() {
+  /* ---------- Render: Configuración ---------- */
+  function renderConfiguracion() {
+    const subTabs = [
+      { id: 'categorias', label: 'Categorías' },
+      { id: 'pin', label: 'PIN de acceso' },
+      { id: 'datos', label: 'Datos y sesión' },
+    ];
     return (
       <>
-        <div className="cc-page-title">Categorías</div>
-        <p className="cc-page-sub">Cambia el nombre de cada categoría como prefieras llamarla. Los íconos y colores no cambian.</p>
+        <div className="cc-page-title">Configuración</div>
+        <p className="cc-page-sub">Personaliza tus categorías, tu PIN de acceso y administra tus datos.</p>
 
-        <div className="cc-card" style={{ marginBottom: 16 }}>
-          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>Categorías de gasto</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {EXPENSE_CATEGORIES.map((c) => (
-              <div key={c.id} className="cc-inline-form" style={{ marginTop: 0 }}>
-                <IconCircle Icon={c.icon} color={c.color} bg="var(--expense-soft)" size={28} iconSize={14} />
+        <div className="cc-subtabs">
+          {subTabs.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className={`cc-subtab ${configTab === s.id ? 'active' : ''}`}
+              onClick={() => setConfigTab(s.id)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        {configTab === 'categorias' && (
+          <>
+            <div className="cc-card" style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>Categorías de gasto</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <div key={c.id} className="cc-inline-form" style={{ marginTop: 0 }}>
+                    <IconCircle Icon={c.icon} color={c.color} bg="var(--expense-soft)" size={28} iconSize={14} />
+                    <input
+                      className="cc-input"
+                      type="text"
+                      defaultValue={getCategory(c.id).label}
+                      onBlur={(e) => handleUpdateCategoryLabel(c.id, e.target.value)}
+                      style={{ maxWidth: 220 }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="cc-card">
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>Categorías de ingreso</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {INCOME_CATEGORIES.map((c) => (
+                  <div key={c.id} className="cc-inline-form" style={{ marginTop: 0 }}>
+                    <IconCircle Icon={c.icon} color={c.color} bg="var(--income-soft)" size={28} iconSize={14} />
+                    <input
+                      className="cc-input"
+                      type="text"
+                      defaultValue={getCategory(c.id).label}
+                      onBlur={(e) => handleUpdateCategoryLabel(c.id, e.target.value)}
+                      style={{ maxWidth: 220 }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {configTab === 'pin' && (
+          <div className="cc-card">
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>PIN de acceso</div>
+            <p className="cc-stat-sub" style={{ marginBottom: 12 }}>
+              Configura o cambia el PIN de 6 dígitos con el que entras a la app.
+            </p>
+            <form onSubmit={handleSetPin} style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 260 }}>
+              <div className="cc-field">
+                <label>Nuevo PIN</label>
                 <input
                   className="cc-input"
-                  type="text"
-                  defaultValue={getCategory(c.id).label}
-                  onBlur={(e) => handleUpdateCategoryLabel(c.id, e.target.value)}
-                  style={{ maxWidth: 220 }}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={pinForm.newPin}
+                  onChange={(e) => setPinForm((f) => ({ ...f, newPin: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
                 />
               </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="cc-card">
-          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>Categorías de ingreso</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {INCOME_CATEGORIES.map((c) => (
-              <div key={c.id} className="cc-inline-form" style={{ marginTop: 0 }}>
-                <IconCircle Icon={c.icon} color={c.color} bg="var(--income-soft)" size={28} iconSize={14} />
+              <div className="cc-field">
+                <label>Confirmar PIN</label>
                 <input
                   className="cc-input"
-                  type="text"
-                  defaultValue={getCategory(c.id).label}
-                  onBlur={(e) => handleUpdateCategoryLabel(c.id, e.target.value)}
-                  style={{ maxWidth: 220 }}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={pinForm.confirmPin}
+                  onChange={(e) => setPinForm((f) => ({ ...f, confirmPin: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
                 />
               </div>
-            ))}
+              <button type="submit" className="cc-btn cc-btn-primary" style={{ alignSelf: 'flex-start' }}>Guardar PIN</button>
+              {pinMessage && (
+                <p style={{ fontSize: 13, color: pinMessage.kind === 'success' ? COLORS.income : COLORS.expense }}>{pinMessage.text}</p>
+              )}
+            </form>
           </div>
-        </div>
+        )}
 
-        <div className="cc-card" style={{ marginTop: 16 }}>
-          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>PIN de acceso</div>
-          <p className="cc-stat-sub" style={{ marginBottom: 12 }}>
-            Configura o cambia el PIN de 6 dígitos con el que entras a la app.
-          </p>
-          <form onSubmit={handleSetPin} style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 260 }}>
-            <div className="cc-field">
-              <label>Nuevo PIN</label>
-              <input
-                className="cc-input"
-                type="password"
-                inputMode="numeric"
-                maxLength={6}
-                value={pinForm.newPin}
-                onChange={(e) => setPinForm((f) => ({ ...f, newPin: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
-              />
+        {configTab === 'datos' && (
+          <div className="cc-card">
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Datos y sesión</div>
+            <p className="cc-stat-sub" style={{ marginBottom: 16 }}>
+              {userEmail ? `Sesión iniciada: ${userEmail}. ` : ''}Tus datos se guardan de forma privada en tu cuenta.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
+              <button type="button" className="cc-btn cc-btn-danger cc-btn-sm" onClick={handleResetAll}>
+                <Trash2 size={13} /> Borrar todos los datos
+              </button>
+              <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => supabase.auth.signOut()}>
+                Cerrar sesión
+              </button>
             </div>
-            <div className="cc-field">
-              <label>Confirmar PIN</label>
-              <input
-                className="cc-input"
-                type="password"
-                inputMode="numeric"
-                maxLength={6}
-                value={pinForm.confirmPin}
-                onChange={(e) => setPinForm((f) => ({ ...f, confirmPin: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
-              />
-            </div>
-            <button type="submit" className="cc-btn cc-btn-primary" style={{ alignSelf: 'flex-start' }}>Guardar PIN</button>
-            {pinMessage && (
-              <p style={{ fontSize: 13, color: pinMessage.kind === 'success' ? COLORS.income : COLORS.expense }}>{pinMessage.text}</p>
-            )}
-          </form>
-        </div>
+          </div>
+        )}
       </>
     );
   }
@@ -1327,7 +1366,7 @@ export default function CuentaClaraApp() {
           {activeTab === 'tarjetas' && renderTarjetas()}
           {activeTab === 'deudas' && renderDeudas()}
           {activeTab === 'ahorros' && renderAhorros()}
-          {activeTab === 'categorias' && renderCategorias()}
+          {activeTab === 'configuracion' && renderConfiguracion()}
         </div>
       </div>
     </>
