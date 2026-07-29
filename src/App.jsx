@@ -8,6 +8,7 @@ import {
   AlertTriangle, TrendingUp, TrendingDown, Wallet, Utensils, Car, Home,
   Film, HeartPulse, GraduationCap, Zap, ShoppingBag, MoreHorizontal,
   Briefcase, Laptop, CircleDollarSign, Check, Loader2, X, Landmark, Banknote, Pencil, Settings,
+  Gift, Plane, Dumbbell, PawPrint, Coffee, Smartphone, Baby, Shirt,
 } from 'lucide-react';
 import { getItem, setItem } from './storage';
 import { supabase } from './supabaseClient';
@@ -46,6 +47,37 @@ const INCOME_CATEGORIES = [
 
 const ALL_CATEGORIES = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES];
 let categoryLabelOverrides = {};
+let customCategoriesOverride = [];
+
+const ICON_CHOICES = [
+  { key: 'utensils', label: 'Comida', Icon: Utensils },
+  { key: 'car', label: 'Transporte', Icon: Car },
+  { key: 'home', label: 'Hogar', Icon: Home },
+  { key: 'film', label: 'Entretenimiento', Icon: Film },
+  { key: 'heart', label: 'Salud', Icon: HeartPulse },
+  { key: 'grad', label: 'Educación', Icon: GraduationCap },
+  { key: 'zap', label: 'Servicios', Icon: Zap },
+  { key: 'bag', label: 'Compras', Icon: ShoppingBag },
+  { key: 'briefcase', label: 'Trabajo', Icon: Briefcase },
+  { key: 'laptop', label: 'Tecnología', Icon: Laptop },
+  { key: 'piggy', label: 'Ahorro', Icon: PiggyBank },
+  { key: 'landmark', label: 'Banco', Icon: Landmark },
+  { key: 'wallet', label: 'Billetera', Icon: Wallet },
+  { key: 'gift', label: 'Regalos', Icon: Gift },
+  { key: 'plane', label: 'Viajes', Icon: Plane },
+  { key: 'dumbbell', label: 'Ejercicio', Icon: Dumbbell },
+  { key: 'paw', label: 'Mascotas', Icon: PawPrint },
+  { key: 'coffee', label: 'Café/salidas', Icon: Coffee },
+  { key: 'phone', label: 'Celular', Icon: Smartphone },
+  { key: 'baby', label: 'Bebé/niños', Icon: Baby },
+  { key: 'shirt', label: 'Ropa', Icon: Shirt },
+  { key: 'other', label: 'Otro', Icon: MoreHorizontal },
+];
+const ICON_MAP = Object.fromEntries(ICON_CHOICES.map((i) => [i.key, i.Icon]));
+const COLOR_CHOICES = [
+  '#B0524B', '#B9772E', '#6B5199', '#3E7FB0', '#B03E70', '#3E9C7A',
+  '#B99A2E', '#7A5C44', '#7A8088', '#2F7D5C', '#4F9A6E', '#2F8F6F', '#6BAF8A',
+];
 const MONTH_NAMES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const STORAGE_KEY = 'cuenta-clara-datos';
 
@@ -82,6 +114,27 @@ function monthsBetween(k1, k2) {
   return (y2 - y1) * 12 + (m2 - m1);
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+function daysInMonth(year, monthIndex) { return new Date(year, monthIndex + 1, 0).getDate(); }
+function computeChargeDate(purchaseDateStr, cutDay, paymentDay) {
+  if (!purchaseDateStr || !cutDay || !paymentDay) return null;
+  const [y, m, d] = purchaseDateStr.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  let cutMonth = m - 1;
+  let cutYear = y;
+  const effectiveCut = Math.min(cutDay, daysInMonth(cutYear, cutMonth));
+  if (d > effectiveCut) {
+    cutMonth += 1;
+    if (cutMonth > 11) { cutMonth = 0; cutYear += 1; }
+  }
+  let paymentMonth = cutMonth + 1;
+  let paymentYear = cutYear;
+  if (paymentMonth > 11) { paymentMonth = 0; paymentYear += 1; }
+  const effectivePaymentDay = Math.min(paymentDay, daysInMonth(paymentYear, paymentMonth));
+  return new Date(paymentYear, paymentMonth, effectivePaymentDay);
+}
+function formatDateHuman(dateObj) {
+  return `${dateObj.getDate()} ${MONTH_NAMES[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
+}
 function fmtCOP(n) {
   return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(Math.round(n || 0));
 }
@@ -92,9 +145,11 @@ function fmtShort(n) {
   return `${Math.round(n)}`;
 }
 function getCategory(id) {
-  const found = ALL_CATEGORIES.find((c) => c.id === id) || EXPENSE_CATEGORIES[EXPENSE_CATEGORIES.length - 1];
+  const custom = customCategoriesOverride.find((c) => c.id === id);
+  const found = custom || ALL_CATEGORIES.find((c) => c.id === id) || EXPENSE_CATEGORIES[EXPENSE_CATEGORIES.length - 1];
+  const icon = found.icon || ICON_MAP[found.iconKey] || MoreHorizontal;
   const customLabel = categoryLabelOverrides[found.id];
-  return customLabel ? { ...found, label: customLabel } : found;
+  return { ...found, icon, label: customLabel || found.label };
 }
 function getPaymentMethod(id) {
   return PAYMENT_METHODS.find((p) => p.id === id) || PAYMENT_METHODS[0];
@@ -463,17 +518,31 @@ export default function CuentaClaraApp() {
   const [creditCards, setCreditCards] = useState([]);
   const [categoryLabels, setCategoryLabels] = useState({});
   categoryLabelOverrides = categoryLabels;
+  const [customCategories, setCustomCategories] = useState([]);
+  customCategoriesOverride = customCategories;
 
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey());
 
   const [showTxForm, setShowTxForm] = useState(false);
   const [editingTxId, setEditingTxId] = useState(null);
-  const [txForm, setTxForm] = useState({ type: 'gasto', amount: '', category: 'alimentacion', date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '' });
+  const [txForm, setTxForm] = useState({ type: 'gasto', amount: '', category: 'alimentacion', date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '' });
   const [txFilters, setTxFilters] = useState({ type: 'todos', month: 'todos', category: 'todas', paymentMethod: 'todos', fixed: 'todos' });
+
+  const [usdRate, setUsdRate] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('https://open.er-api.com/v6/latest/USD')
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && data && data.rates && data.rates.COP) setUsdRate(data.rates.COP);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const [showCardForm, setShowCardForm] = useState(false);
   const [editingCardId, setEditingCardId] = useState(null);
-  const [cardForm, setCardForm] = useState({ name: '', lastFour: '' });
+  const [cardForm, setCardForm] = useState({ name: '', lastFour: '', currency: 'COP', cutDay: '', paymentDay: '' });
 
   const [showDebtForm, setShowDebtForm] = useState(false);
   const [debtForm, setDebtForm] = useState({ name: '', totalAmount: '', interestRate: '', monthlyPayment: '', dueDay: '', startDate: todayStr() });
@@ -486,6 +555,8 @@ export default function CuentaClaraApp() {
   const [pinForm, setPinForm] = useState({ newPin: '', confirmPin: '' });
   const [pinMessage, setPinMessage] = useState(null); // { kind: 'success' | 'error', text }
   const [configTab, setConfigTab] = useState('categorias');
+  const [newCatGasto, setNewCatGasto] = useState({ label: '', iconKey: ICON_CHOICES[0].key, color: COLOR_CHOICES[0] });
+  const [newCatIngreso, setNewCatIngreso] = useState({ label: '', iconKey: ICON_CHOICES[0].key, color: COLOR_CHOICES[0] });
 
   /* ---------- Carga inicial ---------- */
   useEffect(() => {
@@ -499,6 +570,7 @@ export default function CuentaClaraApp() {
           setSavingsGoals((data.savingsGoals || []).map((g) => ({ ...g, contributions: g.contributions || [] })));
           setCreditCards(data.creditCards || []);
           setCategoryLabels(data.categoryLabels || {});
+          setCustomCategories(data.customCategories || []);
         } else {
           setTransactions([]);
           setDebts([]);
@@ -522,13 +594,13 @@ export default function CuentaClaraApp() {
     if (loading) return;
     (async () => {
       try {
-        await setItem(STORAGE_KEY, JSON.stringify({ transactions, debts, savingsGoals, creditCards, categoryLabels }));
+        await setItem(STORAGE_KEY, JSON.stringify({ transactions, debts, savingsGoals, creditCards, categoryLabels, customCategories }));
         setSaveError(false);
       } catch (err) {
         setSaveError(true);
       }
     })();
-  }, [transactions, debts, savingsGoals, creditCards, categoryLabels, loading]);
+  }, [transactions, debts, savingsGoals, creditCards, categoryLabels, customCategories, loading]);
 
   /* ---------- Datos derivados ---------- */
   const monthsWindow = useMemo(() => getLastMonthKeys(6, currentMonthKey()), []);
@@ -572,7 +644,7 @@ export default function CuentaClaraApp() {
       const c = getCategory(id);
       return { name: c.label, value, color: c.color };
     }).sort((a, b) => b.value - a.value);
-  }, [transactions, selectedMonth, categoryLabels]);
+  }, [transactions, selectedMonth, categoryLabels, customCategories]);
 
   const equityEvolution = useMemo(() => monthsWindow.map((key) => {
     const ahorro = savingsGoals.reduce((sum, g) => sum + g.contributions.filter((c) => monthKeyFromDate(c.date) <= key).reduce((s, c) => s + c.amount, 0), 0);
@@ -592,31 +664,51 @@ export default function CuentaClaraApp() {
     .filter((t) => txFilters.fixed === 'todos' || (txFilters.fixed === 'fijo' ? t.isFixed : !t.isFixed))
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)), [transactions, txFilters]);
 
-  const recommendations = useMemo(() => buildRecommendations(transactions, debts, savingsGoals), [transactions, debts, savingsGoals, categoryLabels]);
+  const recommendations = useMemo(() => buildRecommendations(transactions, debts, savingsGoals), [transactions, debts, savingsGoals, categoryLabels, customCategories]);
   const status = getStatus(selMonthIncome, selMonthExpense);
-  const txFilterCategories = (txFilters.type === 'ingreso' ? INCOME_CATEGORIES : txFilters.type === 'gasto' ? EXPENSE_CATEGORIES : ALL_CATEGORIES).map((c) => getCategory(c.id));
-  const txFormCategories = (txForm.type === 'gasto' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES).map((c) => getCategory(c.id));
+  const allExpenseCategories = [...EXPENSE_CATEGORIES, ...customCategories.filter((c) => c.type === 'gasto')];
+  const allIncomeCategories = [...INCOME_CATEGORIES, ...customCategories.filter((c) => c.type === 'ingreso')];
+  const txFilterCategories = (txFilters.type === 'ingreso' ? allIncomeCategories : txFilters.type === 'gasto' ? allExpenseCategories : [...allExpenseCategories, ...allIncomeCategories]).map((c) => getCategory(c.id));
+  const txFormCategories = (txForm.type === 'gasto' ? allExpenseCategories : allIncomeCategories).map((c) => getCategory(c.id));
+
+  const txSelectedCard = txForm.cardId ? creditCards.find((c) => c.id === txForm.cardId) : null;
+  const txIsUSD = txForm.paymentMethod === 'credito' && txSelectedCard?.currency === 'USD';
+  const txEffectiveRate = txForm.exchangeRate !== '' ? parseFloat(txForm.exchangeRate) : (usdRate || 0);
+  const txChargeDate = txForm.paymentMethod === 'credito' && txSelectedCard?.cutDay && txSelectedCard?.paymentDay
+    ? computeChargeDate(txForm.date, txSelectedCard.cutDay, txSelectedCard.paymentDay)
+    : null;
 
   /* ---------- Acciones ---------- */
   function handleAddTransaction(e) {
     e.preventDefault();
-    const amt = parseFloat(txForm.amount);
-    if (!amt || amt <= 0) return;
+    const enteredAmount = parseFloat(txForm.amount);
+    if (!enteredAmount || enteredAmount <= 0) return;
     const isGasto = txForm.type === 'gasto';
-    const isCreditoConCuotas = isGasto && txForm.paymentMethod === 'credito' && txForm.isInstallment;
+    const isCredito = isGasto && txForm.paymentMethod === 'credito';
+    const isCreditoConCuotas = isCredito && txForm.isInstallment;
+    const isUSD = isCredito && txSelectedCard?.currency === 'USD';
+    const rate = isUSD ? (txForm.exchangeRate !== '' ? parseFloat(txForm.exchangeRate) : (usdRate || 0)) : 1;
+    if (isUSD && !rate) return; // sin tasa de cambio disponible todavía
+    const totalCOP = enteredAmount * rate;
+    const totalInstallmentsNum = isCreditoConCuotas && txForm.totalInstallments ? parseInt(txForm.totalInstallments, 10) : null;
+    const monthlyCOP = isCreditoConCuotas && totalInstallmentsNum ? totalCOP / totalInstallmentsNum : totalCOP;
     const built = {
       type: txForm.type,
-      amount: amt,
+      amount: monthlyCOP,
       category: txForm.category,
       date: txForm.date || todayStr(),
       note: txForm.note.trim(),
       paymentMethod: isGasto ? txForm.paymentMethod : null,
-      cardId: isGasto && txForm.paymentMethod === 'credito' ? (txForm.cardId || null) : null,
+      cardId: isCredito ? (txForm.cardId || null) : null,
       isFixed: isGasto ? !!txForm.isFixed : false,
       isInstallment: isCreditoConCuotas,
-      totalInstallments: isCreditoConCuotas && txForm.totalInstallments ? parseInt(txForm.totalInstallments, 10) : null,
+      totalInstallments: totalInstallmentsNum,
       currentInstallment: isCreditoConCuotas && txForm.currentInstallment ? parseInt(txForm.currentInstallment, 10) : null,
       interestRate: isCreditoConCuotas && txForm.interestRate !== '' ? parseFloat(txForm.interestRate) : null,
+      totalAmount: isCreditoConCuotas ? totalCOP : null,
+      currency: isUSD ? 'USD' : 'COP',
+      originalAmount: isUSD ? enteredAmount : null,
+      exchangeRateUsed: isUSD ? rate : null,
     };
     if (editingTxId) {
       setTransactions((prev) => prev.map((t) => (t.id === editingTxId ? { ...t, ...built } : t)));
@@ -624,13 +716,16 @@ export default function CuentaClaraApp() {
     } else {
       setTransactions((prev) => [...prev, { id: uid(), ...built }]);
     }
-    setTxForm({ type: txForm.type, amount: '', category: txForm.type === 'gasto' ? EXPENSE_CATEGORIES[0].id : INCOME_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '' });
+    setTxForm({ type: txForm.type, amount: '', category: txForm.type === 'gasto' ? EXPENSE_CATEGORIES[0].id : INCOME_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '' });
     setShowTxForm(false);
   }
   function handleEditTransaction(t) {
+    const amountForForm = t.currency === 'USD'
+      ? String(t.originalAmount)
+      : (t.isInstallment && t.totalAmount != null ? String(t.totalAmount) : String(t.amount));
     setTxForm({
       type: t.type,
-      amount: String(t.amount),
+      amount: amountForForm,
       category: t.category,
       date: t.date,
       note: t.note || '',
@@ -641,6 +736,7 @@ export default function CuentaClaraApp() {
       totalInstallments: t.totalInstallments != null ? String(t.totalInstallments) : '',
       currentInstallment: t.currentInstallment != null ? String(t.currentInstallment) : '1',
       interestRate: t.interestRate != null ? String(t.interestRate) : '',
+      exchangeRate: t.exchangeRateUsed != null ? String(t.exchangeRateUsed) : '',
     });
     setEditingTxId(t.id);
     setShowTxForm(true);
@@ -648,7 +744,7 @@ export default function CuentaClaraApp() {
   function handleCancelTxForm() {
     setEditingTxId(null);
     setShowTxForm(false);
-    setTxForm({ type: 'gasto', amount: '', category: EXPENSE_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '' });
+    setTxForm({ type: 'gasto', amount: '', category: EXPENSE_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '' });
   }
   function handleDeleteTransaction(id) { setTransactions((prev) => prev.filter((t) => t.id !== id)); }
 
@@ -698,29 +794,43 @@ export default function CuentaClaraApp() {
   function handleAddCard(e) {
     e.preventDefault();
     if (!cardForm.name.trim() || cardForm.lastFour.length !== 4) return;
+    const cardData = {
+      name: cardForm.name.trim(),
+      lastFour: cardForm.lastFour,
+      currency: cardForm.currency === 'USD' ? 'USD' : 'COP',
+      cutDay: cardForm.cutDay ? parseInt(cardForm.cutDay, 10) : null,
+      paymentDay: cardForm.paymentDay ? parseInt(cardForm.paymentDay, 10) : null,
+    };
     if (editingCardId) {
-      setCreditCards((prev) => prev.map((c) => (c.id === editingCardId ? { ...c, name: cardForm.name.trim(), lastFour: cardForm.lastFour } : c)));
+      setCreditCards((prev) => prev.map((c) => (c.id === editingCardId ? { ...c, ...cardData } : c)));
       setEditingCardId(null);
     } else {
-      setCreditCards((prev) => [...prev, { id: uid(), name: cardForm.name.trim(), lastFour: cardForm.lastFour }]);
+      setCreditCards((prev) => [...prev, { id: uid(), ...cardData }]);
     }
-    setCardForm({ name: '', lastFour: '' });
+    setCardForm({ name: '', lastFour: '', currency: 'COP', cutDay: '', paymentDay: '' });
     setShowCardForm(false);
   }
   function handleEditCard(card) {
-    setCardForm({ name: card.name, lastFour: card.lastFour });
+    setCardForm({
+      name: card.name,
+      lastFour: card.lastFour,
+      currency: card.currency || 'COP',
+      cutDay: card.cutDay != null ? String(card.cutDay) : '',
+      paymentDay: card.paymentDay != null ? String(card.paymentDay) : '',
+    });
     setEditingCardId(card.id);
     setShowCardForm(true);
   }
   function handleCancelCardForm() {
     setEditingCardId(null);
     setShowCardForm(false);
-    setCardForm({ name: '', lastFour: '' });
+    setCardForm({ name: '', lastFour: '', currency: 'COP', cutDay: '', paymentDay: '' });
   }
   function handleDeleteCard(id) { setCreditCards((prev) => prev.filter((c) => c.id !== id)); }
 
   function handleUpdateCategoryLabel(id, rawLabel) {
-    const original = ALL_CATEGORIES.find((c) => c.id === id);
+    const original = ALL_CATEGORIES.find((c) => c.id === id) || customCategories.find((c) => c.id === id);
+    if (!original) return;
     const trimmed = rawLabel.trim();
     setCategoryLabels((prev) => {
       const next = { ...prev };
@@ -731,6 +841,19 @@ export default function CuentaClaraApp() {
       }
       return next;
     });
+  }
+
+  function handleAddCustomCategory(type) {
+    const form = type === 'gasto' ? newCatGasto : newCatIngreso;
+    if (!form.label.trim()) return;
+    const newCat = { id: `custom-${uid()}`, type, label: form.label.trim(), iconKey: form.iconKey, color: form.color };
+    setCustomCategories((prev) => [...prev, newCat]);
+    const reset = { label: '', iconKey: ICON_CHOICES[0].key, color: COLOR_CHOICES[0] };
+    if (type === 'gasto') setNewCatGasto(reset); else setNewCatIngreso(reset);
+  }
+  function handleDeleteCustomCategory(id) {
+    if (!window.confirm('¿Eliminar esta categoría? Los movimientos que ya la usan se mostrarán como "Otros".')) return;
+    setCustomCategories((prev) => prev.filter((c) => c.id !== id));
   }
 
   async function handleSetPin(e) {
@@ -873,8 +996,22 @@ export default function CuentaClaraApp() {
               <button type="button" className={`cc-type-btn ${txForm.type === 'ingreso' ? 'active-ingreso' : ''}`} onClick={() => setTxForm((f) => ({ ...f, type: 'ingreso', category: INCOME_CATEGORIES[0].id }))}>Ingreso</button>
             </div>
             <div className="cc-field">
-              <label>{txForm.isInstallment ? 'Valor de la cuota mensual (COP)' : 'Monto (COP)'}</label>
+              <label>
+                {txForm.isInstallment
+                  ? `Monto total de la compra (${txIsUSD ? 'USD' : 'COP'})`
+                  : `Monto (${txIsUSD ? 'USD' : 'COP'})`}
+              </label>
               <input className="cc-input" type="number" min="0" step="100" placeholder="50000" value={txForm.amount} onChange={(e) => setTxForm((f) => ({ ...f, amount: e.target.value }))} required />
+              {txIsUSD && txForm.amount && txEffectiveRate > 0 && (
+                <span className="cc-stat-sub" style={{ fontSize: 11 }}>
+                  ≈ {fmtCOP(parseFloat(txForm.amount) * txEffectiveRate)}{txForm.isInstallment && txForm.totalInstallments ? ` en total · cuota ≈ ${fmtCOP((parseFloat(txForm.amount) * txEffectiveRate) / parseInt(txForm.totalInstallments, 10))}` : ''}
+                </span>
+              )}
+              {!txIsUSD && txForm.isInstallment && txForm.amount && txForm.totalInstallments && (
+                <span className="cc-stat-sub" style={{ fontSize: 11 }}>
+                  Cuota mensual ≈ {fmtCOP(parseFloat(txForm.amount) / parseInt(txForm.totalInstallments, 10))}
+                </span>
+              )}
             </div>
             <div className="cc-field">
               <label>Categoría</label>
@@ -907,10 +1044,30 @@ export default function CuentaClaraApp() {
                       ) : (
                         <select className="cc-select" value={txForm.cardId} onChange={(e) => setTxForm((f) => ({ ...f, cardId: e.target.value }))}>
                           <option value="">Selecciona una tarjeta</option>
-                          {creditCards.map((c) => <option key={c.id} value={c.id}>{c.name} *{c.lastFour}</option>)}
+                          {creditCards.map((c) => <option key={c.id} value={c.id}>{c.name} *{c.lastFour}{c.currency === 'USD' ? ' (USD)' : ''}</option>)}
                         </select>
                       )}
+                      {txChargeDate && (
+                        <span className="cc-stat-sub" style={{ fontSize: 11 }}>Se cobraría el {formatDateHuman(txChargeDate)}</span>
+                      )}
                     </div>
+                    {txIsUSD && (
+                      <div className="cc-field">
+                        <label>Tasa de cambio (COP por USD)</label>
+                        <input
+                          className="cc-input"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder={usdRate ? String(Math.round(usdRate)) : 'Ej. 4050'}
+                          value={txForm.exchangeRate}
+                          onChange={(e) => setTxForm((f) => ({ ...f, exchangeRate: e.target.value }))}
+                        />
+                        <span className="cc-stat-sub" style={{ fontSize: 11 }}>
+                          {usdRate ? `Tasa del día: ≈ ${fmtCOP(usdRate)} por USD. Puedes ajustarla si tu banco usa otra.` : 'No se pudo obtener la tasa automáticamente, ingrésala manualmente.'}
+                        </span>
+                      </div>
+                    )}
                     <div className="cc-field" style={{ justifyContent: 'flex-end' }}>
                       <label className="cc-checkbox-field" style={{ textTransform: 'none' }}>
                         <input type="checkbox" checked={txForm.isInstallment} onChange={(e) => setTxForm((f) => ({ ...f, isInstallment: e.target.checked }))} />
@@ -991,7 +1148,7 @@ export default function CuentaClaraApp() {
                     <div className="cc-tx-note">
                       {t.note || '—'} · <span className="cc-tx-date">{t.date}</span>
                     </div>
-                    {(t.type === 'gasto' && t.paymentMethod) || t.isFixed || t.isInstallment ? (
+                    {(t.type === 'gasto' && t.paymentMethod) || t.isFixed || t.isInstallment || t.currency === 'USD' ? (
                       <div className="cc-tx-tags">
                         {t.type === 'gasto' && t.paymentMethod && (
                           <span className="cc-tag">{getPaymentMethod(t.paymentMethod).label}{t.cardId ? ` · ${cardLabel(t.cardId)}` : ''}</span>
@@ -1003,6 +1160,17 @@ export default function CuentaClaraApp() {
                             {t.interestRate != null ? ` · ${t.interestRate}% mensual` : ''}
                           </span>
                         )}
+                        {t.currency === 'USD' && (
+                          <span className="cc-tag">
+                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(t.originalAmount || 0)}
+                            {t.exchangeRateUsed ? ` · tasa ${fmtCOP(t.exchangeRateUsed)}` : ''}
+                          </span>
+                        )}
+                        {(() => {
+                          const c = t.cardId ? creditCards.find((cc) => cc.id === t.cardId) : null;
+                          const chargeDate = c && c.cutDay && c.paymentDay ? computeChargeDate(t.date, c.cutDay, c.paymentDay) : null;
+                          return chargeDate ? <span className="cc-tag">Se cobra: {formatDateHuman(chargeDate)}</span> : null;
+                        })()}
                       </div>
                     ) : null}
                   </div>
@@ -1048,6 +1216,22 @@ export default function CuentaClaraApp() {
               <label>Últimos 4 dígitos</label>
               <input className="cc-input" type="text" inputMode="numeric" maxLength={4} placeholder="1679" value={cardForm.lastFour} onChange={(e) => setCardForm((f) => ({ ...f, lastFour: e.target.value.replace(/\D/g, '').slice(0, 4) }))} required />
             </div>
+            <div className="cc-field">
+              <label>Moneda</label>
+              <select className="cc-select" value={cardForm.currency} onChange={(e) => setCardForm((f) => ({ ...f, currency: e.target.value }))}>
+                <option value="COP">Pesos colombianos (COP)</option>
+                <option value="USD">Dólares (USD)</option>
+              </select>
+            </div>
+            <div className="cc-field">
+              <label>Día de corte (opcional)</label>
+              <input className="cc-input" type="number" min="1" max="31" placeholder="31" value={cardForm.cutDay} onChange={(e) => setCardForm((f) => ({ ...f, cutDay: e.target.value }))} />
+            </div>
+            <div className="cc-field">
+              <label>Día de pago (opcional)</label>
+              <input className="cc-input" type="number" min="1" max="31" placeholder="15" value={cardForm.paymentDay} onChange={(e) => setCardForm((f) => ({ ...f, paymentDay: e.target.value }))} />
+              <span className="cc-stat-sub" style={{ fontSize: 11 }}>Con estos dos datos calculamos cuándo se cobraría cada compra.</span>
+            </div>
             <div className="cc-form-actions">
               <button type="submit" className="cc-btn cc-btn-primary">{editingCardId ? 'Guardar cambios' : 'Guardar tarjeta'}</button>
               {editingCardId && <button type="button" className="cc-btn cc-btn-outline" onClick={handleCancelCardForm}>Cancelar edición</button>}
@@ -1067,7 +1251,7 @@ export default function CuentaClaraApp() {
                 <div className="cc-goal-head">
                   <div>
                     <div className="cc-goal-name">{card.name}</div>
-                    <div className="cc-goal-meta">Terminada en {card.lastFour} · {cardTx.length} movimientos registrados</div>
+                    <div className="cc-goal-meta">Terminada en {card.lastFour}{card.currency === 'USD' ? ' · USD' : ''} · {cardTx.length} movimientos registrados</div>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => handleEditCard(card)} aria-label="Editar tarjeta"><Pencil size={14} /></button>
@@ -1326,38 +1510,104 @@ export default function CuentaClaraApp() {
         {configTab === 'categorias' && (
           <>
             <div className="cc-card" style={{ marginBottom: 16 }}>
-              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>Categorías de gasto</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {EXPENSE_CATEGORIES.map((c) => (
-                  <div key={c.id} className="cc-inline-form" style={{ marginTop: 0 }}>
-                    <IconCircle Icon={c.icon} color={c.color} bg="var(--expense-soft)" size={28} iconSize={14} />
-                    <input
-                      className="cc-input"
-                      type="text"
-                      defaultValue={getCategory(c.id).label}
-                      onBlur={(e) => handleUpdateCategoryLabel(c.id, e.target.value)}
-                      style={{ maxWidth: 220 }}
-                    />
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Categorías de gasto</div>
+              <p className="cc-stat-sub" style={{ marginBottom: 12 }}>Las categorías originales se pueden renombrar pero no borrar. Las que agregues tú se pueden borrar.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                {allExpenseCategories.map((c) => {
+                  const resolved = getCategory(c.id);
+                  const isCustom = c.id.startsWith('custom-');
+                  return (
+                    <div key={c.id} className="cc-inline-form" style={{ marginTop: 0 }}>
+                      <IconCircle Icon={resolved.icon} color={resolved.color} bg="var(--expense-soft)" size={28} iconSize={14} />
+                      <input
+                        className="cc-input"
+                        type="text"
+                        defaultValue={resolved.label}
+                        onBlur={(e) => handleUpdateCategoryLabel(c.id, e.target.value)}
+                        style={{ maxWidth: 220 }}
+                      />
+                      {isCustom && (
+                        <button type="button" className="cc-btn cc-btn-danger cc-btn-sm" onClick={() => handleDeleteCustomCategory(c.id)} aria-label="Eliminar categoría">
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ borderTop: '1px dashed var(--paper-line)', paddingTop: 12 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Agregar categoría de gasto</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                  <input className="cc-input" type="text" placeholder="Nombre" value={newCatGasto.label} onChange={(e) => setNewCatGasto((f) => ({ ...f, label: e.target.value }))} style={{ maxWidth: 160 }} />
+                  <select className="cc-select" value={newCatGasto.iconKey} onChange={(e) => setNewCatGasto((f) => ({ ...f, iconKey: e.target.value }))} style={{ maxWidth: 150 }}>
+                    {ICON_CHOICES.map((i) => <option key={i.key} value={i.key}>{i.label}</option>)}
+                  </select>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {COLOR_CHOICES.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => setNewCatGasto((f) => ({ ...f, color }))}
+                        style={{ width: 20, height: 20, borderRadius: 99, background: color, border: newCatGasto.color === color ? '2px solid var(--ink)' : '1px solid rgba(0,0,0,0.15)', cursor: 'pointer' }}
+                        aria-label={`Color ${color}`}
+                      />
+                    ))}
                   </div>
-                ))}
+                  <button type="button" className="cc-btn cc-btn-primary cc-btn-sm" onClick={() => handleAddCustomCategory('gasto')}>
+                    <Plus size={13} /> Agregar
+                  </button>
+                </div>
               </div>
             </div>
 
             <div className="cc-card">
-              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>Categorías de ingreso</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {INCOME_CATEGORIES.map((c) => (
-                  <div key={c.id} className="cc-inline-form" style={{ marginTop: 0 }}>
-                    <IconCircle Icon={c.icon} color={c.color} bg="var(--income-soft)" size={28} iconSize={14} />
-                    <input
-                      className="cc-input"
-                      type="text"
-                      defaultValue={getCategory(c.id).label}
-                      onBlur={(e) => handleUpdateCategoryLabel(c.id, e.target.value)}
-                      style={{ maxWidth: 220 }}
-                    />
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Categorías de ingreso</div>
+              <p className="cc-stat-sub" style={{ marginBottom: 12 }}>Las categorías originales se pueden renombrar pero no borrar. Las que agregues tú se pueden borrar.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                {allIncomeCategories.map((c) => {
+                  const resolved = getCategory(c.id);
+                  const isCustom = c.id.startsWith('custom-');
+                  return (
+                    <div key={c.id} className="cc-inline-form" style={{ marginTop: 0 }}>
+                      <IconCircle Icon={resolved.icon} color={resolved.color} bg="var(--income-soft)" size={28} iconSize={14} />
+                      <input
+                        className="cc-input"
+                        type="text"
+                        defaultValue={resolved.label}
+                        onBlur={(e) => handleUpdateCategoryLabel(c.id, e.target.value)}
+                        style={{ maxWidth: 220 }}
+                      />
+                      {isCustom && (
+                        <button type="button" className="cc-btn cc-btn-danger cc-btn-sm" onClick={() => handleDeleteCustomCategory(c.id)} aria-label="Eliminar categoría">
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ borderTop: '1px dashed var(--paper-line)', paddingTop: 12 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Agregar categoría de ingreso</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                  <input className="cc-input" type="text" placeholder="Nombre" value={newCatIngreso.label} onChange={(e) => setNewCatIngreso((f) => ({ ...f, label: e.target.value }))} style={{ maxWidth: 160 }} />
+                  <select className="cc-select" value={newCatIngreso.iconKey} onChange={(e) => setNewCatIngreso((f) => ({ ...f, iconKey: e.target.value }))} style={{ maxWidth: 150 }}>
+                    {ICON_CHOICES.map((i) => <option key={i.key} value={i.key}>{i.label}</option>)}
+                  </select>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {COLOR_CHOICES.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => setNewCatIngreso((f) => ({ ...f, color }))}
+                        style={{ width: 20, height: 20, borderRadius: 99, background: color, border: newCatIngreso.color === color ? '2px solid var(--ink)' : '1px solid rgba(0,0,0,0.15)', cursor: 'pointer' }}
+                        aria-label={`Color ${color}`}
+                      />
+                    ))}
                   </div>
-                ))}
+                  <button type="button" className="cc-btn cc-btn-primary cc-btn-sm" onClick={() => handleAddCustomCategory('ingreso')}>
+                    <Plus size={13} /> Agregar
+                  </button>
+                </div>
               </div>
             </div>
           </>
