@@ -415,6 +415,21 @@ const STYLES = `
 @media (prefers-reduced-motion: reduce) {
   .cc-btn, .cc-progress-fill { transition: none !important; }
 }
+
+.cc-print-report { display: none; }
+.cc-print-sub { color: var(--ink-soft); font-size: 13px; margin: 0 0 20px 0; }
+.cc-print-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; }
+.cc-print-table td, .cc-print-table th { padding: 5px 8px; border-bottom: 1px solid #ddd; text-align: left; }
+.cc-print-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-soft); }
+.cc-print-table td:last-child, .cc-print-table th:last-child { text-align: right; }
+.cc-print-list { font-size: 13px; line-height: 1.6; padding-left: 18px; margin-bottom: 20px; }
+@media print {
+  body * { visibility: hidden; }
+  .cc-print-report, .cc-print-report * { visibility: visible; }
+  .cc-print-report { display: block; position: absolute; top: 0; left: 0; width: 100%; padding: 10mm; }
+  .cc-print-report h1 { font-family: 'Fraunces', serif; font-size: 22px; margin: 0 0 4px 0; }
+  .cc-print-report h2 { font-family: 'Fraunces', serif; font-size: 15px; margin: 22px 0 8px 0; }
+}
 `;
 
 /* ============================== COMPONENTES PEQUEÑOS ============================== */
@@ -534,7 +549,7 @@ export default function CuentaClaraApp() {
     fetch('https://open.er-api.com/v6/latest/USD')
       .then((r) => r.json())
       .then((data) => {
-        if (!cancelled && data && data.rates && data.rates.COP) setUsdRate(data.rates.COP);
+        if (!cancelled && data && data.rates && data.rates.COP) setUsdRate(Math.round(data.rates.COP));
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -898,6 +913,9 @@ export default function CuentaClaraApp() {
           <select className="cc-select" style={{ maxWidth: 160 }} value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}>
             {availableMonths.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
           </select>
+          <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => window.print()}>
+            <Landmark size={13} /> Descargar reporte (PDF)
+          </button>
         </div>
 
         <div className="cc-stats-grid">
@@ -1001,7 +1019,7 @@ export default function CuentaClaraApp() {
                   ? `Monto total de la compra (${txIsUSD ? 'USD' : 'COP'})`
                   : `Monto (${txIsUSD ? 'USD' : 'COP'})`}
               </label>
-              <input className="cc-input" type="number" min="0" step="100" placeholder="50000" value={txForm.amount} onChange={(e) => setTxForm((f) => ({ ...f, amount: e.target.value }))} required />
+              <input className="cc-input" type="number" min="0" step="any" placeholder="50000" value={txForm.amount} onChange={(e) => setTxForm((f) => ({ ...f, amount: e.target.value }))} required />
               {txIsUSD && txForm.amount && txEffectiveRate > 0 && (
                 <span className="cc-stat-sub" style={{ fontSize: 11 }}>
                   ≈ {fmtCOP(parseFloat(txForm.amount) * txEffectiveRate)}{txForm.isInstallment && txForm.totalInstallments ? ` en total · cuota ≈ ${fmtCOP((parseFloat(txForm.amount) * txEffectiveRate) / parseInt(txForm.totalInstallments, 10))}` : ''}
@@ -1058,7 +1076,7 @@ export default function CuentaClaraApp() {
                           className="cc-input"
                           type="number"
                           min="0"
-                          step="0.01"
+                          step="any"
                           placeholder={usdRate ? String(Math.round(usdRate)) : 'Ej. 4050'}
                           value={txForm.exchangeRate}
                           onChange={(e) => setTxForm((f) => ({ ...f, exchangeRate: e.target.value }))}
@@ -1087,7 +1105,7 @@ export default function CuentaClaraApp() {
                         </div>
                         <div className="cc-field">
                           <label>Tasa de interés mensual % (opcional)</label>
-                          <input className="cc-input" type="number" min="0" step="0.01" placeholder="2.08" value={txForm.interestRate} onChange={(e) => setTxForm((f) => ({ ...f, interestRate: e.target.value }))} />
+                          <input className="cc-input" type="number" min="0" step="any" placeholder="2.08" value={txForm.interestRate} onChange={(e) => setTxForm((f) => ({ ...f, interestRate: e.target.value }))} />
                           <span className="cc-stat-sub" style={{ fontSize: 11 }}>Cada compra puede tener su propia tasa, distinta a la de otras compras.</span>
                         </div>
                       </>
@@ -1352,15 +1370,15 @@ export default function CuentaClaraApp() {
             </div>
             <div className="cc-field">
               <label>Monto total (COP)</label>
-              <input className="cc-input" type="number" min="0" step="1000" value={debtForm.totalAmount} onChange={(e) => setDebtForm((f) => ({ ...f, totalAmount: e.target.value }))} required />
+              <input className="cc-input" type="number" min="0" step="any" value={debtForm.totalAmount} onChange={(e) => setDebtForm((f) => ({ ...f, totalAmount: e.target.value }))} required />
             </div>
             <div className="cc-field">
               <label>Tasa de interés (% mensual)</label>
-              <input className="cc-input" type="number" min="0" step="0.1" placeholder="Opcional" value={debtForm.interestRate} onChange={(e) => setDebtForm((f) => ({ ...f, interestRate: e.target.value }))} />
+              <input className="cc-input" type="number" min="0" step="any" placeholder="Opcional" value={debtForm.interestRate} onChange={(e) => setDebtForm((f) => ({ ...f, interestRate: e.target.value }))} />
             </div>
             <div className="cc-field">
               <label>Cuota mensual (COP)</label>
-              <input className="cc-input" type="number" min="0" step="1000" placeholder="Opcional" value={debtForm.monthlyPayment} onChange={(e) => setDebtForm((f) => ({ ...f, monthlyPayment: e.target.value }))} />
+              <input className="cc-input" type="number" min="0" step="any" placeholder="Opcional" value={debtForm.monthlyPayment} onChange={(e) => setDebtForm((f) => ({ ...f, monthlyPayment: e.target.value }))} />
             </div>
             <div className="cc-field">
               <label>Día de pago del mes</label>
@@ -1403,7 +1421,7 @@ export default function CuentaClaraApp() {
                   <span>Total: {fmtCOP(d.totalAmount)}</span>
                 </div>
                 <div className="cc-inline-form">
-                  <input className="cc-input" type="number" min="0" step="1000" placeholder="Monto del abono" value={paymentInputs[d.id] || ''} onChange={(e) => setPaymentInputs((p) => ({ ...p, [d.id]: e.target.value }))} />
+                  <input className="cc-input" type="number" min="0" step="any" placeholder="Monto del abono" value={paymentInputs[d.id] || ''} onChange={(e) => setPaymentInputs((p) => ({ ...p, [d.id]: e.target.value }))} />
                   <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => handleAddPayment(d.id)}>Registrar abono</button>
                 </div>
               </div>
@@ -1436,7 +1454,7 @@ export default function CuentaClaraApp() {
             </div>
             <div className="cc-field">
               <label>Monto objetivo (COP)</label>
-              <input className="cc-input" type="number" min="0" step="1000" value={goalForm.targetAmount} onChange={(e) => setGoalForm((f) => ({ ...f, targetAmount: e.target.value }))} required />
+              <input className="cc-input" type="number" min="0" step="any" value={goalForm.targetAmount} onChange={(e) => setGoalForm((f) => ({ ...f, targetAmount: e.target.value }))} required />
             </div>
             <div className="cc-field">
               <label>Fecha meta (opcional)</label>
@@ -1470,7 +1488,7 @@ export default function CuentaClaraApp() {
                   <span>Meta: {fmtCOP(g.targetAmount)}</span>
                 </div>
                 <div className="cc-inline-form">
-                  <input className="cc-input" type="number" min="0" step="1000" placeholder="Monto" value={contributionInputs[g.id] || ''} onChange={(e) => setContributionInputs((p) => ({ ...p, [g.id]: e.target.value }))} />
+                  <input className="cc-input" type="number" min="0" step="any" placeholder="Monto" value={contributionInputs[g.id] || ''} onChange={(e) => setContributionInputs((p) => ({ ...p, [g.id]: e.target.value }))} />
                   <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => handleContribution(g.id, 1)}>Aportar</button>
                   <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => handleContribution(g.id, -1)}>Retirar</button>
                 </div>
@@ -1684,6 +1702,122 @@ export default function CuentaClaraApp() {
     );
   }
 
+  /* ---------- Reporte mensual imprimible ---------- */
+  function renderPrintReport() {
+    const monthTx = transactions
+      .filter((t) => monthKeyFromDate(t.date) === selectedMonth)
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    const netMonth = selMonthIncome - selMonthExpense;
+    return (
+      <div className="cc-print-report">
+        <h1>Cuenta Clara — Reporte financiero</h1>
+        <p className="cc-print-sub">Mes: {monthLabel(selectedMonth)} · Generado el {formatDateHuman(new Date())}</p>
+
+        <h2>Resumen del mes</h2>
+        <table className="cc-print-table">
+          <tbody>
+            <tr><td>Ingresos</td><td>{fmtCOP(selMonthIncome)}</td></tr>
+            <tr><td>Gastos totales</td><td>{fmtCOP(selMonthExpense)}</td></tr>
+            <tr><td>&nbsp;&nbsp;Gastos fijos</td><td>{fmtCOP(selMonthFixed)}</td></tr>
+            <tr><td>&nbsp;&nbsp;Gastos variables</td><td>{fmtCOP(selMonthVariable)}</td></tr>
+            <tr><td><strong>Balance del mes</strong></td><td><strong>{fmtCOP(netMonth)}</strong></td></tr>
+          </tbody>
+        </table>
+
+        <h2>Posición general</h2>
+        <table className="cc-print-table">
+          <tbody>
+            <tr><td>Saldo en caja (histórico)</td><td>{fmtCOP(cashBalance)}</td></tr>
+            <tr><td>Ahorro total</td><td>{fmtCOP(totalSavings)}</td></tr>
+            <tr><td>Deuda pendiente</td><td>{fmtCOP(totalDebtRemaining)}</td></tr>
+            <tr><td><strong>Patrimonio neto</strong></td><td><strong>{fmtCOP(netWorth)}</strong></td></tr>
+          </tbody>
+        </table>
+
+        {pieData.length > 0 && (
+          <>
+            <h2>Gastos por categoría</h2>
+            <table className="cc-print-table">
+              <tbody>
+                {pieData.map((p) => (
+                  <tr key={p.name}><td>{p.name}</td><td>{fmtCOP(p.value)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+
+        {debts.length > 0 && (
+          <>
+            <h2>Deudas</h2>
+            <table className="cc-print-table">
+              <thead><tr><th>Deuda</th><th>Total</th><th>Pagado</th><th>Pendiente</th></tr></thead>
+              <tbody>
+                {debts.map((d) => {
+                  const paid = (d.payments || []).reduce((s, p) => s + p.amount, 0);
+                  return (
+                    <tr key={d.id}>
+                      <td>{d.name}</td>
+                      <td>{fmtCOP(d.totalAmount)}</td>
+                      <td>{fmtCOP(paid)}</td>
+                      <td>{fmtCOP(Math.max(0, d.totalAmount - paid))}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </>
+        )}
+
+        {savingsGoals.length > 0 && (
+          <>
+            <h2>Metas de ahorro</h2>
+            <table className="cc-print-table">
+              <thead><tr><th>Meta</th><th>Objetivo</th><th>Ahorrado</th></tr></thead>
+              <tbody>
+                {savingsGoals.map((g) => {
+                  const saved = (g.contributions || []).reduce((s, c) => s + c.amount, 0);
+                  return (
+                    <tr key={g.id}>
+                      <td>{g.name}</td>
+                      <td>{fmtCOP(g.targetAmount)}</td>
+                      <td>{fmtCOP(saved)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </>
+        )}
+
+        {recommendations.length > 0 && (
+          <>
+            <h2>Recomendaciones</h2>
+            <ul className="cc-print-list">
+              {recommendations.map((r, i) => <li key={i}>{r.text}</li>)}
+            </ul>
+          </>
+        )}
+
+        <h2>Movimientos del mes ({monthTx.length})</h2>
+        <table className="cc-print-table cc-print-table-tx">
+          <thead><tr><th>Fecha</th><th>Categoría</th><th>Nota</th><th>Monto</th></tr></thead>
+          <tbody>
+            {monthTx.map((t) => (
+              <tr key={t.id}>
+                <td>{t.date}</td>
+                <td>{getCategory(t.category).label}</td>
+                <td>{t.note || '—'}</td>
+                <td>{t.type === 'ingreso' ? '+' : '-'}{fmtCOP(t.amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+
   return (
     <>
       <style>{STYLES}</style>
@@ -1707,6 +1841,7 @@ export default function CuentaClaraApp() {
           {activeTab === 'configuracion' && renderConfiguracion()}
         </div>
       </div>
+      {renderPrintReport()}
     </>
   );
 }
