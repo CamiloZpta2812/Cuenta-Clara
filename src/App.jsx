@@ -8,7 +8,7 @@ import {
   AlertTriangle, TrendingUp, TrendingDown, Wallet, Utensils, Car, Home,
   Film, HeartPulse, GraduationCap, Zap, ShoppingBag, MoreHorizontal,
   Briefcase, Laptop, CircleDollarSign, Check, Loader2, X, Landmark, Banknote, Pencil, Settings,
-  Gift, Plane, Dumbbell, PawPrint, Coffee, Smartphone, Baby, Shirt,
+  Gift, Plane, Dumbbell, PawPrint, Coffee, Smartphone, Baby, Shirt, Repeat,
 } from 'lucide-react';
 import { getItem, setItem } from './storage';
 import { supabase } from './supabaseClient';
@@ -17,12 +17,13 @@ import { supabase } from './supabaseClient';
 
 const COLORS = {
   income: '#2F7D5C',
-  expense: '#B0524B',
+  expense: '#BB4B34',
   savings: '#B98A2E',
   debt: '#6B5199',
-  ink: '#202B38',
-  inkSoft: '#5B6570',
-  line: '#DCD8C4',
+  brand: '#BB4B34',
+  ink: '#2E2B27',
+  inkSoft: '#6E675E',
+  line: '#E4DDCE',
 };
 
 const EXPENSE_CATEGORIES = [
@@ -90,8 +91,20 @@ const PAYMENT_METHODS = [
 /* ============================== HELPERS ============================== */
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
-function monthKeyFromDate(d) { return (d || todayStr()).slice(0, 7); }
-function currentMonthKey() { return todayStr().slice(0, 7); }
+let monthStartDayOverride = 1;
+function monthKeyFromDate(d) {
+  const dateStr = d || todayStr();
+  const S = monthStartDayOverride;
+  if (!S || S <= 1) return dateStr.slice(0, 7);
+  const [y, m, day] = dateStr.split('-').map(Number);
+  const effectiveS = Math.min(S, daysInMonth(y, m - 1));
+  if (day >= effectiveS) return `${y}-${String(m).padStart(2, '0')}`;
+  let pm = m - 1;
+  let py = y;
+  if (pm < 1) { pm = 12; py -= 1; }
+  return `${py}-${String(pm).padStart(2, '0')}`;
+}
+function currentMonthKey() { return monthKeyFromDate(todayStr()); }
 function monthLabel(key) {
   const [y, m] = key.split('-');
   return `${MONTH_NAMES[parseInt(m, 10) - 1]} '${y.slice(2)}`;
@@ -243,23 +256,24 @@ function getStatus(income, expense) {
 /* ============================== ESTILOS ============================== */
 
 const STYLES = `
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 
 .cc-app {
-  --paper: #EEEFE4;
-  --paper-line: #DCD8C4;
-  --ink: #202B38;
-  --ink-soft: #5B6570;
+  --paper: #F4F1EA;
+  --paper-line: #E4DDCE;
+  --ink: #2E2B27;
+  --ink-soft: #6E675E;
   --income: #2F7D5C;
   --income-soft: #E3EFE8;
-  --expense: #B0524B;
-  --expense-soft: #F6E9E6;
+  --expense: #BB4B34;
+  --expense-soft: #F5E2DB;
   --savings: #B98A2E;
   --savings-soft: #F6EEDA;
   --debt: #6B5199;
   --debt-soft: #EDE7F5;
+  --brand: #BB4B34;
   --card: #FFFFFF;
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: 'Poppins', sans-serif;
   color: var(--ink);
   background:
     repeating-linear-gradient(to bottom, transparent 0 39px, var(--paper-line) 39px 40px),
@@ -269,8 +283,8 @@ const STYLES = `
   box-sizing: border-box;
 }
 .cc-app * { box-sizing: border-box; }
-.cc-mono { font-family: 'IBM Plex Mono', monospace; }
-.cc-display { font-family: 'Fraunces', serif; }
+.cc-mono { font-family: 'Poppins', sans-serif; }
+.cc-display { font-family: 'Poppins', sans-serif; }
 
 .cc-sidebar {
   width: 220px;
@@ -284,29 +298,29 @@ const STYLES = `
   min-height: 100vh;
 }
 .cc-brand { display: flex; align-items: center; gap: 10px; padding: 0 6px; }
-.cc-brand-logo { font-size: 26px; line-height: 1; }
-.cc-brand-title { font-family: 'Fraunces', serif; font-weight: 700; font-size: 22px; letter-spacing: -0.01em; }
+.cc-brand-logo { display: inline-flex; align-items: center; line-height: 1; }
+.cc-brand-title { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 22px; letter-spacing: -0.01em; }
 .cc-brand-sub { font-size: 12px; color: var(--ink-soft); }
 .cc-nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .cc-nav-item {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 12px; border-radius: 9px; border: none;
   background: transparent; cursor: pointer; text-align: left;
-  font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; font-weight: 500;
+  font-family: 'Poppins', sans-serif; font-size: 14px; font-weight: 500;
   color: var(--ink-soft); transition: background .15s ease, color .15s ease;
   border-left: 3px solid transparent;
 }
 .cc-nav-item:hover { background: rgba(32,43,56,0.05); color: var(--ink); }
-.cc-nav-item.active { background: var(--card); color: var(--ink); border-left: 3px solid var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(32,43,56,.06); }
+.cc-nav-item.active { background: var(--card); color: var(--ink); border-left: 3px solid var(--brand); font-weight: 600; box-shadow: 0 1px 2px rgba(46,43,39,.06); }
 .cc-sidebar-footer { display: flex; flex-direction: column; gap: 8px; padding: 0 6px; }
 .cc-sidebar-note { font-size: 11px; color: var(--ink-soft); line-height: 1.5; }
 
 .cc-main { flex: 1; padding: 28px 34px; max-width: 1180px; }
-.cc-page-title { font-family: 'Fraunces', serif; font-size: 24px; font-weight: 600; margin: 0 0 4px 0; }
+.cc-page-title { font-family: 'Poppins', sans-serif; font-size: 24px; font-weight: 600; margin: 0 0 4px 0; }
 .cc-page-sub { color: var(--ink-soft); font-size: 14px; margin: 0 0 22px 0; }
 .cc-subtabs { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
 .cc-subtab { padding: 8px 14px; border-radius: 999px; border: 1px solid var(--paper-line); background: var(--card); color: var(--ink-soft); font-size: 13px; font-weight: 600; cursor: pointer; }
-.cc-subtab.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+.cc-subtab.active { background: var(--brand); color: #fff; border-color: var(--brand); }
 
 .cc-banner {
   display: flex; align-items: center; gap: 8px;
@@ -317,14 +331,14 @@ const STYLES = `
 .cc-stamp {
   display: inline-flex; align-items: center; gap: 8px;
   border: 3px double currentColor; padding: 10px 18px; border-radius: 8px;
-  transform: rotate(-3deg); font-family: 'IBM Plex Mono', monospace;
+  transform: rotate(-3deg); font-family: 'Poppins', sans-serif;
   font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; font-size: 12.5px;
 }
 
 .cc-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin: 20px 0; }
 .cc-card { background: var(--card); border-radius: 14px; padding: 18px 20px; box-shadow: 0 1px 2px rgba(32,43,56,.05), 0 6px 18px rgba(32,43,56,.05); border: 1px solid rgba(32,43,56,0.04); }
 .cc-stat-label { font-size: 12px; color: var(--ink-soft); display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
-.cc-stat-value { font-family: 'IBM Plex Mono', monospace; font-size: 21px; font-weight: 600; }
+.cc-stat-value { font-family: 'Poppins', sans-serif; font-size: 21px; font-weight: 600; }
 .cc-stat-sub { font-size: 11.5px; color: var(--ink-soft); margin-top: 4px; }
 
 .cc-icon-circle { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -341,11 +355,11 @@ const STYLES = `
 
 .cc-btn {
   display: inline-flex; align-items: center; gap: 6px; padding: 9px 15px; border-radius: 8px;
-  border: none; font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; font-size: 13.5px;
+  border: none; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 13.5px;
   cursor: pointer; transition: transform .1s ease, opacity .15s ease; white-space: nowrap;
 }
 .cc-btn:active { transform: scale(0.97); }
-.cc-btn-primary { background: var(--ink); color: #fff; }
+.cc-btn-primary { background: var(--brand); color: #fff; }
 .cc-btn-outline { background: transparent; border: 1.5px solid var(--paper-line); color: var(--ink); }
 .cc-btn-danger { background: transparent; color: var(--expense); padding: 6px 8px; }
 .cc-btn-sm { padding: 6px 10px; font-size: 12.5px; }
@@ -357,9 +371,9 @@ const STYLES = `
 .cc-field label { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
 .cc-input, .cc-select {
   padding: 9px 10px; border: 1px solid var(--paper-line); border-radius: 8px;
-  font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; background: #fff; color: var(--ink); width: 100%;
+  font-family: 'Poppins', sans-serif; font-size: 16px; background: #fff; color: var(--ink); width: 100%;
 }
-.cc-input:focus, .cc-select:focus { outline: 2px solid var(--ink); outline-offset: 1px; }
+.cc-input:focus, .cc-select:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
 .cc-type-toggle { display: flex; gap: 6px; grid-column: 1 / -1; }
 .cc-type-btn { flex: 1; padding: 9px; border-radius: 8px; border: 1.5px solid var(--paper-line); background: #fff; cursor: pointer; font-weight: 600; font-size: 13.5px; }
 .cc-type-btn.active-gasto { background: var(--expense-soft); border-color: var(--expense); color: var(--expense); }
@@ -372,9 +386,9 @@ const STYLES = `
 .cc-tx-row { display: flex; align-items: center; gap: 12px; background: var(--card); padding: 11px 14px; border-radius: 10px; border: 1px solid rgba(32,43,56,0.04); }
 .cc-tx-cat { font-size: 13px; font-weight: 600; }
 .cc-tx-note { font-size: 12px; color: var(--ink-soft); }
-.cc-tx-date { font-size: 11.5px; color: var(--ink-soft); font-family: 'IBM Plex Mono', monospace; }
-.cc-tx-amount { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 14px; margin-left: auto; }
-.cc-tag { display: inline-block; font-size: 11px; padding: 3px 8px; border-radius: 6px; background: var(--paper); color: var(--ink-soft); font-family: 'IBM Plex Mono', monospace; line-height: 1.4; max-width: 100%; }
+.cc-tx-date { font-size: 11.5px; color: var(--ink-soft); font-family: 'Poppins', sans-serif; }
+.cc-tx-amount { font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; margin-left: auto; }
+.cc-tag { display: inline-block; font-size: 11px; padding: 3px 8px; border-radius: 6px; background: var(--paper); color: var(--ink-soft); font-family: 'Poppins', sans-serif; line-height: 1.4; max-width: 100%; }
 .cc-tag-fixed { background: var(--debt-soft); color: var(--debt); }
 .cc-tag-installment { background: var(--savings-soft); color: var(--savings); }
 .cc-tx-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
@@ -386,7 +400,7 @@ const STYLES = `
 .cc-goal-meta { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
 .cc-progress-track { width: 100%; height: 9px; border-radius: 99px; background: var(--paper-line); overflow: hidden; margin: 8px 0; }
 .cc-progress-fill { height: 100%; border-radius: 99px; }
-.cc-goal-nums { display: flex; justify-content: space-between; font-size: 12.5px; font-family: 'IBM Plex Mono', monospace; color: var(--ink-soft); }
+.cc-goal-nums { display: flex; justify-content: space-between; font-size: 12.5px; font-family: 'Poppins', sans-serif; color: var(--ink-soft); }
 .cc-inline-form { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
 .cc-inline-form input { max-width: 150px; }
 
@@ -405,7 +419,7 @@ const STYLES = `
   .cc-brand-sub { display: none; }
   .cc-nav { flex-direction: row; flex: none; overflow-x: auto; gap: 2px; }
   .cc-nav-item { border-left: none; border-bottom: 3px solid transparent; white-space: nowrap; }
-  .cc-nav-item.active { border-left: none; border-bottom: 3px solid var(--ink); }
+  .cc-nav-item.active { border-left: none; border-bottom: 3px solid var(--brand); }
   .cc-sidebar-footer { display: none; }
   .cc-main { padding: 20px 16px; }
   .cc-charts-grid { grid-template-columns: 1fr; }
@@ -427,12 +441,22 @@ const STYLES = `
   body * { visibility: hidden; }
   .cc-print-report, .cc-print-report * { visibility: visible; }
   .cc-print-report { display: block; position: absolute; top: 0; left: 0; width: 100%; padding: 10mm; }
-  .cc-print-report h1 { font-family: 'Fraunces', serif; font-size: 22px; margin: 0 0 4px 0; }
-  .cc-print-report h2 { font-family: 'Fraunces', serif; font-size: 15px; margin: 22px 0 8px 0; }
+  .cc-print-report h1 { font-family: 'Poppins', sans-serif; font-size: 22px; margin: 0 0 4px 0; }
+  .cc-print-report h2 { font-family: 'Poppins', sans-serif; font-size: 15px; margin: 22px 0 8px 0; }
 }
 `;
 
 /* ============================== COMPONENTES PEQUEÑOS ============================== */
+
+function Logo({ size = 26 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="50" cy="50" r="36" fill="none" stroke="#BB4B34" strokeWidth="6" />
+      <path d="M 14 50 A 36 36 0 0 0 86 50 Z" fill="#BB4B34" />
+      <line x1="9" y1="50" x2="91" y2="50" stroke="#F4F1EA" strokeWidth="5" />
+    </svg>
+  );
+}
 
 function IconCircle({ Icon, color, bg, size = 30, iconSize = 15 }) {
   return (
@@ -484,6 +508,7 @@ function Sidebar({ activeTab, onChangeTab, onReset, onSignOut, userEmail }) {
   const items = [
     { id: 'resumen', label: 'Resumen', Icon: LayoutDashboard },
     { id: 'movimientos', label: 'Movimientos', Icon: ArrowLeftRight },
+    { id: 'gastosfijos', label: 'Gastos fijos', Icon: Repeat },
     { id: 'tarjetas', label: 'Tarjetas', Icon: Landmark },
     { id: 'deudas', label: 'Deudas', Icon: CreditCard },
     { id: 'ahorros', label: 'Ahorros', Icon: PiggyBank },
@@ -492,10 +517,10 @@ function Sidebar({ activeTab, onChangeTab, onReset, onSignOut, userEmail }) {
   return (
     <div className="cc-sidebar">
       <div className="cc-brand">
-        <span className="cc-brand-logo" aria-hidden="true">📒</span>
+        <span className="cc-brand-logo" aria-hidden="true"><Logo size={26} /></span>
         <div>
-          <div className="cc-brand-title">Cuenta Clara</div>
-          <div className="cc-brand-sub">tu libro de finanzas personales</div>
+          <div className="cc-brand-title">AlDía</div>
+          <div className="cc-brand-sub">tu día a día financiero</div>
         </div>
       </div>
       <div className="cc-nav">
@@ -531,10 +556,13 @@ export default function CuentaClaraApp() {
   const [debts, setDebts] = useState([]);
   const [savingsGoals, setSavingsGoals] = useState([]);
   const [creditCards, setCreditCards] = useState([]);
+  const [fixedExpenses, setFixedExpenses] = useState([]);
   const [categoryLabels, setCategoryLabels] = useState({});
   categoryLabelOverrides = categoryLabels;
   const [customCategories, setCustomCategories] = useState([]);
   customCategoriesOverride = customCategories;
+  const [monthStartDay, setMonthStartDay] = useState(1);
+  monthStartDayOverride = monthStartDay;
 
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey());
 
@@ -558,6 +586,10 @@ export default function CuentaClaraApp() {
   const [showCardForm, setShowCardForm] = useState(false);
   const [editingCardId, setEditingCardId] = useState(null);
   const [cardForm, setCardForm] = useState({ name: '', lastFour: '', currency: 'COP', cutDay: '', paymentDay: '' });
+
+  const [showFixedForm, setShowFixedForm] = useState(false);
+  const [editingFixedId, setEditingFixedId] = useState(null);
+  const [fixedForm, setFixedForm] = useState({ name: '', category: 'servicios', amount: '', dueDay: '', paymentMethod: 'efectivo', cardId: '' });
 
   const [showDebtForm, setShowDebtForm] = useState(false);
   const [debtForm, setDebtForm] = useState({ name: '', totalAmount: '', interestRate: '', monthlyPayment: '', dueDay: '', startDate: todayStr() });
@@ -584,13 +616,19 @@ export default function CuentaClaraApp() {
           setDebts((data.debts || []).map((d) => ({ ...d, payments: d.payments || [] })));
           setSavingsGoals((data.savingsGoals || []).map((g) => ({ ...g, contributions: g.contributions || [] })));
           setCreditCards(data.creditCards || []);
+          setFixedExpenses(data.fixedExpenses || []);
           setCategoryLabels(data.categoryLabels || {});
           setCustomCategories(data.customCategories || []);
+          const loadedStartDay = data.monthStartDay || 1;
+          monthStartDayOverride = loadedStartDay;
+          setMonthStartDay(loadedStartDay);
+          setSelectedMonth(monthKeyFromDate(todayStr()));
         } else {
           setTransactions([]);
           setDebts([]);
           setSavingsGoals([]);
           setCreditCards([]);
+          setFixedExpenses([]);
         }
       } catch (err) {
         // No hay datos guardados todavía; se empieza con la app vacía.
@@ -598,6 +636,7 @@ export default function CuentaClaraApp() {
         setDebts([]);
         setSavingsGoals([]);
         setCreditCards([]);
+        setFixedExpenses([]);
       } finally {
         setLoading(false);
       }
@@ -609,13 +648,13 @@ export default function CuentaClaraApp() {
     if (loading) return;
     (async () => {
       try {
-        await setItem(STORAGE_KEY, JSON.stringify({ transactions, debts, savingsGoals, creditCards, categoryLabels, customCategories }));
+        await setItem(STORAGE_KEY, JSON.stringify({ transactions, debts, savingsGoals, creditCards, categoryLabels, customCategories, monthStartDay, fixedExpenses }));
         setSaveError(false);
       } catch (err) {
         setSaveError(true);
       }
     })();
-  }, [transactions, debts, savingsGoals, creditCards, categoryLabels, customCategories, loading]);
+  }, [transactions, debts, savingsGoals, creditCards, categoryLabels, customCategories, monthStartDay, fixedExpenses, loading]);
 
   /* ---------- Datos derivados ---------- */
   const monthsWindow = useMemo(() => getLastMonthKeys(6, currentMonthKey()), []);
@@ -843,6 +882,80 @@ export default function CuentaClaraApp() {
   }
   function handleDeleteCard(id) { setCreditCards((prev) => prev.filter((c) => c.id !== id)); }
 
+  function handleAddFixedExpense(e) {
+    e.preventDefault();
+    const amt = parseFloat(fixedForm.amount);
+    if (!fixedForm.name.trim() || !amt || amt <= 0) return;
+    const data = {
+      name: fixedForm.name.trim(),
+      category: fixedForm.category,
+      amount: amt,
+      dueDay: fixedForm.dueDay ? parseInt(fixedForm.dueDay, 10) : null,
+      paymentMethod: fixedForm.paymentMethod,
+      cardId: fixedForm.paymentMethod === 'credito' ? (fixedForm.cardId || null) : null,
+    };
+    if (editingFixedId) {
+      setFixedExpenses((prev) => prev.map((f) => (f.id === editingFixedId ? { ...f, ...data } : f)));
+      setEditingFixedId(null);
+    } else {
+      setFixedExpenses((prev) => [...prev, { id: uid(), ...data }]);
+    }
+    setFixedForm({ name: '', category: EXPENSE_CATEGORIES[0].id, amount: '', dueDay: '', paymentMethod: 'efectivo', cardId: '' });
+    setShowFixedForm(false);
+  }
+  function handleEditFixedExpense(fe) {
+    setFixedForm({
+      name: fe.name,
+      category: fe.category,
+      amount: String(fe.amount),
+      dueDay: fe.dueDay != null ? String(fe.dueDay) : '',
+      paymentMethod: fe.paymentMethod || 'efectivo',
+      cardId: fe.cardId || '',
+    });
+    setEditingFixedId(fe.id);
+    setShowFixedForm(true);
+  }
+  function handleCancelFixedForm() {
+    setEditingFixedId(null);
+    setShowFixedForm(false);
+    setFixedForm({ name: '', category: EXPENSE_CATEGORIES[0].id, amount: '', dueDay: '', paymentMethod: 'efectivo', cardId: '' });
+  }
+  function handleDeleteFixedExpense(id) {
+    if (!window.confirm('¿Eliminar este gasto fijo? Los movimientos que ya generó no se borran.')) return;
+    setFixedExpenses((prev) => prev.filter((f) => f.id !== id));
+  }
+  function findFixedExpensePaidThisMonth(feId) {
+    const key = monthKeyFromDate(todayStr());
+    return transactions.find((t) => t.fixedExpenseId === feId && monthKeyFromDate(t.date) === key);
+  }
+  function handleMarkFixedExpensePaid(fe) {
+    let date = todayStr();
+    if (fe.dueDay) {
+      const today = new Date();
+      const y = today.getFullYear();
+      const m = today.getMonth();
+      const day = Math.min(fe.dueDay, daysInMonth(y, m));
+      date = `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+    setTransactions((prev) => [...prev, {
+      id: uid(),
+      type: 'gasto',
+      category: fe.category,
+      amount: fe.amount,
+      date,
+      note: fe.name,
+      paymentMethod: fe.paymentMethod,
+      cardId: fe.cardId || null,
+      isFixed: true,
+      fixedExpenseId: fe.id,
+    }]);
+  }
+  function handleUndoFixedExpensePaid(fe) {
+    const tx = findFixedExpensePaidThisMonth(fe.id);
+    if (!tx) return;
+    setTransactions((prev) => prev.filter((t) => t.id !== tx.id));
+  }
+
   function handleUpdateCategoryLabel(id, rawLabel) {
     const original = ALL_CATEGORIES.find((c) => c.id === id) || customCategories.find((c) => c.id === id);
     if (!original) return;
@@ -938,7 +1051,7 @@ export default function CuentaClaraApp() {
                 <CartesianGrid strokeDasharray="3 3" stroke={COLORS.line} vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 12, fill: COLORS.inkSoft }} axisLine={{ stroke: COLORS.line }} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: COLORS.inkSoft }} axisLine={false} tickLine={false} tickFormatter={fmtShort} width={46} />
-                <Tooltip formatter={(v) => fmtCOP(v)} contentStyle={{ fontFamily: 'IBM Plex Sans', fontSize: 13, borderRadius: 8, border: `1px solid ${COLORS.line}` }} />
+                <Tooltip formatter={(v) => fmtCOP(v)} contentStyle={{ fontFamily: 'Poppins', fontSize: 13, borderRadius: 8, border: `1px solid ${COLORS.line}` }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="Ingresos" fill={COLORS.income} radius={[4, 4, 0, 0]} />
                 <Bar dataKey="Gastos" fill={COLORS.expense} radius={[4, 4, 0, 0]} />
@@ -957,7 +1070,7 @@ export default function CuentaClaraApp() {
                   <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={52} outerRadius={88} paddingAngle={2}>
                     {pieData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
                   </Pie>
-                  <Tooltip formatter={(v) => fmtCOP(v)} contentStyle={{ fontFamily: 'IBM Plex Sans', fontSize: 13, borderRadius: 8, border: `1px solid ${COLORS.line}` }} />
+                  <Tooltip formatter={(v) => fmtCOP(v)} contentStyle={{ fontFamily: 'Poppins', fontSize: 13, borderRadius: 8, border: `1px solid ${COLORS.line}` }} />
                   <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 11.5 }} />
                 </PieChart>
               </ResponsiveContainer>
@@ -972,7 +1085,7 @@ export default function CuentaClaraApp() {
                 <CartesianGrid strokeDasharray="3 3" stroke={COLORS.line} vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 12, fill: COLORS.inkSoft }} axisLine={{ stroke: COLORS.line }} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: COLORS.inkSoft }} axisLine={false} tickLine={false} tickFormatter={fmtShort} width={46} />
-                <Tooltip formatter={(v) => fmtCOP(v)} contentStyle={{ fontFamily: 'IBM Plex Sans', fontSize: 13, borderRadius: 8, border: `1px solid ${COLORS.line}` }} />
+                <Tooltip formatter={(v) => fmtCOP(v)} contentStyle={{ fontFamily: 'Poppins', fontSize: 13, borderRadius: 8, border: `1px solid ${COLORS.line}` }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Line type="monotone" dataKey="Ahorro" stroke={COLORS.income} strokeWidth={2.5} dot={{ r: 3 }} />
                 <Line type="monotone" dataKey="Deuda" stroke={COLORS.debt} strokeWidth={2.5} dot={{ r: 3 }} />
@@ -1112,12 +1225,6 @@ export default function CuentaClaraApp() {
                     )}
                   </>
                 )}
-                <div className="cc-field" style={{ justifyContent: 'flex-end' }}>
-                  <label className="cc-checkbox-field" style={{ textTransform: 'none' }}>
-                    <input type="checkbox" checked={txForm.isFixed} onChange={(e) => setTxForm((f) => ({ ...f, isFixed: e.target.checked }))} />
-                    Es un gasto fijo
-                  </label>
-                </div>
               </>
             )}
             <div className="cc-form-actions">
@@ -1199,6 +1306,111 @@ export default function CuentaClaraApp() {
                     <Pencil size={14} />
                   </button>
                   <button type="button" className="cc-btn cc-btn-danger" onClick={() => handleDeleteTransaction(t.id)} aria-label="Eliminar movimiento">
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  /* ---------- Render: Gastos fijos ---------- */
+  function renderGastosFijos() {
+    const totalMensual = fixedExpenses.reduce((s, f) => s + f.amount, 0);
+    const pagadosCount = fixedExpenses.filter((f) => findFixedExpensePaidThisMonth(f.id)).length;
+    return (
+      <>
+        <div className="cc-page-title">Gastos fijos</div>
+        <p className="cc-page-sub">Tus gastos que se repiten cada mes (gimnasio, mensualidades, suscripciones). Márcalos como pagados en vez de crear un movimiento nuevo cada vez.</p>
+
+        <div className="cc-stats-grid" style={{ marginBottom: 18 }}>
+          <StatCard label="Total en gastos fijos" value={fmtCOP(totalMensual)} Icon={Repeat} color={COLORS.debt} bg="var(--debt-soft)" sub={`${fixedExpenses.length} gasto(s) registrados`} />
+          <StatCard label="Pagados este mes" value={`${pagadosCount}/${fixedExpenses.length}`} Icon={Check} color={COLORS.income} bg="var(--income-soft)" />
+        </div>
+
+        <button type="button" className="cc-btn cc-btn-primary" onClick={() => (showFixedForm ? handleCancelFixedForm() : setShowFixedForm(true))}>
+          {showFixedForm ? <X size={15} /> : <Plus size={15} />} {showFixedForm ? 'Cancelar' : 'Nuevo gasto fijo'}
+        </button>
+
+        {showFixedForm && (
+          <form className="cc-form" onSubmit={handleAddFixedExpense}>
+            <div className="cc-field">
+              <label>Nombre</label>
+              <input className="cc-input" type="text" placeholder="Gimnasio, Netflix, arriendo..." value={fixedForm.name} onChange={(e) => setFixedForm((f) => ({ ...f, name: e.target.value }))} required />
+            </div>
+            <div className="cc-field">
+              <label>Categoría</label>
+              <select className="cc-select" value={fixedForm.category} onChange={(e) => setFixedForm((f) => ({ ...f, category: e.target.value }))}>
+                {allExpenseCategories.map((c) => <option key={c.id} value={c.id}>{getCategory(c.id).label}</option>)}
+              </select>
+            </div>
+            <div className="cc-field">
+              <label>Monto (COP)</label>
+              <input className="cc-input" type="number" min="0" step="any" placeholder="50000" value={fixedForm.amount} onChange={(e) => setFixedForm((f) => ({ ...f, amount: e.target.value }))} required />
+            </div>
+            <div className="cc-field">
+              <label>Día de pago (opcional)</label>
+              <input className="cc-input" type="number" min="1" max="31" placeholder="5" value={fixedForm.dueDay} onChange={(e) => setFixedForm((f) => ({ ...f, dueDay: e.target.value }))} />
+            </div>
+            <div className="cc-field">
+              <label>Medio de pago</label>
+              <select className="cc-select" value={fixedForm.paymentMethod} onChange={(e) => setFixedForm((f) => ({ ...f, paymentMethod: e.target.value, cardId: e.target.value === 'credito' ? f.cardId : '' }))}>
+                {PAYMENT_METHODS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+              </select>
+            </div>
+            {fixedForm.paymentMethod === 'credito' && (
+              <div className="cc-field">
+                <label>Tarjeta</label>
+                {creditCards.length === 0 ? (
+                  <div className="cc-stat-sub">Sin tarjetas registradas.</div>
+                ) : (
+                  <select className="cc-select" value={fixedForm.cardId} onChange={(e) => setFixedForm((f) => ({ ...f, cardId: e.target.value }))}>
+                    <option value="">Selecciona una tarjeta</option>
+                    {creditCards.map((c) => <option key={c.id} value={c.id}>{c.name} *{c.lastFour}</option>)}
+                  </select>
+                )}
+              </div>
+            )}
+            <div className="cc-form-actions">
+              <button type="submit" className="cc-btn cc-btn-primary">{editingFixedId ? 'Guardar cambios' : 'Guardar gasto fijo'}</button>
+              {editingFixedId && <button type="button" className="cc-btn cc-btn-outline" onClick={handleCancelFixedForm}>Cancelar edición</button>}
+            </div>
+          </form>
+        )}
+
+        {fixedExpenses.length === 0 ? (
+          <p className="cc-stat-sub">Aún no tienes gastos fijos registrados.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {fixedExpenses.map((fe) => {
+              const cat = getCategory(fe.category);
+              const paidTx = findFixedExpensePaidThisMonth(fe.id);
+              return (
+                <div key={fe.id} className="cc-tx-row">
+                  <IconCircle Icon={cat.icon} color={cat.color} bg="var(--expense-soft)" />
+                  <div style={{ flex: 1 }}>
+                    <div className="cc-tx-cat">{fe.name}</div>
+                    <div className="cc-tx-note">
+                      {cat.label} · <span className="cc-mono">{fmtCOP(fe.amount)}</span>
+                      {fe.dueDay ? ` · paga el día ${fe.dueDay}` : ''}
+                    </div>
+                    <div className="cc-tx-tags">
+                      <span className="cc-tag">{getPaymentMethod(fe.paymentMethod).label}{fe.cardId ? ` · ${cardLabel(fe.cardId)}` : ''}</span>
+                      {paidTx && <span className="cc-tag" style={{ background: 'var(--income-soft)', color: 'var(--income)' }}>Pagado este mes ✓</span>}
+                    </div>
+                  </div>
+                  {paidTx ? (
+                    <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => handleUndoFixedExpensePaid(fe)}>Deshacer</button>
+                  ) : (
+                    <button type="button" className="cc-btn cc-btn-primary cc-btn-sm" onClick={() => handleMarkFixedExpensePaid(fe)}>Marcar como pagado</button>
+                  )}
+                  <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => handleEditFixedExpense(fe)} aria-label="Editar gasto fijo">
+                    <Pencil size={14} />
+                  </button>
+                  <button type="button" className="cc-btn cc-btn-danger" onClick={() => handleDeleteFixedExpense(fe.id)} aria-label="Eliminar gasto fijo">
                     <Trash2 size={15} />
                   </button>
                 </div>
@@ -1504,6 +1716,7 @@ export default function CuentaClaraApp() {
   function renderConfiguracion() {
     const subTabs = [
       { id: 'categorias', label: 'Categorías' },
+      { id: 'periodo', label: 'Mes financiero' },
       { id: 'pin', label: 'PIN de acceso' },
       { id: 'datos', label: 'Datos y sesión' },
     ];
@@ -1631,6 +1844,39 @@ export default function CuentaClaraApp() {
           </>
         )}
 
+        {configTab === 'periodo' && (
+          <div className="cc-card">
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Mes financiero</div>
+            <p className="cc-stat-sub" style={{ marginBottom: 12 }}>
+              Si te pagan a mitad de mes (como una quincena), el "mes" calendario puede hacer ver que estás en déficit
+              justo antes de que te paguen. Aquí puedes decirle a la app en qué día quieres que empiece tu mes, para
+              que coincida mejor con tu ciclo de pago.
+            </p>
+            <div className="cc-field" style={{ maxWidth: 200 }}>
+              <label>Tu mes empieza el día</label>
+              <input
+                className="cc-input"
+                type="number"
+                min="1"
+                max="28"
+                value={monthStartDay}
+                onChange={(e) => {
+                  const v = Math.min(28, Math.max(1, parseInt(e.target.value, 10) || 1));
+                  monthStartDayOverride = v;
+                  setMonthStartDay(v);
+                }}
+              />
+            </div>
+            <p className="cc-stat-sub" style={{ marginTop: 10 }}>
+              Con "1" (el valor normal), tu mes va del 1 al último día de cada mes. Si por ejemplo te pagan quincenas
+              el 15 y el 30/31, prueba con "16": tu mes iría del 16 de un mes al 15 del siguiente, así el pago de fin
+              de mes y lo que gastes justo después caen en el mismo período. Ninguna configuración es perfecta cuando
+              te pagan dos veces al mes, pero esta ayuda a que el balance mensual refleje mejor tu realidad. El
+              "Saldo en caja" del Resumen siempre muestra tu dinero real acumulado, sin importar esta configuración.
+            </p>
+          </div>
+        )}
+
         {configTab === 'pin' && (
           <div className="cc-card">
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>PIN de acceso</div>
@@ -1695,7 +1941,7 @@ export default function CuentaClaraApp() {
         <div className="cc-app">
           <div className="cc-loading">
             <Loader2 size={26} className="cc-spin" />
-            <span className="cc-mono" style={{ fontSize: 13 }}>Cargando tu libro de finanzas...</span>
+            <span className="cc-mono" style={{ fontSize: 13 }}>Cargando tu día a día financiero...</span>
           </div>
         </div>
       </>
@@ -1710,7 +1956,7 @@ export default function CuentaClaraApp() {
     const netMonth = selMonthIncome - selMonthExpense;
     return (
       <div className="cc-print-report">
-        <h1>Cuenta Clara — Reporte financiero</h1>
+        <h1>AlDía — Reporte financiero</h1>
         <p className="cc-print-sub">Mes: {monthLabel(selectedMonth)} · Generado el {formatDateHuman(new Date())}</p>
 
         <h2>Resumen del mes</h2>
@@ -1835,6 +2081,7 @@ export default function CuentaClaraApp() {
           )}
           {activeTab === 'resumen' && renderResumen()}
           {activeTab === 'movimientos' && renderMovimientos()}
+          {activeTab === 'gastosfijos' && renderGastosFijos()}
           {activeTab === 'tarjetas' && renderTarjetas()}
           {activeTab === 'deudas' && renderDeudas()}
           {activeTab === 'ahorros' && renderAhorros()}
