@@ -1,11 +1,11 @@
 {
-  "name": "Cuenta Clara",
-  "short_name": "Cuenta Clara",
-  "description": "Tu libro de finanzas personales",
+  "name": "AlDía",
+  "short_name": "AlDía",
+  "description": "Tu día a día financiero",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#EEEFE4",
-  "theme_color": "#202B38",
+  "background_color": "#F4F1EA",
+  "theme_color": "#BB4B34",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
