@@ -222,7 +222,7 @@ function buildRecommendations(transactions, debts, savingsGoals) {
     recs.push({ kind: 'tip', text: 'No tienes metas de ahorro creadas. Un fondo de emergencia de 3 a 6 meses de gastos es un buen primer objetivo.' });
   } else {
     savingsGoals.forEach((g) => {
-      if (!g.targetDate) return;
+      if (!g.targetDate || g.targetAmount == null) return;
       const saved = g.contributions.reduce((s, c) => s + c.amount, 0);
       const remaining = parseFloat(g.targetAmount) - saved;
       if (remaining <= 0) return;
@@ -426,6 +426,15 @@ const STYLES = `
   .cc-form { grid-template-columns: 1fr; }
 }
 
+.cc-fab {
+  position: fixed; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); right: 20px;
+  width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 16px rgba(187,75,52,0.4); z-index: 40; transition: transform 0.15s ease;
+}
+.cc-fab:hover { transform: scale(1.06); }
+.cc-fab:active { transform: scale(0.96); }
+
 @media (prefers-reduced-motion: reduce) {
   .cc-btn, .cc-progress-fill { transition: none !important; }
 }
@@ -569,7 +578,7 @@ export default function CuentaClaraApp() {
   const [showTxForm, setShowTxForm] = useState(false);
   const [editingTxId, setEditingTxId] = useState(null);
   const [txForm, setTxForm] = useState({ type: 'gasto', amount: '', category: 'alimentacion', date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '' });
-  const [txFilters, setTxFilters] = useState({ type: 'todos', month: 'todos', category: 'todas', paymentMethod: 'todos', fixed: 'todos' });
+  const [txFilters, setTxFilters] = useState({ type: 'todos', month: 'todos', category: 'todas', paymentMethod: 'todos', fixed: 'todos', day: '' });
 
   const [usdRate, setUsdRate] = useState(null);
   useEffect(() => {
@@ -716,6 +725,7 @@ export default function CuentaClaraApp() {
     .filter((t) => txFilters.category === 'todas' || t.category === txFilters.category)
     .filter((t) => txFilters.paymentMethod === 'todos' || t.paymentMethod === txFilters.paymentMethod)
     .filter((t) => txFilters.fixed === 'todos' || (txFilters.fixed === 'fijo' ? t.isFixed : !t.isFixed))
+    .filter((t) => !txFilters.day || t.date === txFilters.day)
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)), [transactions, txFilters]);
 
   const recommendations = useMemo(() => buildRecommendations(transactions, debts, savingsGoals), [transactions, debts, savingsGoals, categoryLabels, customCategories]);
@@ -801,6 +811,11 @@ export default function CuentaClaraApp() {
     setTxForm({ type: 'gasto', amount: '', category: EXPENSE_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '' });
   }
   function handleDeleteTransaction(id) { setTransactions((prev) => prev.filter((t) => t.id !== id)); }
+  function handleOpenNewMovement() {
+    setActiveTab('movimientos');
+    setEditingTxId(null);
+    setShowTxForm(true);
+  }
 
   function handleAddDebt(e) {
     e.preventDefault();
@@ -831,9 +846,10 @@ export default function CuentaClaraApp() {
 
   function handleAddGoal(e) {
     e.preventDefault();
-    const target = parseFloat(goalForm.targetAmount);
-    if (!goalForm.name.trim() || !target || target <= 0) return;
-    setSavingsGoals((prev) => [...prev, { id: uid(), name: goalForm.name.trim(), targetAmount: target, targetDate: goalForm.targetDate || '', contributions: [] }]);
+    if (!goalForm.name.trim()) return;
+    const target = goalForm.targetAmount !== '' ? parseFloat(goalForm.targetAmount) : null;
+    if (target != null && (!target || target <= 0)) return;
+    setSavingsGoals((prev) => [...prev, { id: uid(), name: goalForm.name.trim(), targetAmount: target, targetDate: target ? (goalForm.targetDate || '') : '', contributions: [] }]);
     setGoalForm({ name: '', targetAmount: '', targetDate: '' });
     setShowGoalForm(false);
   }
@@ -1257,6 +1273,20 @@ export default function CuentaClaraApp() {
             <option value="fijo">Solo fijos</option>
             <option value="variable">Solo variables</option>
           </select>
+          <div className="cc-field" style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <input
+              className="cc-input"
+              type="date"
+              value={txFilters.day}
+              onChange={(e) => setTxFilters((f) => ({ ...f, day: e.target.value }))}
+              style={{ maxWidth: 160 }}
+            />
+            {txFilters.day && (
+              <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => setTxFilters((f) => ({ ...f, day: '' }))} aria-label="Quitar filtro de día">
+                <X size={13} />
+              </button>
+            )}
+          </div>
         </div>
 
         {filteredTx.length === 0 ? (
@@ -1665,8 +1695,9 @@ export default function CuentaClaraApp() {
               <input className="cc-input" type="text" placeholder="Fondo de emergencia, viaje..." value={goalForm.name} onChange={(e) => setGoalForm((f) => ({ ...f, name: e.target.value }))} required />
             </div>
             <div className="cc-field">
-              <label>Monto objetivo (COP)</label>
-              <input className="cc-input" type="number" min="0" step="any" value={goalForm.targetAmount} onChange={(e) => setGoalForm((f) => ({ ...f, targetAmount: e.target.value }))} required />
+              <label>Monto objetivo (opcional)</label>
+              <input className="cc-input" type="number" min="0" step="any" placeholder="Déjalo vacío si no tienes un monto fijo" value={goalForm.targetAmount} onChange={(e) => setGoalForm((f) => ({ ...f, targetAmount: e.target.value }))} />
+              <span className="cc-stat-sub" style={{ fontSize: 11 }}>Déjalo vacío si solo quieres ir ahorrando sin un monto fijo en mente.</span>
             </div>
             <div className="cc-field">
               <label>Fecha meta (opcional)</label>
@@ -1683,22 +1714,33 @@ export default function CuentaClaraApp() {
         ) : (
           savingsGoals.map((g) => {
             const saved = Math.max(0, g.contributions.reduce((s, c) => s + c.amount, 0));
-            const pct = Math.min(100, (saved / parseFloat(g.targetAmount)) * 100);
+            const hasTarget = g.targetAmount != null && g.targetAmount > 0;
+            const pct = hasTarget ? Math.min(100, (saved / parseFloat(g.targetAmount)) * 100) : null;
             return (
               <div key={g.id} className="cc-goal-card">
                 <div className="cc-goal-head">
                   <div>
                     <div className="cc-goal-name">{g.name}</div>
-                    <div className="cc-goal-meta">{g.targetDate ? `Meta para ${g.targetDate}` : 'Sin fecha límite'}</div>
+                    <div className="cc-goal-meta">
+                      {hasTarget ? (g.targetDate ? `Meta para ${g.targetDate}` : 'Sin fecha límite') : 'Ahorro abierto, sin monto objetivo'}
+                    </div>
                   </div>
                   <button type="button" className="cc-btn cc-btn-danger" onClick={() => handleDeleteGoal(g.id)} aria-label="Eliminar meta"><Trash2 size={15} /></button>
                 </div>
-                <div className="cc-progress-track"><div className="cc-progress-fill" style={{ width: `${pct}%`, background: COLORS.savings }} /></div>
-                <div className="cc-goal-nums">
-                  <span>Ahorrado: {fmtCOP(saved)}</span>
-                  <span>{pct.toFixed(0)}%</span>
-                  <span>Meta: {fmtCOP(g.targetAmount)}</span>
-                </div>
+                {hasTarget ? (
+                  <>
+                    <div className="cc-progress-track"><div className="cc-progress-fill" style={{ width: `${pct}%`, background: COLORS.savings }} /></div>
+                    <div className="cc-goal-nums">
+                      <span>Ahorrado: {fmtCOP(saved)}</span>
+                      <span>{pct.toFixed(0)}%</span>
+                      <span>Meta: {fmtCOP(g.targetAmount)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="cc-goal-nums" style={{ justifyContent: 'flex-start' }}>
+                    <span>Ahorrado hasta ahora: <strong className="cc-mono">{fmtCOP(saved)}</strong></span>
+                  </div>
+                )}
                 <div className="cc-inline-form">
                   <input className="cc-input" type="number" min="0" step="any" placeholder="Monto" value={contributionInputs[g.id] || ''} onChange={(e) => setContributionInputs((p) => ({ ...p, [g.id]: e.target.value }))} />
                   <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => handleContribution(g.id, 1)}>Aportar</button>
@@ -2026,7 +2068,7 @@ export default function CuentaClaraApp() {
                   return (
                     <tr key={g.id}>
                       <td>{g.name}</td>
-                      <td>{fmtCOP(g.targetAmount)}</td>
+                      <td>{g.targetAmount != null ? fmtCOP(g.targetAmount) : '—'}</td>
                       <td>{fmtCOP(saved)}</td>
                     </tr>
                   );
@@ -2088,6 +2130,9 @@ export default function CuentaClaraApp() {
           {activeTab === 'configuracion' && renderConfiguracion()}
         </div>
       </div>
+      <button type="button" className="cc-fab" onClick={handleOpenNewMovement} aria-label="Nuevo movimiento">
+        <Plus size={26} strokeWidth={2.5} />
+      </button>
       {renderPrintReport()}
     </>
   );
