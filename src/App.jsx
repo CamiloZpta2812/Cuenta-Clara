@@ -151,6 +151,12 @@ function formatDateHuman(dateObj) {
 function fmtCOP(n) {
   return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(Math.round(n || 0));
 }
+function fmtUSD(n) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
+}
+function fmtMoney(n, currency) {
+  return currency === 'USD' ? fmtUSD(n) : fmtCOP(n);
+}
 function fmtShort(n) {
   const abs = Math.abs(n);
   if (abs >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
@@ -184,9 +190,9 @@ function buildRecommendations(transactions, debts, savingsGoals) {
     if (expense > income) {
       recs.push({ kind: 'warning', text: `Este mes tus gastos (${fmtCOP(expense)}) superan tus ingresos (${fmtCOP(income)}). Vale la pena revisar en qué se está yendo el dinero antes de que se convierta en deuda.` });
     } else if (rate < 0.1) {
-      recs.push({ kind: 'tip', text: `Estás ahorrando cerca del ${(rate * 100).toFixed(0)}% de tus ingresos este mes. La regla 50/30/20 sugiere destinar al menos un 20% al ahorro.` });
+      recs.push({ kind: 'tip', text: `Este mes te queda disponible cerca del ${(rate * 100).toFixed(0)}% de tus ingresos después de gastos. La regla 50/30/20 sugiere dejar libre al menos un 20% para mover a ahorro o inversión.` });
     } else if (rate >= 0.2) {
-      recs.push({ kind: 'success', text: `Vas muy bien: este mes estás ahorrando cerca del ${(rate * 100).toFixed(0)}% de tus ingresos.` });
+      recs.push({ kind: 'success', text: `Vas bien: este mes te queda disponible cerca del ${(rate * 100).toFixed(0)}% de tus ingresos después de gastos. Considera pasar parte de eso a una meta de ahorro para que no se diluya en el día a día.` });
     }
     const fixedExpense = monthTx.filter((t) => t.type === 'gasto' && t.isFixed).reduce((s, t) => s + t.amount, 0);
     if (fixedExpense / income > 0.5) {
@@ -402,6 +408,9 @@ const STYLES = `
 
 .cc-tx-list { display: flex; flex-direction: column; gap: 8px; }
 .cc-tx-row { display: flex; align-items: center; gap: 12px; background: var(--card); padding: 11px 14px; border-radius: 10px; border: 1px solid rgba(32,43,56,0.04); }
+.cc-fixed-row { display: flex; flex-direction: column; gap: 10px; background: var(--card); padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(46,43,39,0.04); }
+.cc-fixed-row-main { display: flex; align-items: flex-start; gap: 12px; }
+.cc-fixed-row-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .cc-tx-cat { font-size: 13px; font-weight: 600; }
 .cc-tx-note { font-size: 12px; color: var(--ink-soft); }
 .cc-tx-date { font-size: 11.5px; color: var(--ink-soft); font-family: 'Poppins', sans-serif; }
@@ -621,11 +630,11 @@ export default function CuentaClaraApp() {
   const [fixedForm, setFixedForm] = useState({ name: '', category: 'servicios', amount: '', dueDay: '', paymentMethod: 'efectivo', cardId: '' });
 
   const [showDebtForm, setShowDebtForm] = useState(false);
-  const [debtForm, setDebtForm] = useState({ name: '', totalAmount: '', interestRate: '', monthlyPayment: '', dueDay: '', startDate: todayStr() });
+  const [debtForm, setDebtForm] = useState({ name: '', totalAmount: '', interestRate: '', monthlyPayment: '', dueDay: '', startDate: todayStr(), currency: 'COP', exchangeRate: '' });
   const [paymentInputs, setPaymentInputs] = useState({});
 
   const [showGoalForm, setShowGoalForm] = useState(false);
-  const [goalForm, setGoalForm] = useState({ name: '', targetAmount: '', targetDate: '' });
+  const [goalForm, setGoalForm] = useState({ name: '', targetAmount: '', targetDate: '', initialAmount: '' });
   const [contributionInputs, setContributionInputs] = useState({});
 
   const [pinForm, setPinForm] = useState({ newPin: '', confirmPin: '' });
@@ -697,7 +706,16 @@ export default function CuentaClaraApp() {
   const totalExpense = useMemo(() => transactions.filter((t) => t.type === 'gasto').reduce((s, t) => s + t.amount, 0), [transactions]);
   const cashBalance = totalIncome - totalExpense;
   const totalSavings = useMemo(() => savingsGoals.reduce((s, g) => s + g.contributions.reduce((a, c) => a + c.amount, 0), 0), [savingsGoals]);
-  const totalDebtRemaining = useMemo(() => debts.reduce((s, d) => s + Math.max(0, parseFloat(d.totalAmount) - d.payments.reduce((a, p) => a + p.amount, 0)), 0), [debts]);
+  function debtRemainingCOP(d) {
+    const paid = d.payments.reduce((a, p) => a + p.amount, 0);
+    const remaining = Math.max(0, parseFloat(d.totalAmount) - paid);
+    return d.currency === 'USD' ? remaining * (d.exchangeRate || 0) : remaining;
+  }
+  const totalDebtRemaining = useMemo(() => debts.reduce((s, d) => s + debtRemainingCOP(d), 0), [debts]);
+  const totalCardSpendCOP = useMemo(
+    () => transactions.filter((t) => t.type === 'gasto' && t.cardId).reduce((s, t) => s + t.amount, 0),
+    [transactions]
+  );
   const netWorth = cashBalance + totalSavings - totalDebtRemaining;
 
   const selMonthIncome = useMemo(() => transactions.filter((t) => t.type === 'ingreso' && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth]);
@@ -790,6 +808,7 @@ export default function CuentaClaraApp() {
       currentInstallment: isCreditoConCuotas && txForm.currentInstallment ? parseInt(txForm.currentInstallment, 10) : null,
       interestRate: isCreditoConCuotas && txForm.interestRate !== '' ? parseFloat(txForm.interestRate) : null,
       totalAmount: isCreditoConCuotas ? totalCOP : null,
+      installmentGroupId: isCreditoConCuotas ? (editingTxId ? (transactions.find((t) => t.id === editingTxId)?.installmentGroupId || uid()) : uid()) : null,
       currency: isUSD ? 'USD' : 'COP',
       originalAmount: isUSD ? enteredAmount : null,
       exchangeRateUsed: isUSD ? rate : null,
@@ -831,6 +850,41 @@ export default function CuentaClaraApp() {
     setTxForm({ type: 'gasto', amount: '', category: EXPENSE_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '' });
   }
   function handleDeleteTransaction(id) { setTransactions((prev) => prev.filter((t) => t.id !== id)); }
+  function getInstallmentGroup(groupId) {
+    return transactions
+      .filter((t) => t.installmentGroupId === groupId)
+      .sort((a, b) => (a.currentInstallment || 0) - (b.currentInstallment || 0));
+  }
+  function handleRegisterNextInstallment(groupId) {
+    const group = getInstallmentGroup(groupId);
+    if (group.length === 0) return;
+    const last = group[group.length - 1];
+    const next = (last.currentInstallment || 0) + 1;
+    if (last.totalInstallments && next > last.totalInstallments) return;
+    const key = monthKeyFromDate(todayStr());
+    if (group.some((t) => monthKeyFromDate(t.date) === key)) return; // ya hay una cuota registrada este mes
+    setTransactions((prev) => [...prev, {
+      id: uid(),
+      type: 'gasto',
+      amount: last.amount,
+      category: last.category,
+      date: todayStr(),
+      note: last.note,
+      paymentMethod: last.paymentMethod,
+      cardId: last.cardId,
+      isFixed: false,
+      isInstallment: true,
+      totalInstallments: last.totalInstallments,
+      currentInstallment: next,
+      interestRate: last.interestRate,
+      totalAmount: last.totalAmount,
+      installmentGroupId: groupId,
+      currency: last.currency,
+      originalAmount: last.originalAmount,
+      exchangeRateUsed: last.exchangeRateUsed,
+    }]);
+  }
+
   function handleOpenNewMovement() {
     setActiveTab('movimientos');
     setEditingTxId(null);
@@ -841,6 +895,9 @@ export default function CuentaClaraApp() {
     e.preventDefault();
     const total = parseFloat(debtForm.totalAmount);
     if (!debtForm.name.trim() || !total || total <= 0) return;
+    const isUSD = debtForm.currency === 'USD';
+    const rate = isUSD ? (debtForm.exchangeRate !== '' ? parseFloat(debtForm.exchangeRate) : (usdRate || 0)) : 1;
+    if (isUSD && !rate) return;
     setDebts((prev) => [...prev, {
       id: uid(),
       name: debtForm.name.trim(),
@@ -849,9 +906,11 @@ export default function CuentaClaraApp() {
       monthlyPayment: debtForm.monthlyPayment ? parseFloat(debtForm.monthlyPayment) : 0,
       dueDay: debtForm.dueDay ? parseInt(debtForm.dueDay, 10) : null,
       startDate: debtForm.startDate || todayStr(),
+      currency: isUSD ? 'USD' : 'COP',
+      exchangeRate: isUSD ? rate : null,
       payments: [],
     }]);
-    setDebtForm({ name: '', totalAmount: '', interestRate: '', monthlyPayment: '', dueDay: '', startDate: todayStr() });
+    setDebtForm({ name: '', totalAmount: '', interestRate: '', monthlyPayment: '', dueDay: '', startDate: todayStr(), currency: 'COP', exchangeRate: '' });
     setShowDebtForm(false);
   }
   function handleDeleteDebt(id) { setDebts((prev) => prev.filter((d) => d.id !== id)); }
@@ -869,8 +928,10 @@ export default function CuentaClaraApp() {
     if (!goalForm.name.trim()) return;
     const target = goalForm.targetAmount !== '' ? parseFloat(goalForm.targetAmount) : null;
     if (target != null && (!target || target <= 0)) return;
-    setSavingsGoals((prev) => [...prev, { id: uid(), name: goalForm.name.trim(), targetAmount: target, targetDate: target ? (goalForm.targetDate || '') : '', contributions: [] }]);
-    setGoalForm({ name: '', targetAmount: '', targetDate: '' });
+    const initial = goalForm.initialAmount !== '' ? parseFloat(goalForm.initialAmount) : 0;
+    const contributions = initial > 0 ? [{ id: uid(), amount: initial, date: todayStr() }] : [];
+    setSavingsGoals((prev) => [...prev, { id: uid(), name: goalForm.name.trim(), targetAmount: target, targetDate: target ? (goalForm.targetDate || '') : '', contributions }]);
+    setGoalForm({ name: '', targetAmount: '', targetDate: '', initialAmount: '' });
     setShowGoalForm(false);
   }
   function handleDeleteGoal(id) { setSavingsGoals((prev) => prev.filter((g) => g.id !== id)); }
@@ -1075,6 +1136,7 @@ export default function CuentaClaraApp() {
           <StatCard label="Saldo en caja (total)" value={fmtCOP(cashBalance)} Icon={Wallet} color={COLORS.ink} bg="var(--paper)" sub="Ingresos - gastos, histórico" />
           <StatCard label="Ahorro total" value={fmtCOP(totalSavings)} Icon={PiggyBank} color={COLORS.savings} bg="var(--savings-soft)" />
           <StatCard label="Deuda pendiente" value={fmtCOP(totalDebtRemaining)} Icon={CreditCard} color={COLORS.debt} bg="var(--debt-soft)" />
+          <StatCard label="Cargado a tarjetas (histórico)" value={fmtCOP(totalCardSpendCOP)} Icon={Landmark} color={COLORS.debt} bg="var(--debt-soft)" sub="Incluye tarjetas en USD, ya convertidas a COP" />
           <StatCard label="Patrimonio neto" value={fmtCOP(netWorth)} Icon={LayoutDashboard} color={COLORS.ink} bg="var(--paper)" sub="Caja + ahorro - deuda" />
         </div>
 
@@ -1438,30 +1500,34 @@ export default function CuentaClaraApp() {
               const cat = getCategory(fe.category);
               const paidTx = findFixedExpensePaidThisMonth(fe.id);
               return (
-                <div key={fe.id} className="cc-tx-row">
-                  <IconCircle Icon={cat.icon} color={cat.color} bg="var(--expense-soft)" />
-                  <div style={{ flex: 1 }}>
-                    <div className="cc-tx-cat">{fe.name}</div>
-                    <div className="cc-tx-note">
-                      {cat.label} · <span className="cc-mono">{fmtCOP(fe.amount)}</span>
-                      {fe.dueDay ? ` · paga el día ${fe.dueDay}` : ''}
-                    </div>
-                    <div className="cc-tx-tags">
-                      <span className="cc-tag">{getPaymentMethod(fe.paymentMethod).label}{fe.cardId ? ` · ${cardLabel(fe.cardId)}` : ''}</span>
-                      {paidTx && <span className="cc-tag" style={{ background: 'var(--income-soft)', color: 'var(--income)' }}>Pagado este mes ✓</span>}
+                <div key={fe.id} className="cc-fixed-row">
+                  <div className="cc-fixed-row-main">
+                    <IconCircle Icon={cat.icon} color={cat.color} bg="var(--expense-soft)" />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="cc-tx-cat">{fe.name}</div>
+                      <div className="cc-tx-note">
+                        {cat.label} · <span className="cc-mono">{fmtCOP(fe.amount)}</span>
+                        {fe.dueDay ? ` · paga el día ${fe.dueDay}` : ''}
+                      </div>
+                      <div className="cc-tx-tags">
+                        <span className="cc-tag">{getPaymentMethod(fe.paymentMethod).label}{fe.cardId ? ` · ${cardLabel(fe.cardId)}` : ''}</span>
+                        {paidTx && <span className="cc-tag" style={{ background: 'var(--income-soft)', color: 'var(--income)' }}>Pagado este mes ✓</span>}
+                      </div>
                     </div>
                   </div>
-                  {paidTx ? (
-                    <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => handleUndoFixedExpensePaid(fe)}>Deshacer</button>
-                  ) : (
-                    <button type="button" className="cc-btn cc-btn-primary cc-btn-sm" onClick={() => handleMarkFixedExpensePaid(fe)}>Marcar como pagado</button>
-                  )}
-                  <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => handleEditFixedExpense(fe)} aria-label="Editar gasto fijo">
-                    <Pencil size={14} />
-                  </button>
-                  <button type="button" className="cc-btn cc-btn-danger" onClick={() => handleDeleteFixedExpense(fe.id)} aria-label="Eliminar gasto fijo">
-                    <Trash2 size={15} />
-                  </button>
+                  <div className="cc-fixed-row-actions">
+                    {paidTx ? (
+                      <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => handleUndoFixedExpensePaid(fe)}>Deshacer</button>
+                    ) : (
+                      <button type="button" className="cc-btn cc-btn-primary cc-btn-sm" onClick={() => handleMarkFixedExpensePaid(fe)}>Marcar como pagado</button>
+                    )}
+                    <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => handleEditFixedExpense(fe)} aria-label="Editar gasto fijo">
+                      <Pencil size={14} />
+                    </button>
+                    <button type="button" className="cc-btn cc-btn-danger" onClick={() => handleDeleteFixedExpense(fe.id)} aria-label="Eliminar gasto fijo">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -1524,7 +1590,13 @@ export default function CuentaClaraApp() {
           creditCards.map((card) => {
             const cardTx = transactions.filter((t) => t.cardId === card.id).sort((a, b) => (a.date < b.date ? 1 : -1));
             const monthTotal = cardTx.filter((t) => monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0);
-            const installments = cardTx.filter((t) => t.isInstallment && t.totalInstallments);
+            const historicTotal = cardTx.filter((t) => t.type === 'gasto').reduce((s, t) => s + t.amount, 0);
+            const installmentTx = cardTx.filter((t) => t.isInstallment && t.totalInstallments);
+            const groupIds = [...new Set(installmentTx.map((t) => t.installmentGroupId || t.id))];
+            const installmentGroups = groupIds.map((gid) => {
+              const entries = installmentTx.filter((t) => (t.installmentGroupId || t.id) === gid).sort((a, b) => (a.currentInstallment || 0) - (b.currentInstallment || 0));
+              return entries[entries.length - 1];
+            });
             return (
               <div key={card.id} className="cc-card" style={{ marginBottom: 16 }}>
                 <div className="cc-goal-head">
@@ -1539,18 +1611,25 @@ export default function CuentaClaraApp() {
                 </div>
                 <div className="cc-stat-sub" style={{ marginBottom: 12 }}>
                   Gastado en {monthLabel(selectedMonth)}: <span className="cc-mono" style={{ fontWeight: 600, color: 'var(--ink)' }}>{fmtCOP(monthTotal)}</span>
+                  {' · '}Histórico: <span className="cc-mono" style={{ fontWeight: 600, color: 'var(--ink)' }}>{fmtCOP(historicTotal)}</span>
+                  {card.currency === 'USD' ? ' (convertido a COP)' : ''}
                 </div>
 
-                {installments.length > 0 && (
+                {installmentGroups.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
                     <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Compras en cuotas activas</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {installments.map((t) => {
+                      {installmentGroups.map((t) => {
                         const remainingCuotas = Math.max(0, (t.totalInstallments || 0) - (t.currentInstallment || 0));
                         const remainingAmount = remainingCuotas * t.amount;
                         const pct = t.totalInstallments ? Math.min(100, Math.round(((t.currentInstallment || 0) / t.totalInstallments) * 100)) : 0;
+                        const groupId = t.installmentGroupId || t.id;
+                        const key = monthKeyFromDate(todayStr());
+                        const group = t.installmentGroupId ? getInstallmentGroup(t.installmentGroupId) : [t];
+                        const paidThisMonth = group.some((g) => monthKeyFromDate(g.date) === key);
+                        const completed = t.totalInstallments && t.currentInstallment >= t.totalInstallments;
                         return (
-                          <div key={t.id} style={{ background: 'var(--paper)', borderRadius: 10, padding: '10px 12px' }}>
+                          <div key={groupId} style={{ background: 'var(--paper)', borderRadius: 10, padding: '10px 12px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
                               <span style={{ fontWeight: 600 }}>{t.note || getCategory(t.category).label}</span>
                               <span className="cc-mono">Cuota {t.currentInstallment}/{t.totalInstallments}</span>
@@ -1558,10 +1637,19 @@ export default function CuentaClaraApp() {
                             <div style={{ height: 6, borderRadius: 99, background: 'var(--paper-line)', overflow: 'hidden', marginBottom: 6 }}>
                               <div style={{ height: '100%', width: `${pct}%`, background: COLORS.savings, borderRadius: 99 }} />
                             </div>
-                            <div className="cc-stat-sub" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <div className="cc-stat-sub" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                               <span>{fmtCOP(t.amount)}/mes{t.interestRate != null ? ` · ${t.interestRate}% mensual` : ''}</span>
                               <span>Faltan {remainingCuotas} cuotas (~{fmtCOP(remainingAmount)})</span>
                             </div>
+                            {completed ? (
+                              <span className="cc-tag" style={{ background: 'var(--income-soft)', color: 'var(--income)' }}>Completada ✓</span>
+                            ) : paidThisMonth ? (
+                              <span className="cc-tag" style={{ background: 'var(--income-soft)', color: 'var(--income)' }}>Cuota de este mes ya registrada ✓</span>
+                            ) : (
+                              <button type="button" className="cc-btn cc-btn-primary cc-btn-sm" onClick={() => handleRegisterNextInstallment(groupId)}>
+                                Registrar cuota {t.currentInstallment + 1} de este mes
+                              </button>
+                            )}
                           </div>
                         );
                       })}
@@ -1630,15 +1718,39 @@ export default function CuentaClaraApp() {
               <input className="cc-input" type="text" placeholder="Tarjeta de crédito, préstamo..." value={debtForm.name} onChange={(e) => setDebtForm((f) => ({ ...f, name: e.target.value }))} required />
             </div>
             <div className="cc-field">
-              <label>Monto total (COP)</label>
+              <label>Moneda</label>
+              <select className="cc-select" value={debtForm.currency} onChange={(e) => setDebtForm((f) => ({ ...f, currency: e.target.value }))}>
+                <option value="COP">Pesos colombianos (COP)</option>
+                <option value="USD">Dólares (USD)</option>
+              </select>
+            </div>
+            <div className="cc-field">
+              <label>Monto total ({debtForm.currency})</label>
               <input className="cc-input" type="number" min="0" step="any" value={debtForm.totalAmount} onChange={(e) => setDebtForm((f) => ({ ...f, totalAmount: e.target.value }))} required />
             </div>
+            {debtForm.currency === 'USD' && (
+              <div className="cc-field">
+                <label>Tasa de cambio (COP por USD)</label>
+                <input
+                  className="cc-input"
+                  type="number"
+                  min="0"
+                  step="any"
+                  placeholder={usdRate ? String(Math.round(usdRate)) : 'Ej. 4050'}
+                  value={debtForm.exchangeRate}
+                  onChange={(e) => setDebtForm((f) => ({ ...f, exchangeRate: e.target.value }))}
+                />
+                <span className="cc-stat-sub" style={{ fontSize: 11 }}>
+                  {usdRate ? `Tasa del día: ≈ ${fmtCOP(usdRate)} por USD. Se usa para mostrar esta deuda junto a las demás en COP.` : 'Ingrésala manualmente.'}
+                </span>
+              </div>
+            )}
             <div className="cc-field">
               <label>Tasa de interés (% mensual)</label>
               <input className="cc-input" type="number" min="0" step="any" placeholder="Opcional" value={debtForm.interestRate} onChange={(e) => setDebtForm((f) => ({ ...f, interestRate: e.target.value }))} />
             </div>
             <div className="cc-field">
-              <label>Cuota mensual (COP)</label>
+              <label>Cuota mensual ({debtForm.currency})</label>
               <input className="cc-input" type="number" min="0" step="any" placeholder="Opcional" value={debtForm.monthlyPayment} onChange={(e) => setDebtForm((f) => ({ ...f, monthlyPayment: e.target.value }))} />
             </div>
             <div className="cc-field">
@@ -1662,14 +1774,15 @@ export default function CuentaClaraApp() {
             const paid = d.payments.reduce((s, p) => s + p.amount, 0);
             const remaining = Math.max(0, parseFloat(d.totalAmount) - paid);
             const pct = Math.min(100, (paid / parseFloat(d.totalAmount)) * 100);
+            const isUSD = d.currency === 'USD';
             return (
               <div key={d.id} className="cc-debt-card">
                 <div className="cc-goal-head">
                   <div>
-                    <div className="cc-goal-name">{d.name}</div>
+                    <div className="cc-goal-name">{d.name}{isUSD ? ' · USD' : ''}</div>
                     <div className="cc-goal-meta">
                       {d.interestRate ? `${d.interestRate}% mensual · ` : ''}
-                      {d.monthlyPayment ? `cuota ${fmtCOP(d.monthlyPayment)} · ` : ''}
+                      {d.monthlyPayment ? `cuota ${fmtMoney(d.monthlyPayment, d.currency)} · ` : ''}
                       {d.dueDay ? `paga el día ${d.dueDay}` : 'sin fecha de pago fija'}
                     </div>
                   </div>
@@ -1677,12 +1790,17 @@ export default function CuentaClaraApp() {
                 </div>
                 <div className="cc-progress-track"><div className="cc-progress-fill" style={{ width: `${pct}%`, background: COLORS.debt }} /></div>
                 <div className="cc-goal-nums">
-                  <span>Pagado: {fmtCOP(paid)}</span>
-                  <span>Restante: {fmtCOP(remaining)}</span>
-                  <span>Total: {fmtCOP(d.totalAmount)}</span>
+                  <span>Pagado: {fmtMoney(paid, d.currency)}</span>
+                  <span>Restante: {fmtMoney(remaining, d.currency)}</span>
+                  <span>Total: {fmtMoney(d.totalAmount, d.currency)}</span>
                 </div>
+                {isUSD && (
+                  <div className="cc-stat-sub" style={{ marginTop: 4 }}>
+                    ≈ {fmtCOP(debtRemainingCOP(d))} restante en pesos (tasa {fmtCOP(d.exchangeRate)}/USD)
+                  </div>
+                )}
                 <div className="cc-inline-form">
-                  <input className="cc-input" type="number" min="0" step="any" placeholder="Monto del abono" value={paymentInputs[d.id] || ''} onChange={(e) => setPaymentInputs((p) => ({ ...p, [d.id]: e.target.value }))} />
+                  <input className="cc-input" type="number" min="0" step="any" placeholder={`Monto del abono (${d.currency})`} value={paymentInputs[d.id] || ''} onChange={(e) => setPaymentInputs((p) => ({ ...p, [d.id]: e.target.value }))} />
                   <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => handleAddPayment(d.id)}>Registrar abono</button>
                 </div>
               </div>
@@ -1721,6 +1839,11 @@ export default function CuentaClaraApp() {
             <div className="cc-field">
               <label>Fecha meta (opcional)</label>
               <input className="cc-input" type="date" value={goalForm.targetDate} onChange={(e) => setGoalForm((f) => ({ ...f, targetDate: e.target.value }))} />
+            </div>
+            <div className="cc-field">
+              <label>Ya tenías ahorrado (opcional)</label>
+              <input className="cc-input" type="number" min="0" step="any" placeholder="0" value={goalForm.initialAmount} onChange={(e) => setGoalForm((f) => ({ ...f, initialAmount: e.target.value }))} />
+              <span className="cc-stat-sub" style={{ fontSize: 11 }}>Si ya venías ahorrando para esto por tu cuenta, pon ese monto aquí para que la meta arranque desde ahí.</span>
             </div>
             <div className="cc-form-actions">
               <button type="submit" className="cc-btn cc-btn-primary">Guardar meta</button>
@@ -2058,16 +2181,18 @@ export default function CuentaClaraApp() {
           <>
             <h2>Deudas</h2>
             <table className="cc-print-table">
-              <thead><tr><th>Deuda</th><th>Total</th><th>Pagado</th><th>Pendiente</th></tr></thead>
+              <thead><tr><th>Deuda</th><th>Total</th><th>Pagado</th><th>Pendiente</th><th>Pendiente (COP)</th></tr></thead>
               <tbody>
                 {debts.map((d) => {
                   const paid = (d.payments || []).reduce((s, p) => s + p.amount, 0);
+                  const remaining = Math.max(0, d.totalAmount - paid);
                   return (
                     <tr key={d.id}>
-                      <td>{d.name}</td>
-                      <td>{fmtCOP(d.totalAmount)}</td>
-                      <td>{fmtCOP(paid)}</td>
-                      <td>{fmtCOP(Math.max(0, d.totalAmount - paid))}</td>
+                      <td>{d.name}{d.currency === 'USD' ? ' (USD)' : ''}</td>
+                      <td>{fmtMoney(d.totalAmount, d.currency)}</td>
+                      <td>{fmtMoney(paid, d.currency)}</td>
+                      <td>{fmtMoney(remaining, d.currency)}</td>
+                      <td>{d.currency === 'USD' ? fmtCOP(debtRemainingCOP(d)) : '—'}</td>
                     </tr>
                   );
                 })}
