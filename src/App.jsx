@@ -375,6 +375,7 @@ const STYLES = `
 
 .cc-form { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); background: var(--card); padding: 18px; border-radius: 12px; border: 1.5px dashed var(--paper-line); margin-bottom: 18px; }
 .cc-form-actions { grid-column: 1 / -1; display: flex; gap: 10px; margin-top: 2px; }
+.cc-field-full { grid-column: 1 / -1; }
 .cc-field { display: flex; flex-direction: column; gap: 5px; }
 .cc-field label { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
 .cc-input, .cc-select {
@@ -1713,7 +1714,7 @@ export default function CuentaClaraApp() {
 
         {showDebtForm && (
           <form className="cc-form" onSubmit={handleAddDebt}>
-            <div className="cc-field" style={{ gridColumn: 'span 2' }}>
+            <div className="cc-field cc-field-full">
               <label>Nombre</label>
               <input className="cc-input" type="text" placeholder="Tarjeta de crédito, préstamo..." value={debtForm.name} onChange={(e) => setDebtForm((f) => ({ ...f, name: e.target.value }))} required />
             </div>
@@ -1827,7 +1828,7 @@ export default function CuentaClaraApp() {
 
         {showGoalForm && (
           <form className="cc-form" onSubmit={handleAddGoal}>
-            <div className="cc-field" style={{ gridColumn: 'span 2' }}>
+            <div className="cc-field cc-field-full">
               <label>Nombre de la meta</label>
               <input className="cc-input" type="text" placeholder="Fondo de emergencia, viaje..." value={goalForm.name} onChange={(e) => setGoalForm((f) => ({ ...f, name: e.target.value }))} required />
             </div>
