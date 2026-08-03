@@ -258,7 +258,7 @@ function getStatus(income, expense) {
 const STYLES = `
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 
-.cc-app {
+:root {
   --paper: #F4F1EA;
   --paper-line: #E4DDCE;
   --ink: #2E2B27;
@@ -273,6 +273,8 @@ const STYLES = `
   --debt-soft: #EDE7F5;
   --brand: #BB4B34;
   --card: #FFFFFF;
+}
+.cc-app {
   font-family: 'Poppins', sans-serif;
   color: var(--ink);
   background:
@@ -381,6 +383,22 @@ const STYLES = `
 
 .cc-filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .cc-filters select { min-width: 140px; }
+.cc-day-filter {
+  position: relative; display: flex; align-items: center; min-width: 140px;
+  border: 1px solid var(--paper-line); border-radius: 8px; background: #fff; padding: 0 10px;
+}
+.cc-day-filter input[type="date"] {
+  border: none; background: transparent; padding: 9px 0; width: 100%; min-width: 0;
+  font-family: 'Poppins', sans-serif; font-size: 16px; color: var(--ink);
+}
+.cc-day-filter-placeholder {
+  position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  color: var(--ink-soft); font-size: 14px; pointer-events: none; background: #fff;
+}
+.cc-day-filter-clear {
+  border: none; background: transparent; color: var(--ink-soft); cursor: pointer;
+  display: flex; align-items: center; padding: 4px;
+}
 
 .cc-tx-list { display: flex; flex-direction: column; gap: 8px; }
 .cc-tx-row { display: flex; align-items: center; gap: 12px; background: var(--card); padding: 11px 14px; border-radius: 10px; border: 1px solid rgba(32,43,56,0.04); }
@@ -423,13 +441,15 @@ const STYLES = `
   .cc-sidebar-footer { display: none; }
   .cc-main { padding: 20px 16px; }
   .cc-charts-grid { grid-template-columns: 1fr; }
-  .cc-form { grid-template-columns: 1fr; }
+  .cc-form { grid-template-columns: minmax(0, 1fr); }
+  .cc-field { min-width: 0; }
+  .cc-input, .cc-select { min-width: 0; max-width: 100%; }
 }
 
 .cc-fab {
   position: fixed; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); right: 20px;
   width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer;
-  background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center;
+  background: var(--brand, #BB4B34); color: #fff; display: flex; align-items: center; justify-content: center;
   box-shadow: 0 6px 16px rgba(187,75,52,0.4); z-index: 40; transition: transform 0.15s ease;
 }
 .cc-fab:hover { transform: scale(1.06); }
@@ -1273,16 +1293,15 @@ export default function CuentaClaraApp() {
             <option value="fijo">Solo fijos</option>
             <option value="variable">Solo variables</option>
           </select>
-          <div className="cc-field" style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <div className="cc-day-filter">
             <input
-              className="cc-input"
               type="date"
               value={txFilters.day}
               onChange={(e) => setTxFilters((f) => ({ ...f, day: e.target.value }))}
-              style={{ maxWidth: 160 }}
             />
+            {!txFilters.day && <span className="cc-day-filter-placeholder">Filtrar por día</span>}
             {txFilters.day && (
-              <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => setTxFilters((f) => ({ ...f, day: '' }))} aria-label="Quitar filtro de día">
+              <button type="button" className="cc-day-filter-clear" onClick={() => setTxFilters((f) => ({ ...f, day: '' }))} aria-label="Quitar filtro de día">
                 <X size={13} />
               </button>
             )}
