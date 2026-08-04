@@ -1085,12 +1085,12 @@ export default function CuentaClaraApp() {
   async function handleSetPin(e) {
     e.preventDefault();
     setPinMessage(null);
-    if (!/^\d{6}$/.test(pinForm.newPin)) {
-      setPinMessage({ kind: 'error', text: 'El PIN debe tener exactamente 6 dígitos.' });
+    if (pinForm.newPin.length < 6) {
+      setPinMessage({ kind: 'error', text: 'La contraseña debe tener al menos 6 caracteres.' });
       return;
     }
     if (pinForm.newPin !== pinForm.confirmPin) {
-      setPinMessage({ kind: 'error', text: 'Los dos PIN no coinciden.' });
+      setPinMessage({ kind: 'error', text: 'Las dos contraseñas no coinciden.' });
       return;
     }
     const { error } = await supabase.auth.updateUser({ password: pinForm.newPin });
@@ -1098,7 +1098,7 @@ export default function CuentaClaraApp() {
       setPinMessage({ kind: 'error', text: error.message });
     } else {
       setPinForm({ newPin: '', confirmPin: '' });
-      setPinMessage({ kind: 'success', text: 'Listo, tu PIN quedó configurado. La próxima vez entra con él.' });
+      setPinMessage({ kind: 'success', text: 'Listo, tu contraseña quedó actualizada.' });
     }
   }
 
@@ -1902,13 +1902,13 @@ export default function CuentaClaraApp() {
     const subTabs = [
       { id: 'categorias', label: 'Categorías' },
       { id: 'periodo', label: 'Mes financiero' },
-      { id: 'pin', label: 'PIN de acceso' },
+      { id: 'pin', label: 'Contraseña' },
       { id: 'datos', label: 'Datos y sesión' },
     ];
     return (
       <>
         <div className="cc-page-title">Configuración</div>
-        <p className="cc-page-sub">Personaliza tus categorías, tu PIN de acceso y administra tus datos.</p>
+        <p className="cc-page-sub">Personaliza tus categorías, tu contraseña y administra tus datos.</p>
 
         <div className="cc-subtabs">
           {subTabs.map((s) => (
@@ -2064,34 +2064,32 @@ export default function CuentaClaraApp() {
 
         {configTab === 'pin' && (
           <div className="cc-card">
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>PIN de acceso</div>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Contraseña</div>
             <p className="cc-stat-sub" style={{ marginBottom: 12 }}>
-              Configura o cambia el PIN de 6 dígitos con el que entras a la app.
+              Cambia la contraseña de tu cuenta (mínimo 6 caracteres).
             </p>
             <form onSubmit={handleSetPin} style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 260 }}>
               <div className="cc-field">
-                <label>Nuevo PIN</label>
+                <label>Nueva contraseña</label>
                 <input
                   className="cc-input"
                   type="password"
-                  inputMode="numeric"
-                  maxLength={6}
+                  minLength={6}
                   value={pinForm.newPin}
-                  onChange={(e) => setPinForm((f) => ({ ...f, newPin: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
+                  onChange={(e) => setPinForm((f) => ({ ...f, newPin: e.target.value }))}
                 />
               </div>
               <div className="cc-field">
-                <label>Confirmar PIN</label>
+                <label>Confirmar contraseña</label>
                 <input
                   className="cc-input"
                   type="password"
-                  inputMode="numeric"
-                  maxLength={6}
+                  minLength={6}
                   value={pinForm.confirmPin}
-                  onChange={(e) => setPinForm((f) => ({ ...f, confirmPin: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
+                  onChange={(e) => setPinForm((f) => ({ ...f, confirmPin: e.target.value }))}
                 />
               </div>
-              <button type="submit" className="cc-btn cc-btn-primary" style={{ alignSelf: 'flex-start' }}>Guardar PIN</button>
+              <button type="submit" className="cc-btn cc-btn-primary" style={{ alignSelf: 'flex-start' }}>Guardar contraseña</button>
               {pinMessage && (
                 <p style={{ fontSize: 13, color: pinMessage.kind === 'success' ? COLORS.income : COLORS.expense }}>{pinMessage.text}</p>
               )}

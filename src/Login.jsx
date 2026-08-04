@@ -1,29 +1,34 @@
 import React, { useState } from 'react';
 import { supabase } from './supabaseClient';
 
-const APP_EMAIL = import.meta.env.VITE_APP_EMAIL;
-
 export default function Login() {
-  const [pin, setPin] = useState('');
+  const [mode, setMode] = useState('signin'); // 'signin' | 'signup'
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
-    if (pin.length !== 6) {
-      setError('El PIN debe tener 6 dígitos.');
-      return;
-    }
-    if (!APP_EMAIL) {
-      setError('Falta configurar VITE_APP_EMAIL en las variables de entorno.');
-      return;
-    }
+    setInfo('');
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: APP_EMAIL, password: pin });
-    setLoading(false);
-    if (error) {
-      setError('PIN incorrecto. Intenta de nuevo.');
+
+    if (mode === 'signup') {
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      setLoading(false);
+      if (error) {
+        setError(error.message);
+      } else if (!data.session) {
+        // Si el proyecto de Supabase todavía tiene la confirmación por correo activada,
+        // no habrá sesión inmediata. Avisamos para que revisen esa configuración.
+        setInfo('Cuenta creada. Si no entraste automáticamente, revisa que tu proyecto de Supabase tenga desactivada la confirmación por correo.');
+      }
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      setLoading(false);
+      if (error) setError('Correo o contraseña incorrectos.');
     }
   }
 
@@ -44,7 +49,7 @@ export default function Login() {
           background: '#fff',
           borderRadius: 14,
           padding: '32px 28px',
-          maxWidth: 320,
+          maxWidth: 340,
           width: '100%',
           boxShadow: '0 6px 18px rgba(46,43,39,.08)',
         }}
@@ -58,44 +63,43 @@ export default function Login() {
           <h1 style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 24, margin: 0, color: '#2E2B27' }}>AlDía</h1>
         </div>
         <p style={{ color: '#6E675E', fontSize: 13.5, margin: '0 0 20px 0' }}>
-          Ingresa tu PIN de 6 dígitos para entrar.
+          {mode === 'signup' ? 'Crea tu cuenta para tener tu propio espacio.' : 'Ingresa con tu correo y contraseña.'}
         </p>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <input
-            type="password"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={6}
+            type="email"
             required
-            placeholder="••••••"
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            style={{
-              padding: '10px 12px',
-              borderRadius: 8,
-              border: '1px solid #E4DDCE',
-              fontSize: 22,
-              letterSpacing: 6,
-              textAlign: 'center',
-            }}
+            placeholder="tu@correo.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #E4DDCE', fontSize: 16 }}
+          />
+          <input
+            type="password"
+            required
+            minLength={6}
+            placeholder="Contraseña (mínimo 6 caracteres)"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #E4DDCE', fontSize: 16 }}
           />
           <button
             type="submit"
             disabled={loading}
-            style={{
-              padding: '10px 12px',
-              borderRadius: 8,
-              border: 'none',
-              background: '#BB4B34',
-              color: '#fff',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
+            style={{ padding: '10px 12px', borderRadius: 8, border: 'none', background: '#BB4B34', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
           >
-            {loading ? 'Entrando...' : 'Entrar'}
+            {loading ? 'Un momento...' : mode === 'signup' ? 'Crear cuenta' : 'Entrar'}
           </button>
-          {error ? <p style={{ color: '#BB4B34', fontSize: 13 }}>{error}</p> : null}
+          {error ? <p style={{ color: '#BB4B34', fontSize: 13, margin: 0 }}>{error}</p> : null}
+          {info ? <p style={{ color: '#2F7D5C', fontSize: 13, margin: 0 }}>{info}</p> : null}
         </form>
+        <button
+          type="button"
+          onClick={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setError(''); setInfo(''); }}
+          style={{ marginTop: 16, background: 'none', border: 'none', color: '#6E675E', fontSize: 13, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+        >
+          {mode === 'signup' ? '¿Ya tienes cuenta? Entra aquí' : '¿No tienes cuenta? Créala aquí'}
+        </button>
       </div>
     </div>
   );
