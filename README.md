@@ -13,9 +13,10 @@ instalarse en tu celular sin depender de Claude.
    contenido del archivo `supabase/schema.sql` de esta carpeta y dale **Run**.
    Esto crea la tabla donde vivirán tus datos y las reglas de seguridad
    (cada usuario solo puede ver los suyos).
-5. Ve a **Authentication → Providers** y confirma que **Email** esté
-   habilitado (viene activado por defecto). Con esto entrarás con un enlace
-   mágico que llega a tu correo, sin contraseñas que recordar.
+5. Ve a **Authentication → Providers → Email** y **desactiva "Confirm email"**
+   (a veces aparece como "Enable email confirmations"). Así, cuando alguien
+   se registre con correo y contraseña, puede entrar de inmediato sin tener
+   que hacer clic en un enlace de confirmación.
 6. Ve a **Project Settings → API** y copia dos valores:
    - **Project URL**
    - **anon public key**
@@ -57,7 +58,7 @@ La forma más simple sin usar la terminal para el despliegue:
 
 Importante: una vez tengas esa URL, entra a Supabase →
 **Authentication → URL Configuration** y agrega esa URL como
-**Site URL** y en **Redirect URLs**, para que el enlace mágico funcione
+**Site URL** y en **Redirect URLs**, para que el login funcione
 correctamente en producción.
 
 ## Paso 4 — Instalarla en tu celular
