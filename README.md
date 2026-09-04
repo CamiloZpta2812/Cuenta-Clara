@@ -1,8 +1,65 @@
-# Cuenta Clara — versión app independiente
+# AlDía (repo: cuenta-clara)
 
-Esta es tu app "Cuenta Clara" convertida en una aplicación web independiente,
-con tus datos guardados en una base de datos real (Supabase), lista para
-instalarse en tu celular sin depender de Claude.
+App web de finanzas personales, con tus datos en una base de datos real
+(Supabase), lista para instalarse en tu celular.
+
+## ⚠️ Si ya venías usando la app: hay que correr el SQL nuevo
+
+Los datos ya no viven como un JSON gigante en una sola fila (`kv_store`), sino
+en tablas de verdad. Para pasarte:
+
+1. Entra a Supabase → **SQL Editor** → **New query**.
+2. Pega todo el contenido de `supabase/schema.sql` y dale **Run**.
+   Se puede correr varias veces sin romper nada.
+
+   Supabase avisa que "la consulta incluye operaciones destructivas": se
+   refiere a los `drop policy if exists`, que solo borran las políticas que el
+   mismo archivo vuelve a crear dos líneas más abajo. No toca datos.
+3. Pega `supabase/verify-rls.sql` y dale **Run**. Deben salir **9 filas, todas
+   en OK**. Eso confirma que ninguna tabla quedó abierta.
+4. Abre la app y entra normal. La primera vez detecta tu JSON viejo y lo
+   convierte solo a las tablas nuevas.
+
+**No se borra nada.** La tabla `kv_store` se queda intacta como respaldo. Cuando
+lleves un tiempo tranquilo y hayas verificado que todo está bien, puedes
+borrarla a mano con `drop table public.kv_store;`. El esquema viejo quedó
+guardado en `supabase/schema-kv-store-legacy.sql` por si acaso.
+
+## Funciona sin conexión
+
+La app se puede instalar en el celular y **abre sin señal**. Lo que registres sin
+internet se guarda en el dispositivo y se sube solo cuando vuelve la conexión
+(arriba aparece un aviso mientras tanto). Si mientras estabas sin señal cambiaste
+algo desde otro dispositivo, al reconectar se conservan los dos: solo se pisa el
+registro puntual que hayas tocado en ambos lados.
+
+## Exportar todo a Excel
+
+En **Resumen** hay un botón **"Todo en Excel"** que descarga un `.xlsx` con
+absolutamente todo lo registrado, en 15 hojas: resumen general, mes a mes,
+movimientos, gastos por categoría cruzados por mes, ingresos, tarjetas,
+facturas de tarjeta, movimientos de tarjeta, cuotas activas, deudas, abonos,
+metas de ahorro, aportes, gastos fijos y compromisos futuros.
+
+Los montos van como números (no como texto con "$"), así que se pueden sumar y
+meter en tablas dinámicas; los gastos van en negativo para que sumar la columna
+dé el saldo. Cada hoja trae autofiltro.
+
+Para ver cómo queda sin usar datos reales:
+
+```
+node scripts/sample-report.mjs
+```
+
+## Comandos
+
+```
+npm install     # instalar dependencias
+npm run dev     # levantar en local
+npm run build   # compilar para producción
+npm run lint    # revisar el código (atrapa errores que el build no ve)
+npm test        # pruebas de la capa de datos
+```
 
 ## Paso 1 — Crear el proyecto en Supabase (gratis)
 
@@ -11,8 +68,8 @@ instalarse en tu celular sin depender de Claude.
 3. Espera 1-2 minutos a que termine de aprovisionarse.
 4. En el menú lateral ve a **SQL Editor** → **New query**, pega todo el
    contenido del archivo `supabase/schema.sql` de esta carpeta y dale **Run**.
-   Esto crea la tabla donde vivirán tus datos y las reglas de seguridad
-   (cada usuario solo puede ver los suyos).
+   Esto crea las tablas donde vivirán tus datos y las reglas de seguridad
+   (Row Level Security: cada usuario solo puede ver y tocar lo suyo).
 5. Ve a **Authentication → Providers → Email** y **desactiva "Confirm email"**
    (a veces aparece como "Enable email confirmations"). Así, cuando alguien
    se registre con correo y contraseña, puede entrar de inmediato sin tener
