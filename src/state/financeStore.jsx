@@ -32,6 +32,7 @@ export function FinanceProvider({ children }) {
   const [loadError, setLoadError] = useState('');
   const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
   const [pendingChanges, setPendingChanges] = useState(false);
+  const [exporting, setExporting] = useState('');   // '' | 'trabajando' | mensaje de error
   const [activeTab, setActiveTab] = useState('resumen');
   const [userEmail, setUserEmail] = useState('');
 
@@ -728,6 +729,19 @@ export function FinanceProvider({ children }) {
     }
   }
 
+  async function handleExportExcel() {
+    setExporting('trabajando');
+    try {
+      // import() dinámico: ExcelJS solo se descarga cuando de verdad se usa.
+      const { exportToExcel } = await import('../lib/exportExcel.js');
+      await exportToExcel({ transactions, debts, savingsGoals, creditCards, fixedExpenses,
+                            customCategories, categoryLabels, monthStartDay });
+      setExporting('');
+    } catch (err) {
+      setExporting(err.message || 'No se pudo generar el archivo.');
+    }
+  }
+
   function handleResetAll() {
     if (!window.confirm('¿Seguro que quieres borrar todos tus datos financieros? Esta acción no se puede deshacer.')) return;
     setTransactions([]);
@@ -790,11 +804,13 @@ export function FinanceProvider({ children }) {
     handleMarkFixedExpensePaid,
     handleOpenNewMovement,
     handleRegisterNextInstallment,
+    handleExportExcel,
     handleResetAll,
     handleSetPin,
     handleUndoFixedExpensePaid,
     handleUpdateCategoryLabel,
     loadError,
+    exporting,
     offline,
     pendingChanges,
     loading,

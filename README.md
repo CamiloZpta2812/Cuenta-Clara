@@ -33,6 +33,24 @@ internet se guarda en el dispositivo y se sube solo cuando vuelve la conexión
 algo desde otro dispositivo, al reconectar se conservan los dos: solo se pisa el
 registro puntual que hayas tocado en ambos lados.
 
+## Exportar todo a Excel
+
+En **Resumen** hay un botón **"Todo en Excel"** que descarga un `.xlsx` con
+absolutamente todo lo registrado, en 15 hojas: resumen general, mes a mes,
+movimientos, gastos por categoría cruzados por mes, ingresos, tarjetas,
+facturas de tarjeta, movimientos de tarjeta, cuotas activas, deudas, abonos,
+metas de ahorro, aportes, gastos fijos y compromisos futuros.
+
+Los montos van como números (no como texto con "$"), así que se pueden sumar y
+meter en tablas dinámicas; los gastos van en negativo para que sumar la columna
+dé el saldo. Cada hoja trae autofiltro.
+
+Para ver cómo queda sin usar datos reales:
+
+```
+node scripts/sample-report.mjs
+```
+
 ## Comandos
 
 ```

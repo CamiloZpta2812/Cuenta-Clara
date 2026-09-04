@@ -8,10 +8,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext .js,.jsx",
-    "test": "node --test \"src/**/*.test.js\""
+    "test": "node --test \"src/**/*.test.js\"",
+    "sample-report": "node scripts/sample-report.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
+    "exceljs": "^4.4.0",
     "lucide-react": "^0.383.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

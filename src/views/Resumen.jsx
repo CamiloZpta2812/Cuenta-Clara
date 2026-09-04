@@ -1,7 +1,7 @@
 import {
   BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { LayoutDashboard, CreditCard, PiggyBank, TrendingUp, TrendingDown, Wallet, ShoppingBag, Check, Landmark, Repeat } from 'lucide-react';
+import { LayoutDashboard, CreditCard, PiggyBank, TrendingUp, TrendingDown, Wallet, ShoppingBag, Check, Landmark, Repeat, Sheet, AlertTriangle } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
 import { getCategory } from '../lib/categories.js';
 import { monthLabel } from '../lib/dates.js';
@@ -13,6 +13,8 @@ import { useFinance } from '../state/financeStore';
 export default function Resumen() {
   const {
     availableMonths,
+    exporting,
+    handleExportExcel,
     commitments,
     cashBalance,
     equityEvolution,
@@ -45,9 +47,21 @@ export default function Resumen() {
           {availableMonths.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
         </select>
         <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => window.print()}>
-          <Landmark size={13} /> Descargar reporte (PDF)
+          <Landmark size={13} /> Reporte del mes (PDF)
+        </button>
+        <button
+          type="button"
+          className="cc-btn cc-btn-outline cc-btn-sm"
+          onClick={handleExportExcel}
+          disabled={exporting === 'trabajando'}
+        >
+          <Sheet size={13} /> {exporting === 'trabajando' ? 'Generando…' : 'Todo en Excel'}
         </button>
       </div>
+
+      {exporting && exporting !== 'trabajando' && (
+        <div className="cc-banner"><AlertTriangle size={15} /> No se pudo generar el Excel: {exporting}</div>
+      )}
 
       <div className="cc-stats-grid">
         <StatCard label="Ingresos del mes" value={fmtCOP(selMonthIncome)} Icon={TrendingUp} color={COLORS.income} bg="var(--income-soft)" />
