@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { supabase } from './supabaseClient';
+import { useState } from 'react';
+import { supabase } from './supabaseClient.js';
 
 export default function Login() {
   const [mode, setMode] = useState('signin'); // 'signin' | 'signup'
