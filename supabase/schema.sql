@@ -155,20 +155,80 @@ create index if not exists goal_contributions_goal_idx on public.goal_contributi
 
 -- =============================================================================
 -- Row Level Security: cada usuario solo ve y toca lo suyo.
+--
+-- Escrito tabla por tabla y sin bucles a propósito. El editor de Supabase
+-- revisa el SQL de forma estática y no puede mirar dentro de un bloque
+-- `do $$ ... $$`: con un bucle avisaba "creas tablas sin RLS" aunque sí se
+-- activara al ejecutarse. Aquí RLS es lo único que impide que la anon key lea
+-- las finanzas de cualquiera, así que tiene que poder verificarse a simple
+-- vista, no confiarse.
+--
+-- El `drop policy if exists` de cada bloque es lo que hace que el script se
+-- pueda correr de nuevo sin fallar. Solo borra la política que este mismo
+-- archivo vuelve a crear dos líneas más abajo; no toca datos.
 -- =============================================================================
-do $$
-declare
-  t text;
-  tables text[] := array['user_settings', 'custom_categories', 'credit_cards', 'fixed_expenses',
-                         'debts', 'debt_payments', 'savings_goals', 'goal_contributions',
-                         'transactions'];
-begin
-  foreach t in array tables loop
-    execute format('alter table public.%I enable row level security', t);
-    -- se recrean para que correr el script de nuevo no falle ni deje políticas viejas
-    execute format('drop policy if exists %I on public.%I', t || '_own', t);
-    execute format(
-      'create policy %I on public.%I for all using (auth.uid() = user_id) with check (auth.uid() = user_id)',
-      t || '_own', t);
-  end loop;
-end $$;
+
+alter table public.user_settings enable row level security;
+alter table public.custom_categories enable row level security;
+alter table public.credit_cards enable row level security;
+alter table public.fixed_expenses enable row level security;
+alter table public.debts enable row level security;
+alter table public.debt_payments enable row level security;
+alter table public.savings_goals enable row level security;
+alter table public.goal_contributions enable row level security;
+alter table public.transactions enable row level security;
+
+drop policy if exists user_settings_own on public.user_settings;
+create policy user_settings_own on public.user_settings
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists custom_categories_own on public.custom_categories;
+create policy custom_categories_own on public.custom_categories
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists credit_cards_own on public.credit_cards;
+create policy credit_cards_own on public.credit_cards
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists fixed_expenses_own on public.fixed_expenses;
+create policy fixed_expenses_own on public.fixed_expenses
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists debts_own on public.debts;
+create policy debts_own on public.debts
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists debt_payments_own on public.debt_payments;
+create policy debt_payments_own on public.debt_payments
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists savings_goals_own on public.savings_goals;
+create policy savings_goals_own on public.savings_goals
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists goal_contributions_own on public.goal_contributions;
+create policy goal_contributions_own on public.goal_contributions
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists transactions_own on public.transactions;
+create policy transactions_own on public.transactions
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+

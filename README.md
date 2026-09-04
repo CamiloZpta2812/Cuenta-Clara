@@ -11,7 +11,13 @@ en tablas de verdad. Para pasarte:
 1. Entra a Supabase → **SQL Editor** → **New query**.
 2. Pega todo el contenido de `supabase/schema.sql` y dale **Run**.
    Se puede correr varias veces sin romper nada.
-3. Abre la app y entra normal. La primera vez detecta tu JSON viejo y lo
+
+   Supabase avisa que "la consulta incluye operaciones destructivas": se
+   refiere a los `drop policy if exists`, que solo borran las políticas que el
+   mismo archivo vuelve a crear dos líneas más abajo. No toca datos.
+3. Pega `supabase/verify-rls.sql` y dale **Run**. Deben salir **9 filas, todas
+   en OK**. Eso confirma que ninguna tabla quedó abierta.
+4. Abre la app y entra normal. La primera vez detecta tu JSON viejo y lo
    convierte solo a las tablas nuevas.
 
 **No se borra nada.** La tabla `kv_store` se queda intacta como respaldo. Cuando
