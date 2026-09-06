@@ -48,7 +48,6 @@ const blob = {
     { id: 'custom-x1', type: 'gasto', label: 'Peluquería', iconKey: 'utensils', color: '#B0524B' },
   ],
   categoryLabels: { alimentacion: 'Mercado' },
-  monthStartDay: 16,
 };
 
 test('el blob completo sobrevive el viaje de ida y vuelta a filas', () => {
@@ -101,7 +100,6 @@ test('las referencias entre registros se conservan', () => {
 
 test('los ajustes viajan en user_settings', () => {
   const rows = stateToRows(blob);
-  assert.equal(rows.user_settings[0].month_start_day, 16);
   assert.deepEqual(rows.user_settings[0].category_labels, { alimentacion: 'Mercado' });
 });
 
@@ -111,7 +109,6 @@ test('un blob vacío o a medias no revienta', () => {
   assert.deepEqual(vacio.transactions, []);
   assert.deepEqual(vacio.debts, []);
   assert.deepEqual(vacio.categoryLabels, {});
-  assert.equal(vacio.monthStartDay, 1, 'sin ajustes guardados, el mes empieza el 1');
 });
 
 test('un movimiento viejo sin campos de moneda queda como COP', () => {

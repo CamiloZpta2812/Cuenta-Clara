@@ -14,7 +14,6 @@ const base = {
   fixedExpenses: [],
   customCategories: [],
   categoryLabels: {},
-  monthStartDay: 1,
 };
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -57,12 +56,12 @@ test('renombrar una categoría ya no reescribe los movimientos', () => {
   assert.deepEqual(Object.keys(d.upserts), ['user_settings']);
 });
 
-test('cambiar el día de inicio de mes solo toca los ajustes', () => {
+test('renombrar una categoría propia solo toca los ajustes', () => {
   const next = clone(base);
-  next.monthStartDay = 16;
+  next.categoryLabels = { transporte: 'Moto' };
   const d = diffState(base, next);
   assert.deepEqual(Object.keys(d.upserts), ['user_settings']);
-  assert.equal(d.upserts.user_settings[0].month_start_day, 16);
+  assert.deepEqual(d.upserts.user_settings[0].category_labels, { transporte: 'Moto' });
 });
 
 test('un abono nuevo aparece como fila de debt_payments, no como deuda modificada', () => {
@@ -96,7 +95,7 @@ test('deshacer un abono borra el abono y el movimiento enlazado', () => {
 
 test('borrar todo produce solo borrados', () => {
   const vacio = { transactions: [], creditCards: [], debts: [], savingsGoals: [],
-                  fixedExpenses: [], customCategories: [], categoryLabels: {}, monthStartDay: 1 };
+                  fixedExpenses: [], customCategories: [], categoryLabels: {} };
   const d = diffState(base, vacio);
   assert.equal(Object.keys(d.upserts).length, 0);
   assert.deepEqual(d.deletes.transactions.sort(), ['t1', 't2']);

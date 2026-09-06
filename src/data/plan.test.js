@@ -12,10 +12,10 @@ const conDeuda = {
             payments: [{ id: 'p1', amount: 200, date: '2026-09-02' }] }],
   savingsGoals: [{ id: 'g1', name: 'Meta', targetAmount: 500, targetDate: '',
                    contributions: [{ id: 'a1', amount: 100, date: '2026-05-01' }] }],
-  fixedExpenses: [], customCategories: [], categoryLabels: {}, monthStartDay: 1,
+  fixedExpenses: [], customCategories: [], categoryLabels: {},
 };
 const vacio = { transactions: [], creditCards: [], debts: [], savingsGoals: [],
-                fixedExpenses: [], customCategories: [], categoryLabels: {}, monthStartDay: 1 };
+                fixedExpenses: [], customCategories: [], categoryLabels: {} };
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const orden = (plan) => plan.map((s) => `${s.op}:${s.table}`);
@@ -65,7 +65,7 @@ test('los borrados van acotados al usuario', () => {
 
 test('user_settings resuelve el conflicto por user_id, el resto por user_id,id', () => {
   const next = clone(conDeuda);
-  next.monthStartDay = 20;
+  next.categoryLabels = { compras: 'Antojos' };
   next.creditCards[0].name = 'Visa Oro';
   const plan = planWrites(diffState(conDeuda, next), UID);
   const ajustes = plan.find((s) => s.table === 'user_settings');

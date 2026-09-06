@@ -10,7 +10,7 @@ const alPerderSenal = {
     { id: 't2', type: 'gasto', amount: 20000, category: 'transporte', date: '2026-09-02', note: 'Taxi' },
   ],
   creditCards: [], debts: [], savingsGoals: [], fixedExpenses: [],
-  customCategories: [], categoryLabels: {}, monthStartDay: 1,
+  customCategories: [], categoryLabels: {},
 };
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -75,10 +75,8 @@ test('sin cambios pendientes, la reconciliación deja el servidor tal cual', () 
 
 test('los ajustes cambiados sin señal también se recuperan', () => {
   const local = clone(alPerderSenal);
-  local.monthStartDay = 16;
   local.categoryLabels = { alimentacion: 'Mercado' };
   const resultado = reconciliar(alPerderSenal, alPerderSenal, local);
-  assert.equal(resultado.monthStartDay, 16);
   assert.deepEqual(resultado.categoryLabels, { alimentacion: 'Mercado' });
 });
 

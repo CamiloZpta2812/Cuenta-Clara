@@ -1,21 +1,19 @@
 import { MONTH_NAMES } from './constants.js';
-import { userConfig } from './userConfig.js';
 
 export function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 export function daysInMonth(year, monthIndex) { return new Date(year, monthIndex + 1, 0).getDate(); }
 
+/*
+ * El mes de una fecha, siempre calendario (YYYY-MM).
+ *
+ * Antes esto dependía de un ajuste de "mi mes empieza el día N", pensado para
+ * quien cobra quincenas. Se quitó: confundía más de lo que ayudaba, y obligaba
+ * a que una función de fechas leyera configuración global, lo que ensuciaba
+ * todos los cálculos derivados que dependían de ella.
+ */
 export function monthKeyFromDate(d) {
-  const dateStr = d || todayStr();
-  const S = userConfig.monthStartDay;
-  if (!S || S <= 1) return dateStr.slice(0, 7);
-  const [y, m, day] = dateStr.split('-').map(Number);
-  const effectiveS = Math.min(S, daysInMonth(y, m - 1));
-  if (day >= effectiveS) return `${y}-${String(m).padStart(2, '0')}`;
-  let pm = m - 1;
-  let py = y;
-  if (pm < 1) { pm = 12; py -= 1; }
-  return `${py}-${String(pm).padStart(2, '0')}`;
+  return (d || todayStr()).slice(0, 7);
 }
 
 export function currentMonthKey() { return monthKeyFromDate(todayStr()); }

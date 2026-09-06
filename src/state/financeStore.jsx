@@ -47,7 +47,6 @@ export function FinanceProvider({ children }) {
   const [fixedExpenses, setFixedExpenses] = useState([]);
   const [categoryLabels, setCategoryLabelsState] = useState({});
   const [customCategories, setCustomCategoriesState] = useState([]);
-  const [monthStartDay, setMonthStartDayState] = useState(1);
 
   /*
    * Estos setters dejan userConfig sincronizado ANTES de pedir el re-render,
@@ -56,7 +55,6 @@ export function FinanceProvider({ children }) {
    */
   function setCategoryLabels(next) { userConfig.categoryLabels = next; setCategoryLabelsState(next); }
   function setCustomCategories(next) { userConfig.customCategories = next; setCustomCategoriesState(next); }
-  function setMonthStartDay(next) { userConfig.monthStartDay = next; setMonthStartDayState(next); }
 
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey());
 
@@ -126,7 +124,6 @@ export function FinanceProvider({ children }) {
         setFixedExpenses(state.fixedExpenses || []);
         setCategoryLabels(state.categoryLabels || {});
         setCustomCategories(state.customCategories || []);
-        setMonthStartDay(state.monthStartDay || 1);
         setSelectedMonth(monthKeyFromDate(todayStr()));
       }
 
@@ -174,7 +171,7 @@ export function FinanceProvider({ children }) {
   useEffect(() => {
     if (loading || loadError) return undefined;
     const next = { transactions, debts, savingsGoals, creditCards, fixedExpenses,
-                   customCategories, categoryLabels, monthStartDay };
+                   customCategories, categoryLabels };
     const prev = persistedRef.current;
     if (!prev) { persistedRef.current = next; return undefined; }
 
@@ -205,7 +202,7 @@ export function FinanceProvider({ children }) {
       }
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [transactions, debts, savingsGoals, creditCards, categoryLabels, customCategories, monthStartDay, fixedExpenses, loading, loadError]);
+  }, [transactions, debts, savingsGoals, creditCards, categoryLabels, customCategories, fixedExpenses, loading, loadError]);
 
   /* ---------- Conexión ---------- */
   /*
@@ -216,7 +213,7 @@ export function FinanceProvider({ children }) {
     const prev = persistedRef.current;
     if (!prev) return;
     const next = { transactions, debts, savingsGoals, creditCards, fixedExpenses,
-                   customCategories, categoryLabels, monthStartDay };
+                   customCategories, categoryLabels };
     const diff = diffState(prev, next);
     if (isEmptyDiff(diff)) { setOffline(false); setPendingChanges(false); return; }
     try {
@@ -247,21 +244,12 @@ export function FinanceProvider({ children }) {
   }, []);
 
   /* ---------- Datos derivados ---------- */
-  /*
-   * monthKeyFromDate() lee userConfig.monthStartDay por dentro, cosa que ESLint
-   * no puede ver: por eso marca monthStartDay como dependencia innecesaria en
-   * los useMemo de abajo. Sí hace falta, si no las gráficas se quedan con el
-   * corte de mes viejo al cambiar la configuración.
-   */
-  /* eslint-disable react-hooks/exhaustive-deps */
-  // Dependen de monthStartDay: si el usuario tiene "mi mes empieza el 25", el
-  // corte cambia y hay que recalcular la ventana de meses y todo lo derivado.
-  const monthsWindow = useMemo(() => getLastMonthKeys(6, currentMonthKey()), [monthStartDay]);
+  const monthsWindow = useMemo(() => getLastMonthKeys(6, currentMonthKey()), []);
 
   // Los 6 meses que VIENEN, para ver lo que ya está comprometido.
   const futureMonths = useMemo(
     () => Array.from({ length: 6 }, (_, i) => addMonths(currentMonthKey(), i + 1)),
-    [monthStartDay],
+    [],
   );
   const commitments = useMemo(
     () => buildCommitments(transactions, fixedExpenses, futureMonths),
@@ -282,7 +270,7 @@ export function FinanceProvider({ children }) {
   const availableMonths = useMemo(() => {
     const set = new Set([currentMonthKey(), ...transactions.map((t) => monthKeyFromDate(t.date))]);
     return Array.from(set).sort().reverse();
-  }, [transactions, monthStartDay]);
+  }, [transactions]);
 
   const totalIncome = useMemo(() => transactions.filter((t) => t.type === 'ingreso').reduce((s, t) => s + t.amount, 0), [transactions]);
   const totalExpense = useMemo(() => transactions.filter((t) => t.type === 'gasto').reduce((s, t) => s + t.amount, 0), [transactions]);
@@ -300,9 +288,9 @@ export function FinanceProvider({ children }) {
   );
   const netWorth = cashBalance + totalSavings - totalDebtRemaining;
 
-  const selMonthIncome = useMemo(() => transactions.filter((t) => t.type === 'ingreso' && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth, monthStartDay]);
-  const selMonthExpense = useMemo(() => transactions.filter((t) => t.type === 'gasto' && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth, monthStartDay]);
-  const selMonthFixed = useMemo(() => transactions.filter((t) => t.type === 'gasto' && t.isFixed && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth, monthStartDay]);
+  const selMonthIncome = useMemo(() => transactions.filter((t) => t.type === 'ingreso' && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth]);
+  const selMonthExpense = useMemo(() => transactions.filter((t) => t.type === 'gasto' && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth]);
+  const selMonthFixed = useMemo(() => transactions.filter((t) => t.type === 'gasto' && t.isFixed && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth]);
   const selMonthVariable = Math.max(0, selMonthExpense - selMonthFixed);
   function cardLabel(cardId) {
     const c = creditCards.find((card) => card.id === cardId);
@@ -327,7 +315,10 @@ export function FinanceProvider({ children }) {
       const c = getCategory(id);
       return { name: c.label, value, color: c.color };
     }).sort((a, b) => b.value - a.value);
-  }, [transactions, selectedMonth, categoryLabels, customCategories, monthStartDay]);
+    // categoryLabels y customCategories sí hacen falta: getCategory() los lee
+    // a través de userConfig, cosa que ESLint no puede ver desde aquí.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transactions, selectedMonth, categoryLabels, customCategories]);
 
   const equityEvolution = useMemo(() => monthsWindow.map((key) => {
     const ahorro = savingsGoals.reduce((sum, g) => sum + g.contributions.filter((c) => monthKeyFromDate(c.date) <= key).reduce((s, c) => s + c.amount, 0), 0);
@@ -349,9 +340,11 @@ export function FinanceProvider({ children }) {
     .filter((t) => txFilters.paymentMethod === 'todos' || t.paymentMethod === txFilters.paymentMethod)
     .filter((t) => txFilters.fixed === 'todos' || (txFilters.fixed === 'fijo' ? t.isFixed : !t.isFixed))
     .filter((t) => !txFilters.day || t.date === txFilters.day)
-    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)), [transactions, txFilters, monthStartDay]);
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)), [transactions, txFilters]);
 
-  const recommendations = useMemo(() => buildRecommendations(transactions, debts, savingsGoals), [transactions, debts, savingsGoals, categoryLabels, customCategories, monthStartDay]);
+  // Igual que arriba: buildRecommendations() etiqueta categorías por dentro.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const recommendations = useMemo(() => buildRecommendations(transactions, debts, savingsGoals), [transactions, debts, savingsGoals, categoryLabels, customCategories]);
   const status = getStatus(selMonthIncome, selMonthExpense);
   const allExpenseCategories = [...EXPENSE_CATEGORIES, ...customCategories.filter((c) => c.type === 'gasto')];
   const allIncomeCategories = [...INCOME_CATEGORIES, ...customCategories.filter((c) => c.type === 'ingreso')];
@@ -364,8 +357,6 @@ export function FinanceProvider({ children }) {
   const txChargeDate = txForm.paymentMethod === 'credito' && txSelectedCard?.cutDay && txSelectedCard?.paymentDay
     ? computeChargeDate(txForm.date, txSelectedCard.cutDay, txSelectedCard.paymentDay)
     : null;
-
-  /* eslint-enable react-hooks/exhaustive-deps */
 
   /* ---------- Acciones ---------- */
   function handleAddTransaction(e) {
@@ -735,7 +726,7 @@ export function FinanceProvider({ children }) {
       // import() dinámico: ExcelJS solo se descarga cuando de verdad se usa.
       const { exportToExcel } = await import('../lib/exportExcel.js');
       await exportToExcel({ transactions, debts, savingsGoals, creditCards, fixedExpenses,
-                            customCategories, categoryLabels, monthStartDay });
+                            customCategories, categoryLabels });
       setExporting('');
     } catch (err) {
       setExporting(err.message || 'No se pudo generar el archivo.');
@@ -751,7 +742,6 @@ export function FinanceProvider({ children }) {
     setFixedExpenses([]);
     setCustomCategories([]);
     setCategoryLabels({});
-    setMonthStartDay(1);
   }
 
   const value = {
@@ -814,7 +804,6 @@ export function FinanceProvider({ children }) {
     offline,
     pendingChanges,
     loading,
-    monthStartDay,
     monthlyIncomeExpense,
     monthsWindow,
     futureMonths,
@@ -852,7 +841,6 @@ export function FinanceProvider({ children }) {
     setFixedForm,
     setGoalForm,
     setLoading,
-    setMonthStartDay,
     setNewCatGasto,
     setNewCatIngreso,
     setPaymentInputs,

@@ -14,13 +14,11 @@ export default function Configuracion() {
     handleResetAll,
     handleSetPin,
     handleUpdateCategoryLabel,
-    monthStartDay,
     newCatGasto,
     newCatIngreso,
     pinForm,
     pinMessage,
     setConfigTab,
-    setMonthStartDay,
     setNewCatGasto,
     setNewCatIngreso,
     setPinForm,
@@ -29,7 +27,6 @@ export default function Configuracion() {
 
   const subTabs = [
     { id: 'categorias', label: 'Categorías' },
-    { id: 'periodo', label: 'Mes financiero' },
     { id: 'pin', label: 'Contraseña' },
     { id: 'datos', label: 'Datos y sesión' },
   ];
@@ -155,38 +152,6 @@ export default function Configuracion() {
             </div>
           </div>
         </>
-      )}
-
-      {configTab === 'periodo' && (
-        <div className="cc-card">
-          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Mes financiero</div>
-          <p className="cc-stat-sub" style={{ marginBottom: 12 }}>
-            Si te pagan a mitad de mes (como una quincena), el "mes" calendario puede hacer ver que estás en déficit
-            justo antes de que te paguen. Aquí puedes decirle a la app en qué día quieres que empiece tu mes, para
-            que coincida mejor con tu ciclo de pago.
-          </p>
-          <div className="cc-field" style={{ maxWidth: 200 }}>
-            <label>Tu mes empieza el día</label>
-            <input
-              className="cc-input"
-              type="number"
-              min="1"
-              max="28"
-              value={monthStartDay}
-              onChange={(e) => {
-                const v = Math.min(28, Math.max(1, parseInt(e.target.value, 10) || 1));
-                setMonthStartDay(v);
-              }}
-            />
-          </div>
-          <p className="cc-stat-sub" style={{ marginTop: 10 }}>
-            Con "1" (el valor normal), tu mes va del 1 al último día de cada mes. Si por ejemplo te pagan quincenas
-            el 15 y el 30/31, prueba con "16": tu mes iría del 16 de un mes al 15 del siguiente, así el pago de fin
-            de mes y lo que gastes justo después caen en el mismo período. Ninguna configuración es perfecta cuando
-            te pagan dos veces al mes, pero esta ayuda a que el balance mensual refleje mejor tu realidad. El
-            "Saldo en caja" del Resumen siempre muestra tu dinero real acumulado, sin importar esta configuración.
-          </p>
-        </div>
       )}
 
       {configTab === 'pin' && (

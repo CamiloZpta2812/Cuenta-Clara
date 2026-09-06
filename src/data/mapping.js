@@ -117,7 +117,6 @@ export function customCategoryToRow(c) {
 
 export function settingsToRow(state) {
   return {
-    month_start_day: int(state.monthStartDay) || 1,
     category_labels: state.categoryLabels || {},
   };
 }
@@ -221,7 +220,6 @@ export function rowsToState(rows) {
       id: c.id, type: c.type, label: c.label, iconKey: c.icon_key, color: c.color,
     })),
     categoryLabels: settings.category_labels || {},
-    monthStartDay: int(settings.month_start_day) || 1,
   };
 }
 
