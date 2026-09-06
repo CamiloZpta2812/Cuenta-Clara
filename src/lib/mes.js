@@ -23,6 +23,7 @@
  */
 
 import { monthKeyFromDate } from './dates.js';
+import { simulate } from './amortizacion.js';
 
 const num = (v) => Number(v) || 0;
 const sum = (arr, f) => (arr || []).reduce((s, x) => s + num(f(x)), 0);
@@ -222,5 +223,54 @@ export function resumenDelMes(estado, mes) {
     desvios,
     cobros: cobrosDelMes(estado.gastosFijos, estado.cobros, mes),
     alertas: alertasDelMes(estado, mes, plan, real),
+  };
+}
+
+
+/* ------------------------------------------------------------ simulador -- */
+
+/*
+ * "¿Y si le bajo al colchón?" / "¿Y si me sube el arriendo?"
+ *
+ * Aplica cambios sobre el plan y devuelve qué pasa con la deuda. Es lo que se
+ * muestra ANTES de confirmar un cambio, para que nadie mueva un número sin ver
+ * lo que cuesta en meses.
+ *
+ * Los cambios son sumas o restas sobre las líneas del plan, no valores nuevos:
+ * { colchon: -150000 } significa "bajo el colchón en 150.000".
+ */
+export function simularCambioDePlan(estado, cambios = {}) {
+  const plan = planDelMes(estado);
+  const deuda = (estado.deudas || [])[0];
+  if (!deuda) return null;
+
+  const delta = Object.values(cambios).reduce((s, v) => s - num(v), 0);
+  const abonoAntes = plan.disponibleParaAbono;
+  const abonoDespues = abonoAntes + delta;
+
+  /*
+   * Sin recortar en cero a propósito. Si el plan queda en déficit, no es que
+   * "abones cero": es que no te alcanza ni para la cuota mínima, y eso tiene
+   * que verse. Recortarlo mostraría un plan de pago que no existe.
+   */
+  const pago = (a) => num(deuda.cuotaFija) + a;
+  const antes = simulate({
+    principal: deuda.saldoActual, monthlyRate: deuda.tasaMensual, payment: pago(abonoAntes),
+  });
+  const despues = simulate({
+    principal: deuda.saldoActual, monthlyRate: deuda.tasaMensual, payment: pago(abonoDespues),
+  });
+
+  return {
+    abonoAntes,
+    abonoDespues,
+    antes,
+    despues,
+    // El plan no cierra: los gastos se comen hasta la cuota mínima.
+    deficit: abonoDespues < 0,
+    mesesDiferencia: antes.feasible && despues.feasible ? antes.months - despues.months : null,
+    interesDiferencia: antes.feasible && despues.feasible
+      ? antes.totalInterest - despues.totalInterest : null,
+    dejaDeSerViable: antes.feasible && !despues.feasible,
   };
 }

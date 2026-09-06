@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   miParte, parteExterna, cobrosDelMes, planDelMes, realDelMes,
-  salidasDeCajaDelMes, resumenDelMes,
+  salidasDeCajaDelMes, resumenDelMes, simularCambioDePlan,
 } from './mes.js';
 
 /*
@@ -263,4 +263,49 @@ test('la app arranca sin datos sin romperse', () => {
   assert.equal(r.plan.ingresos, 0);
   assert.equal(r.plan.disponibleParaAbono, 0);
   assert.deepEqual(r.cobros, []);
+});
+
+
+/* ------------------------------------------------------------ simulador -- */
+
+test('bajar el colchón acorta la deuda, y dice en cuánto', () => {
+  const r = simularCambioDePlan(estado, { colchon: -150_000 });
+  assert.equal(r.abonoAntes, 737_587);
+  assert.equal(r.abonoDespues, 887_587);
+  assert.equal(r.antes.months, 14);
+  assert.equal(r.despues.months, 12);
+  assert.equal(r.mesesDiferencia, 2);
+  assert.ok(r.interesDiferencia > 200_000, 'y se ahorra en intereses');
+});
+
+test('subir el colchón alarga la deuda, y también lo dice', () => {
+  const r = simularCambioDePlan(estado, { colchon: 100_000 });
+  assert.equal(r.abonoDespues, 637_587);
+  assert.equal(r.mesesDiferencia, -1, 'un mes más');
+  assert.ok(r.interesDiferencia < 0, 'y cuesta más intereses');
+});
+
+test('varios cambios a la vez se acumulan', () => {
+  const r = simularCambioDePlan(estado, { colchon: -100_000, variable: -50_000 });
+  assert.equal(r.abonoDespues, 737_587 + 150_000);
+});
+
+test('un gasto que se come el excedente deja el plan en déficit', () => {
+  // Si los fijos suben 1,5 millones, el abono extra queda en negativo: no
+  // alcanza ni para la cuota mínima. La app tiene que decirlo, no fingir
+  // que simplemente "no abonas extra".
+  const r = simularCambioDePlan(estado, { gastosFijos: 1_500_000 });
+  assert.equal(r.deficit, true);
+  assert.ok(r.abonoDespues < 0, `abono quedó en ${r.abonoDespues}`);
+  assert.equal(r.dejaDeSerViable, true, 'con menos que la cuota, la deuda no se acaba');
+  assert.equal(r.mesesDiferencia, null);
+});
+
+test('un plan holgado no se marca en déficit', () => {
+  const r = simularCambioDePlan(estado, { colchon: -150_000 });
+  assert.equal(r.deficit, false);
+});
+
+test('sin deudas no hay nada que simular', () => {
+  assert.equal(simularCambioDePlan({ ...estado, deudas: [] }, { colchon: -100_000 }), null);
 });
