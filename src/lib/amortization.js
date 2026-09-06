@@ -65,7 +65,7 @@ export function simulate({ principal, monthlyRate, payment, extra = 0, maxMonths
   let totalPagado = 0;
   let totalInteres = 0;
 
-  for (let mes = 1; mes <= maxMonths && saldo > 0; mes += 1) {
+  for (let month = 1; month <= maxMonths && saldo > 0; month += 1) {
     const apertura = saldo;
     const interes = apertura * tasa;
     // El último mes se paga solo lo que falta, no la cuota completa.
@@ -76,7 +76,7 @@ export function simulate({ principal, monthlyRate, payment, extra = 0, maxMonths
 
     totalPagado += pago;
     totalInteres += interes;
-    schedule.push({ month: mes, opening: apertura, interest: interes, principal: capital, payment: pago, closing: saldo });
+    schedule.push({ month: month, opening: apertura, interest: interes, principal: capital, payment: pago, closing: saldo });
   }
 
   return {
@@ -93,7 +93,7 @@ export function simulate({ principal, monthlyRate, payment, extra = 0, maxMonths
  * Sirve para deducir la cuota cuando conoces el plazo, o el plazo cuando
  * conoces la cuota.
  */
-export function cuotaFija(principal, monthlyRate, months) {
+export function levelPayment(principal, monthlyRate, months) {
   const P = Number(principal) || 0;
   const i = Number(monthlyRate) || 0;
   const n = Number(months) || 0;
@@ -106,7 +106,7 @@ export function cuotaFija(principal, monthlyRate, months) {
  * Cuántos meses faltan pagando una cuota dada. Devuelve null si la cuota no
  * alcanza ni para los intereses.
  */
-export function mesesRestantes(principal, monthlyRate, payment) {
+export function monthsRemaining(principal, monthlyRate, payment) {
   const P = Number(principal) || 0;
   const i = Number(monthlyRate) || 0;
   const A = Number(payment) || 0;
@@ -120,17 +120,17 @@ export function mesesRestantes(principal, monthlyRate, payment) {
  * Compara pagar solo la cuota mínima contra pagar cuota + abono extra.
  * Es el número que de verdad motiva: cuántos meses y cuánta plata te ahorras.
  */
-export function compararPlanes({ principal, monthlyRate, minimumPayment, extra }) {
-  const soloMinimo = simulate({ principal, monthlyRate, payment: minimumPayment });
-  const conAbono = simulate({ principal, monthlyRate, payment: minimumPayment, extra });
+export function comparePlans({ principal, monthlyRate, minimumPayment, extra }) {
+  const minimumOnly = simulate({ principal, monthlyRate, payment: minimumPayment });
+  const withExtra = simulate({ principal, monthlyRate, payment: minimumPayment, extra });
 
   return {
-    soloMinimo,
-    conAbono,
-    mesesAhorrados: soloMinimo.feasible && conAbono.feasible
-      ? soloMinimo.months - conAbono.months : null,
-    interesAhorrado: soloMinimo.feasible && conAbono.feasible
-      ? soloMinimo.totalInterest - conAbono.totalInterest : null,
+    minimumOnly,
+    withExtra,
+    monthsSaved: minimumOnly.feasible && withExtra.feasible
+      ? minimumOnly.months - withExtra.months : null,
+    interestSaved: minimumOnly.feasible && withExtra.feasible
+      ? minimumOnly.totalInterest - withExtra.totalInterest : null,
   };
 }
 
@@ -141,17 +141,17 @@ export function compararPlanes({ principal, monthlyRate, minimumPayment, extra }
  * Este es el número del guardarraíl: en vez de bloquear la compra, se le
  * muestra al usuario lo que cuesta en meses de deuda.
  */
-export function impactoDeNuevoCompromiso({ principal, monthlyRate, payment, compromisoMensual }) {
-  const antes = simulate({ principal, monthlyRate, payment });
-  const despues = simulate({ principal, monthlyRate, payment: payment - compromisoMensual });
+export function impactOfNewCommitment({ principal, monthlyRate, payment, monthlyCommitment }) {
+  const before = simulate({ principal, monthlyRate, payment });
+  const after = simulate({ principal, monthlyRate, payment: payment - monthlyCommitment });
 
   return {
-    antes,
-    despues,
-    mesesExtra: antes.feasible && despues.feasible ? despues.months - antes.months : null,
-    interesExtra: antes.feasible && despues.feasible
-      ? despues.totalInterest - antes.totalInterest : null,
-    dejaDeSerViable: antes.feasible && !despues.feasible,
+    before,
+    after,
+    extraMonths: before.feasible && after.feasible ? after.months - before.months : null,
+    extraInterest: before.feasible && after.feasible
+      ? after.totalInterest - before.totalInterest : null,
+    becomesUnpayable: before.feasible && !after.feasible,
   };
 }
 
@@ -159,8 +159,8 @@ export function impactoDeNuevoCompromiso({ principal, monthlyRate, payment, comp
  * Saldo después de N meses. Útil para dibujar la proyección sin tener que
  * recorrer el cronograma completo desde fuera.
  */
-export function saldoProyectado(schedule, mes) {
-  if (mes <= 0) return schedule.length ? schedule[0].opening : 0;
-  const fila = schedule[mes - 1];
+export function projectedBalance(schedule, month) {
+  if (month <= 0) return schedule.length ? schedule[0].opening : 0;
+  const fila = schedule[month - 1];
   return fila ? fila.closing : 0;
 }

@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  simulate, cuotaFija, mesesRestantes, compararPlanes, impactoDeNuevoCompromiso,
-} from './amortizacion.js';
+  simulate, levelPayment, monthsRemaining, comparePlans, impactOfNewCommitment,
+} from './amortization.js';
 
 /*
  * El caso real: préstamo de libre inversión de Bancolombia.
@@ -74,10 +74,10 @@ test('pagando solo la cuota mínima son ~45 meses', () => {
 });
 
 test('el plan ahorra ~31 meses y más de $4 millones en intereses', () => {
-  const c = compararPlanes({ ...PRESTAMO, minimumPayment: CUOTA_MINIMA, extra: ABONO_EXTRA });
-  assert.equal(c.conAbono.months, 14);
-  assert.ok(c.mesesAhorrados >= 30, `ahorró ${c.mesesAhorrados} meses`);
-  assert.ok(c.interesAhorrado > 4_000_000, `ahorró ${Math.round(c.interesAhorrado)}`);
+  const c = comparePlans({ ...PRESTAMO, minimumPayment: CUOTA_MINIMA, extra: ABONO_EXTRA });
+  assert.equal(c.withExtra.months, 14);
+  assert.ok(c.monthsSaved >= 30, `ahorró ${c.mesesAhorrados} meses`);
+  assert.ok(c.interestSaved > 4_000_000, `ahorró ${Math.round(c.interesAhorrado)}`);
 });
 
 test('la suma de capital de todas las cuotas devuelve el préstamo completo', () => {
@@ -125,43 +125,43 @@ test('pagar todo de una liquida en un mes', () => {
 
 /* ----------------------------------------------------------- fórmulas ----- */
 
-test('cuotaFija reproduce la cuota mínima del préstamo', () => {
-  const cuota = cuotaFija(14_000_000, 0.0167, 45);
-  assert.ok(Math.abs(cuota - CUOTA_MINIMA) < 2000, `dio ${Math.round(cuota)}`);
+test('levelPayment reproduce la cuota mínima del préstamo', () => {
+  const installment = levelPayment(14_000_000, 0.0167, 45);
+  assert.ok(Math.abs(installment - CUOTA_MINIMA) < 2000, `dio ${Math.round(installment)}`);
 });
 
-test('mesesRestantes coincide con lo que da la simulación', () => {
-  assert.equal(mesesRestantes(14_000_000, 0.0167, PAGO_TOTAL), 14);
-  assert.equal(mesesRestantes(14_000_000, 0.0167, 100_000), null, 'cuota insuficiente');
+test('monthsRemaining coincide con lo que da la simulación', () => {
+  assert.equal(monthsRemaining(14_000_000, 0.0167, PAGO_TOTAL), 14);
+  assert.equal(monthsRemaining(14_000_000, 0.0167, 100_000), null, 'cuota insuficiente');
 });
 
 /* --------------------------------------------------------- guardarraíl ---- */
 
 test('una compra a 12 cuotas de $128.000 atrasa la liquidación', () => {
-  const r = impactoDeNuevoCompromiso({
-    ...PRESTAMO, payment: PAGO_TOTAL, compromisoMensual: 128_000,
+  const r = impactOfNewCommitment({
+    ...PRESTAMO, payment: PAGO_TOTAL, monthlyCommitment: 128_000,
   });
-  assert.equal(r.antes.months, 14);
-  assert.ok(r.mesesExtra >= 1, `atrasó ${r.mesesExtra} meses`);
-  assert.ok(r.interesExtra > 0, 'y cuesta más intereses');
+  assert.equal(r.before.months, 14);
+  assert.ok(r.extraMonths >= 1, `atrasó ${r.mesesExtra} meses`);
+  assert.ok(r.extraInterest > 0, 'y cuesta más intereses');
 });
 
 test('un compromiso que se come el abono entero vuelve impagable la deuda', () => {
   // Con $1.000.000 comprometido quedarían $184.000/mes para el préstamo, y el
   // interés del primer mes solo ya es $233.800: la deuda crecería sola.
-  const r = impactoDeNuevoCompromiso({
-    ...PRESTAMO, payment: PAGO_TOTAL, compromisoMensual: 1_000_000,
+  const r = impactOfNewCommitment({
+    ...PRESTAMO, payment: PAGO_TOTAL, monthlyCommitment: 1_000_000,
   });
-  assert.equal(r.despues.feasible, false);
-  assert.equal(r.dejaDeSerViable, true, 'la app tiene que poder avisar esto');
-  assert.equal(r.mesesExtra, null, 'no hay "cuántos meses más": nunca se acaba');
+  assert.equal(r.after.feasible, false);
+  assert.equal(r.becomesUnpayable, true, 'la app tiene que poder avisar esto');
+  assert.equal(r.extraMonths, null, 'no hay "cuántos meses más": nunca se acaba');
 });
 
 test('un compromiso moderado sí es viable, solo más lento', () => {
-  const r = impactoDeNuevoCompromiso({
-    ...PRESTAMO, payment: PAGO_TOTAL, compromisoMensual: 400_000,
+  const r = impactOfNewCommitment({
+    ...PRESTAMO, payment: PAGO_TOTAL, monthlyCommitment: 400_000,
   });
-  assert.equal(r.dejaDeSerViable, false);
-  assert.ok(r.despues.feasible);
-  assert.ok(r.mesesExtra > 0 && r.mesesExtra < 20, `atrasó ${r.mesesExtra} meses`);
+  assert.equal(r.becomesUnpayable, false);
+  assert.ok(r.after.feasible);
+  assert.ok(r.extraMonths > 0 && r.extraMonths < 20, `atrasó ${r.mesesExtra} meses`);
 });
