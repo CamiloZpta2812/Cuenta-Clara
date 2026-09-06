@@ -25,10 +25,10 @@ const estado = {
     { id: 'p5', nombre: 'Alex', linkedUserId: null },
   ],
   gastosFijos: [
-    { id: 'f1', nombre: 'HBO Max', valorTotal: 12_450, reparto: [{ personaId: 'p1', monto: 4_150 }] },
+    { id: 'f1', nombre: 'HBO Max', valorTotal: 12_450, reparto: [{ id: 's1', personaId: 'p1', monto: 4_150 }] },
     { id: 'f2', nombre: 'Spotify', valorTotal: 30_500, reparto: [
-      { personaId: 'p2', monto: 6_100 }, { personaId: 'p3', monto: 6_100 },
-      { personaId: 'p4', monto: 6_100 }, { personaId: 'p5', monto: 6_100 },
+      { id: 's2', personaId: 'p2', monto: 6_100 }, { id: 's3', personaId: 'p3', monto: 6_100 },
+      { id: 's4', personaId: 'p4', monto: 6_100 }, { id: 's5', personaId: 'p5', monto: 6_100 },
     ] },
     { id: 'f3', nombre: 'iCloud', valorTotal: 11_300, reparto: [] },
     { id: 'f4', nombre: 'Disney+', valorTotal: 12_000, reparto: [] },
@@ -69,7 +69,7 @@ test('mi parte de un gasto compartido es el total menos lo de los demás', () =>
 });
 
 test('mi parte se calcula, no se guarda: nunca puede descuadrar', () => {
-  const g = { valorTotal: 30_500, reparto: [{ personaId: 'x', monto: 10_000 }] };
+  const g = { valorTotal: 30_500, reparto: [{ id: 'sx', personaId: 'x', monto: 10_000 }] };
   assert.equal(miParte(g) + parteExterna(g), g.valorTotal);
 });
 
@@ -90,7 +90,7 @@ test('lo por cobrar son $28.550, repartidos entre 5 personas', () => {
 });
 
 test('marcar un cobro solo afecta ese mes y esa persona', () => {
-  const cobros = [{ mes: '2026-09', gastoFijoId: 'f2', personaId: 'p2' }];
+  const cobros = [{ mes: '2026-09', shareId: 's2' }];
   const sept = cobrosDelMes(estado.gastosFijos, cobros, '2026-09');
   assert.equal(sept.filter((c) => c.cobrado).length, 1);
   assert.equal(sept.find((c) => c.personaId === 'p2').cobrado, true);
@@ -201,13 +201,7 @@ test('avisa de los cobros pendientes con el costo anual', () => {
 test('no avisa de cobros si ya se cobraron todos', () => {
   const todoCobrado = {
     ...conMovimientos,
-    cobros: [
-      { mes: '2026-09', gastoFijoId: 'f1', personaId: 'p1' },
-      { mes: '2026-09', gastoFijoId: 'f2', personaId: 'p2' },
-      { mes: '2026-09', gastoFijoId: 'f2', personaId: 'p3' },
-      { mes: '2026-09', gastoFijoId: 'f2', personaId: 'p4' },
-      { mes: '2026-09', gastoFijoId: 'f2', personaId: 'p5' },
-    ],
+    cobros: ['s1', 's2', 's3', 's4', 's5'].map((shareId) => ({ mes: '2026-09', shareId })),
   };
   const r = resumenDelMes(todoCobrado, '2026-09');
   assert.equal(r.alertas.filter((a) => a.tipo === 'cobro').length, 0);

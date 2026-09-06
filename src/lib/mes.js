@@ -48,18 +48,19 @@ export function parteExterna(gastoFijo) {
  */
 export function cobrosDelMes(gastosFijos, cobros, mes) {
   const cobrados = new Set(
-    (cobros || []).filter((c) => c.mes === mes).map((c) => `${c.gastoFijoId}:${c.personaId}`),
+    (cobros || []).filter((c) => c.mes === mes).map((c) => c.shareId),
   );
   const filas = [];
   (gastosFijos || []).forEach((g) => {
     (g.reparto || []).forEach((r) => {
       if (num(r.monto) <= 0) return;
       filas.push({
+        shareId: r.id,
         gastoFijoId: g.id,
         gastoNombre: g.nombre,
         personaId: r.personaId,
         monto: num(r.monto),
-        cobrado: cobrados.has(`${g.id}:${r.personaId}`),
+        cobrado: cobrados.has(r.id),
       });
     });
   });
