@@ -13,15 +13,30 @@
 
 do $$
 declare
-  -- Si algún día siembras otra cuenta, este es el único valor que se cambia.
-  correo text := 'juancamiloz@solenium.co';
-  uid    uuid;
-  deudas int;
+  /*
+   * Déjalo vacío si tu proyecto de Supabase tiene un solo usuario: el script lo
+   * encuentra solo. Si tienes varios, pon aquí el correo con el que entras a
+   * AlDía — que no es necesariamente el mismo del dashboard de Supabase.
+   */
+  correo   text := '';
+  uid      uuid;
+  usuarios int;
+  deudas   int;
 begin
 
-  select id into uid from auth.users where email = correo;
-  if uid is null then
-    raise exception 'No hay ningún usuario con el correo %. Revisa el correo y vuelve a correr.', correo;
+  select count(*) into usuarios from auth.users;
+
+  if correo <> '' then
+    select id into uid from auth.users where email = correo;
+    if uid is null then
+      raise exception 'No hay ningún usuario con el correo %. Corre: select email from auth.users;', correo;
+    end if;
+  elsif usuarios = 1 then
+    select id into uid from auth.users;
+  elsif usuarios = 0 then
+    raise exception 'No hay usuarios registrados. Entra una vez a la app antes de sembrar.';
+  else
+    raise exception 'Hay % usuarios. Pon tu correo en la variable `correo` de arriba. Corre: select email from auth.users;', usuarios;
   end if;
 
   -- ===========================================================================
@@ -178,7 +193,7 @@ begin
         cushion           = excluded.cushion,
         updated_at        = now();
 
-  raise notice 'Siembra lista para %.', correo;
+  raise notice 'Siembra lista.';
 end $$;
 
 
@@ -189,7 +204,16 @@ end $$;
 -- estar ahí —"Mantenimiento Moto", "Cooperativa", "Colchón"— es un dato viejo
 -- del modelo anterior y lo puedes borrar desde la app.
 -- =============================================================================
-with uid as (select id from auth.users where email = 'juancamiloz@solenium.co')
+/*
+ * La misma regla de arriba: si hay un solo usuario se toma ese; si pusiste un
+ * correo en la variable, escríbelo también aquí.
+ */
+with uid as (
+  select id from auth.users
+   where (select count(*) from auth.users) = 1
+      or email = ''            -- <-- si arriba pusiste un correo, ponlo aquí
+   limit 1
+)
 select 'personas' as que, name as detalle, null::numeric as valor
   from public.people where user_id = (select id from uid)
 union all
