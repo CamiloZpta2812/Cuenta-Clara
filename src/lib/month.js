@@ -292,6 +292,25 @@ export function monthSummary(estado, month) {
 }
 
 
+/* --------------------------------------------------------------- deuda -- */
+
+/*
+ * A cuál deuda le estás abonando de más.
+ *
+ * Sin un id explícito se ataca la más cara: mayor tasa, y a igual tasa la de
+ * mayor saldo. Antes esto era `debts[0]` — el orden en que Postgres devolviera
+ * las filas, o sea azar. Con una sola deuda daba igual; con nueve, el
+ * simulador habría estado hablando de una deuda cualquiera sin decirlo.
+ */
+export function targetDebt(estado, debtId) {
+  const debts = estado.debts || [];
+  if (debtId) return debts.find((d) => d.id === debtId) || null;
+  return [...debts].sort((a, b) => (
+    (num(b.interestRate) - num(a.interestRate))
+    || (num(b.currentBalance) - num(a.currentBalance))
+  ))[0] || null;
+}
+
 /* ------------------------------------------------------------ simulador -- */
 
 /*
@@ -304,9 +323,9 @@ export function monthSummary(estado, month) {
  * Los cambios son sumas o restas sobre las líneas del plan, no valores nuevos:
  * { colchon: -150000 } significa "bajo el colchón en 150.000".
  */
-export function simulatePlanChange(estado, cambios = {}, month) {
+export function simulatePlanChange(estado, cambios = {}, month, debtId) {
   const plan = monthPlan(estado, month);
-  const deuda = (estado.debts || [])[0];
+  const deuda = targetDebt(estado, debtId);
   if (!deuda) return null;
 
   const delta = Object.values(cambios).reduce((s, v) => s - num(v), 0);
@@ -328,6 +347,9 @@ export function simulatePlanChange(estado, cambios = {}, month) {
   });
 
   return {
+    /* Cuál deuda se está simulando: con más de una, no decirlo sería adivinanza. */
+    debtId: deuda.id,
+    debtName: deuda.name,
     extraBefore,
     extraAfter,
     before,

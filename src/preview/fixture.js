@@ -1,4 +1,5 @@
-import { monthSummary } from '../lib/month.js';
+import { monthSummary, targetDebt, simulatePlanChange } from '../lib/month.js';
+import { comparePlans, monthlyRateOf } from '../lib/amortization.js';
 import { activeInstallmentGroups, buildCardStatements, nextStatement } from '../lib/projections.js';
 
 /*
@@ -106,8 +107,21 @@ export function buildValue(overrides = {}) {
     .filter((c) => c.next);
   const groups = activeInstallmentGroups(estado.transactions);
 
+  const deuda = targetDebt(estado);
+  const extra = Math.max(0, monthSummary(estado, MES).plan.availableForExtra);
+
   return {
     ...estado,
+    debtOutlook: {
+      debt: deuda, extra,
+      ...comparePlans({
+        principal: deuda.currentBalance,
+        monthlyRate: monthlyRateOf(deuda),
+        minimumPayment: deuda.fixedPayment,
+        extra,
+      }),
+    },
+    simulatePlan: (cambios) => simulatePlanChange(estado, cambios, MES),
     selectedMonth: MES,
     setSelectedMonth: () => {},
     bucketInputs: {},

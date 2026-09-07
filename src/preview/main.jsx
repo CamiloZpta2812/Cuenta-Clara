@@ -6,12 +6,13 @@ import { buildValue } from './fixture.js';
 import Mes from '../views/Mes';
 import Cobros from '../views/Cobros';
 import Buckets from '../views/Buckets';
+import Deuda from '../views/Deuda';
 
 /*
  * Banco de pruebas de las pantallas. Se abre con `npm run dev` en /preview.html
  * y no entra en el build de produccion: vite solo empaqueta index.html.
  */
-const PANTALLAS = { Mes, Cobros, Buckets };
+const PANTALLAS = { Mes, Cobros, Buckets, Deuda };
 
 function Preview() {
   const [cual, setCual] = useState('Mes');

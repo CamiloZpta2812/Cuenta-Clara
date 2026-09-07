@@ -9,6 +9,7 @@ export default function Sidebar({ activeTab, onChangeTab }) {
     { id: 'movimientos', label: 'Movimientos', Icon: ArrowLeftRight },
     { id: 'gastosfijos', label: 'Gastos fijos', Icon: Repeat },
     { id: 'tarjetas', label: 'Tarjetas', Icon: Landmark },
+    { id: 'deuda', label: 'Deuda', Icon: CreditCard },
     { id: 'deudas', label: 'Deudas', Icon: CreditCard },
     { id: 'buckets', label: 'Ahorro y colchones', Icon: Shield },
     { id: 'ahorros', label: 'Ahorros', Icon: PiggyBank },

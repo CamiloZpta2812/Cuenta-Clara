@@ -12,7 +12,8 @@ import { userConfig } from '../lib/userConfig.js';
 import { uid } from '../lib/id.js';
 import { buildRecommendations, getStatus } from '../lib/insights.js';
 import { buildCardStatements, nextStatement, buildCommitments, activeInstallmentGroups } from '../lib/projections.js';
-import { monthSummary } from '../lib/month.js';
+import { monthSummary, targetDebt, simulatePlanChange } from '../lib/month.js';
+import { comparePlans, monthlyRateOf } from '../lib/amortization.js';
 
 /*
  * Todo el estado de la app vive aquí: lo que se persiste en Supabase, lo que se
@@ -871,8 +872,47 @@ export function FinanceProvider({ children }) {
     };
   }, [creditCards, transactions]);
 
+  /*
+   * La deuda que estás atacando, corrida con y sin el abono extra del plan.
+   *
+   * El número que motiva no es el saldo: es cuántos meses y cuántos intereses
+   * te ahorras por mandarle lo que te sobra. Sin comparar contra pagar solo la
+   * cuota, "abonar de más" es un acto de fe.
+   */
+  const debtOutlook = useMemo(() => {
+    const estado = snapshot();
+    const deuda = targetDebt(estado);
+    if (!deuda) return null;
+
+    const extra = Math.max(0, monthReport.plan.availableForExtra);
+    const principal = deuda.currentBalance != null
+      ? deuda.currentBalance
+      /* Sin saldo reportado por el banco, se deduce de lo abonado. */
+      : Math.max(0, (Number(deuda.totalAmount) || 0)
+        - (deuda.payments || []).reduce((a, p) => a + (Number(p.amount) || 0), 0));
+
+    return {
+      debt: deuda,
+      extra,
+      ...comparePlans({
+        principal,
+        monthlyRate: monthlyRateOf(deuda),
+        minimumPayment: Number(deuda.fixedPayment) || 0,
+        extra,
+      }),
+    };
+  }, [snapshot, monthReport]);
+
+  /* "¿Y si le bajo al colchón?" — lo que se muestra ANTES de mover un número. */
+  const simulate = useCallback(
+    (cambios) => simulatePlanChange(snapshot(), cambios, selectedMonth),
+    [snapshot, selectedMonth],
+  );
+
   const value = {
     activeTab,
+    debtOutlook,
+    simulatePlan: simulate,
     bucketForm,
     bucketInputs,
     cardOutlook,

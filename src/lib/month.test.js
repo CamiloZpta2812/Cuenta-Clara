@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   myShare, othersShare, monthCollections, monthPlan, monthActual,
-  monthCashOut, monthSummary, simulatePlanChange,
+  monthCashOut, monthSummary, simulatePlanChange, targetDebt,
 } from './month.js';
 
 /*
@@ -411,4 +411,48 @@ test('una fuente de ingreso inactiva no se cuenta en el plan', () => {
   };
   assert.equal(monthPlan(sinClub, MES).income, 3_400_000, 'solo el salario');
   assert.equal(monthPlan(estado, MES).income, 3_600_000, 'sin la marca, sigue contando');
+});
+
+/* ---------------------------------------------------------- cuál deuda -- */
+
+test('sin decir cuál, se ataca la deuda más cara y no la primera de la lista', () => {
+  const varias = {
+    ...estado,
+    debts: [
+      { id: 'barata', interestRate: 0.9, currentBalance: 20_000_000, fixedPayment: 300_000, payments: [] },
+      { id: 'cara',   interestRate: 2.4, currentBalance: 3_000_000,  fixedPayment: 200_000, payments: [] },
+      { id: 'media',  interestRate: 1.67, currentBalance: 14_000_000, fixedPayment: 446_413, payments: [] },
+    ],
+  };
+  assert.equal(targetDebt(varias).id, 'cara', 'la tasa manda, no el saldo ni el orden');
+  assert.equal(targetDebt(varias, 'media').id, 'media', 'y se puede decir explícitamente');
+});
+
+test('a igual tasa gana la más grande', () => {
+  const empate = {
+    ...estado,
+    debts: [
+      { id: 'chica', interestRate: 1.67, currentBalance: 2_000_000, fixedPayment: 100_000, payments: [] },
+      { id: 'grande', interestRate: 1.67, currentBalance: 9_000_000, fixedPayment: 300_000, payments: [] },
+    ],
+  };
+  assert.equal(targetDebt(empate).id, 'grande');
+});
+
+test('el simulador puede apuntar a una deuda concreta', () => {
+  const dos = {
+    ...estado,
+    debts: [
+      ...estado.debts,
+      { id: 'otra', interestRate: 3, currentBalance: 1_000_000, fixedPayment: 100_000, payments: [] },
+    ],
+  };
+  // Sin id agarraría la del 3%; con id se respeta la que se pide.
+  assert.equal(simulatePlanChange(dos, {}, MES).debtId, 'otra', 'la más cara');
+  assert.equal(simulatePlanChange(dos, {}, MES, 'd1').debtId, 'd1', 'la que se pidió');
+});
+
+test('sin deudas el simulador no inventa nada', () => {
+  assert.equal(targetDebt({ debts: [] }), null);
+  assert.equal(simulatePlanChange({ ...estado, debts: [] }, { cushion: -100_000 }, MES), null);
 });
