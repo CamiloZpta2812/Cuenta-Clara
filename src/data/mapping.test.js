@@ -179,7 +179,7 @@ const v2 = {
       ] },
     { id: 'b2', name: 'Cooperativa', kind: 'meta', liquid: false, monthlyAmount: 76000,
       targetAmount: null, targetDate: null, contributions: [] },
-    { id: 'b3', name: 'Colchón de gastos', kind: 'colchon', liquid: true, monthlyAmount: 65000,
+    { id: 'b3', name: 'Colchón gatos', kind: 'colchon', liquid: true, monthlyAmount: 65000,
       targetAmount: null, targetDate: null, contributions: [] },
   ],
   debts: [

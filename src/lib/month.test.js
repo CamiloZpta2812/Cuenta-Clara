@@ -36,14 +36,16 @@ const estado = {
     { id: 'f6', name: 'Motilada', totalAmount: 40_000, shares: [] },
     { id: 'f7', name: 'Aporte Casa', totalAmount: 300_000, shares: [] },
     { id: 'f8', name: 'Gimnasio', totalAmount: 103_400, shares: [] },
-    { id: 'f9', name: 'Mantenimiento Moto', totalAmount: 100_000, shares: [] },
     { id: 'f10', name: 'Gasolina', totalAmount: 160_000, shares: [] },
   ],
   buckets: [
     { id: 'b1', name: 'Ahorro personal 1', kind: 'meta', liquid: true, monthlyAmount: 50_000 },
     { id: 'b2', name: 'Ahorro personal 2', kind: 'meta', liquid: true, monthlyAmount: 300_000 },
     { id: 'b3', name: 'Cooperativa', kind: 'meta', liquid: false, monthlyAmount: 76_000 },
-    { id: 'b4', name: 'Colchón de gastos', kind: 'colchon', liquid: true, monthlyAmount: 65_000 },
+    // Los colchones no son ahorro con destino: son plata guardada para un gasto
+    // que llega sin avisar. Los gatos comen y se enferman; la moto se vara.
+    { id: 'b4', name: 'Colchón gatos', kind: 'colchon', liquid: true, monthlyAmount: 65_000 },
+    { id: 'b6', name: 'Colchón moto', kind: 'colchon', liquid: true, monthlyAmount: 100_000 },
     { id: 'b5', name: 'Colchón de seguridad', kind: 'colchon', liquid: true, monthlyAmount: 300_000 },
   ],
   debts: [
@@ -75,11 +77,14 @@ test('mi parte se calcula, no se guarda: nunca puede descuadrar', () => {
 });
 
 test('los gastos fijos de la hoja suman $936.000 de parte personal', () => {
-  // 936.000 es el total de la hoja, que incluía cooperativa (76.000) y
-  // colchón de gastos (65.000). Sin esos dos, los fijos "puros" son 795.000.
+  // 936.000 es el total de la hoja, que metía en "gastos fijos" tres cosas que
+  // no lo son: la cooperativa (76.000, que es ahorro), el colchón de los gatos
+  // (65.000) y el mantenimiento de la moto (100.000). Los dos últimos no son un
+  // gasto que llegue cada mes: son plata guardada para cuando llegue. Sin esos
+  // tres, los fijos "puros" son 695.000.
   const fijos = estado.fixedExpenses.reduce((s, g) => s + myShare(g), 0);
-  assert.equal(fijos, 795_000);
-  assert.equal(fijos + 76_000 + 65_000, 936_000, 'cuadra con el total de la hoja');
+  assert.equal(fijos, 695_000);
+  assert.equal(fijos + 76_000 + 65_000 + 100_000, 936_000, 'cuadra con el total de la hoja');
 });
 
 test('lo por cobrar son $28.550, repartidos entre 5 personas', () => {
@@ -104,12 +109,12 @@ test('marcar un cobro solo afecta ese mes y esa persona', () => {
 test('el plan reproduce exactamente el abono extra de $737.587', () => {
   const p = monthPlan(estado, MES);
   assert.equal(p.income, 3_600_000);
-  assert.equal(p.fixedExpenses, 795_000);
+  assert.equal(p.fixedExpenses, 695_000);
   assert.equal(p.debtPayment, 446_413);
   assert.equal(p.savings, 426_000, 'las tres metas, con cooperativa incluida');
   assert.equal(p.variable, 830_000);
-  assert.equal(p.grossSurplus, 1_102_587);
-  assert.equal(p.cushion, 365_000, 'los dos colchones');
+  assert.equal(p.grossSurplus, 1_202_587);
+  assert.equal(p.cushion, 465_000, 'gatos, moto y el de seguridad');
   assert.equal(p.availableForExtra, 737_587);
 });
 
@@ -331,11 +336,70 @@ test('un mes cerrado se juzga contra el plan que tenía, no contra el de hoy', (
   // Septiembre sigue vivo y se recalcula con los gastos actuales.
   const sept = monthPlan(cerrado, MES);
   assert.equal(sept.locked, false);
-  assert.equal(sept.fixedExpenses, 795_000);
+  assert.equal(sept.fixedExpenses, 695_000);
 });
 
 test('sin plan guardado, el gasto variable estimado es cero', () => {
   const p = monthPlan(estado, '2026-12');
   assert.equal(p.variable, 0, 'no se hereda el estimado de otro mes');
-  assert.equal(p.fixedExpenses, 795_000, 'lo demás sí se calcula igual');
+  assert.equal(p.fixedExpenses, 695_000, 'lo demás sí se calcula igual');
+});
+
+
+/* ------------------------------------------------------------ colchones -- */
+
+/*
+ * Un colchón no es un gasto: es plata que apartas para cuando llegue. La hoja
+ * los tenía dentro de "gastos fijos" y por eso no se distinguían.
+ */
+test('mover un gasto a colchón no cambia el abono extra, solo lo hace legible', () => {
+  const comoAntes = {
+    ...estado,
+    fixedExpenses: [...estado.fixedExpenses,
+      { id: 'f9', name: 'Mantenimiento Moto', totalAmount: 100_000, shares: [] }],
+    buckets: estado.buckets.filter((b) => b.id !== 'b6'),
+  };
+  assert.equal(monthPlan(comoAntes, MES).fixedExpenses, 795_000);
+  assert.equal(monthPlan(comoAntes, MES).cushion, 365_000);
+
+  const ahora = monthPlan(estado, MES);
+  assert.equal(ahora.fixedExpenses, 695_000, 'la moto salió de los fijos');
+  assert.equal(ahora.cushion, 465_000, 'y entró a los colchones');
+
+  assert.equal(ahora.availableForExtra, monthPlan(comoAntes, MES).availableForExtra,
+               'el abono extra no se mueve: la plata sigue saliendo igual');
+});
+
+test('aportar a un colchón no cuenta como haberse pasado de ahorro', () => {
+  const conColchones = {
+    ...estado,
+    buckets: estado.buckets.map((b) => {
+      if (b.id === 'b1') return { ...b, contributions: [{ id: 'c1', amount: 50_000, date: '2026-09-05' }] };
+      if (b.id === 'b4') return { ...b, contributions: [{ id: 'c2', amount: 65_000, date: '2026-09-05' }] };
+      if (b.id === 'b6') return { ...b, contributions: [{ id: 'c3', amount: 100_000, date: '2026-09-05' }] };
+      return b;
+    }),
+  };
+  const r = monthActual(conColchones, MES);
+  assert.equal(r.savings, 50_000, 'solo la meta');
+  assert.equal(r.cushion, 165_000, 'gatos y moto van aparte');
+
+  const desvios = monthSummary(conColchones, MES).deviations;
+  assert.equal(desvios.savings, 50_000 - 426_000, 'falta aportar a las otras metas');
+  assert.equal(desvios.cushion, 165_000 - 465_000, 'falta el colchón de seguridad');
+});
+
+test('sacar plata del colchón de la moto para un arreglo deja el aporte en cero', () => {
+  // Guardas 100.000 y en el mismo mes sale un arreglo de 100.000: el bucket
+  // queda igual que empezó, y eso es exactamente para lo que estaba.
+  const conArreglo = {
+    ...estado,
+    buckets: estado.buckets.map((b) => (b.id === 'b6'
+      ? { ...b, contributions: [
+          { id: 'c1', amount: 100_000, date: '2026-09-05' },
+          { id: 'c2', amount: -100_000, date: '2026-09-18' },
+        ] }
+      : b)),
+  };
+  assert.equal(monthActual(conArreglo, MES).cushion, 0);
 });

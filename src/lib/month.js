@@ -144,7 +144,10 @@ function frozenPlan(p) {
  * además sueltos en el estado sería el mismo dato dos veces.
  */
 const debtPayments = (estado) => (estado.debts || []).flatMap((d) => d.payments || []);
-const bucketContributions = (estado) => (estado.buckets || []).flatMap((b) => b.contributions || []);
+
+/* Cada aporte se lleva el tipo de su bucket: el plan separa metas de colchones. */
+const bucketContributions = (estado) => (estado.buckets || [])
+  .flatMap((b) => (b.contributions || []).map((c) => ({ ...c, kind: b.kind })));
 
 /*
  * Clasifica los movimientos del mes en las mismas líneas del plan.
@@ -162,10 +165,21 @@ export function monthActual(estado, month) {
 
   const fixedExpenses = sum(gastos.filter((t) => t.fixedExpenseId), (t) => t.amount);
   const debtPayment = sum(debtPayments(estado).filter((p) => monthKeyFromDate(p.date) === month), (p) => p.amount);
-  const savings = sum(bucketContributions(estado).filter((a) => monthKeyFromDate(a.date) === month), (a) => a.amount);
+
+  /*
+   * Un aporte a un colchón no es lo mismo que uno a una meta, y meterlos en la
+   * misma línea haría que guardar para los gatos apareciera como si te hubieras
+   * pasado de ahorro. El plan los separa; lo real tiene que separarlos igual o
+   * el desvío compara peras con manzanas.
+   */
+  const aportes = bucketContributions(estado).filter((a) => monthKeyFromDate(a.date) === month);
+  const savings = sum(aportes.filter((a) => a.kind !== 'colchon'), (a) => a.amount);
+  const cushion = sum(aportes.filter((a) => a.kind === 'colchon'), (a) => a.amount);
 
   // Variable es todo lo demás: ni fijo, ni abono a deuda, ni aporte a ahorro.
   const variable = sum(gastos.filter((t) => !t.fixedExpenseId && !t.debtId && !t.bucketId), (t) => t.amount);
+
+  const grossSurplus = income - fixedExpenses - debtPayment - savings - variable;
 
   return {
     income,
@@ -173,7 +187,9 @@ export function monthActual(estado, month) {
     debtPayment,
     savings,
     variable,
-    grossSurplus: income - fixedExpenses - debtPayment - savings - variable,
+    grossSurplus,
+    cushion,
+    availableForExtra: grossSurplus - cushion,
     transactions: transactions.length,
   };
 }
@@ -255,7 +271,7 @@ export function monthSummary(estado, month) {
   const salidas = monthCashOut(estado, month);
 
   const deviations = {};
-  ['income', 'fixedExpenses', 'debtPayment', 'savings', 'variable'].forEach((k) => {
+  ['income', 'fixedExpenses', 'debtPayment', 'savings', 'variable', 'cushion'].forEach((k) => {
     deviations[k] = real[k] - plan[k];
   });
 
