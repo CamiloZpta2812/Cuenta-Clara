@@ -40,22 +40,23 @@ const estado = {
     { id: 'f10', name: 'Gasolina', totalAmount: 160_000, shares: [] },
   ],
   buckets: [
-    { id: 'b1', name: 'Ahorro personal 1', type: 'meta', liquid: true, monthlyAmount: 50_000 },
-    { id: 'b2', name: 'Ahorro personal 2', type: 'meta', liquid: true, monthlyAmount: 300_000 },
-    { id: 'b3', name: 'Cooperativa', type: 'meta', liquid: false, monthlyAmount: 76_000 },
-    { id: 'b4', name: 'Colchón de gastos', type: 'colchon', liquid: true, monthlyAmount: 65_000 },
-    { id: 'b5', name: 'Colchón de seguridad', type: 'colchon', liquid: true, monthlyAmount: 300_000 },
+    { id: 'b1', name: 'Ahorro personal 1', kind: 'meta', liquid: true, monthlyAmount: 50_000 },
+    { id: 'b2', name: 'Ahorro personal 2', kind: 'meta', liquid: true, monthlyAmount: 300_000 },
+    { id: 'b3', name: 'Cooperativa', kind: 'meta', liquid: false, monthlyAmount: 76_000 },
+    { id: 'b4', name: 'Colchón de gastos', kind: 'colchon', liquid: true, monthlyAmount: 65_000 },
+    { id: 'b5', name: 'Colchón de seguridad', kind: 'colchon', liquid: true, monthlyAmount: 300_000 },
   ],
   debts: [
+    // interestRate es el porcentaje MENSUAL, como lo reporta el banco.
     { id: 'd1', name: 'Libre inversión Bancolombia', currentBalance: 14_000_000,
-      monthlyRate: 0.0167, fixedPayment: 446_413, mode: 'reducir-plazo' },
+      interestRate: 1.67, fixedPayment: 446_413, payoffMode: 'reducir-plazo', payments: [] },
   ],
-  plan: { variableEstimate: 830_000 },
+  monthlyPlans: [{ month: '2026-09', variableEstimate: 830_000 }],
   transactions: [],
-  debtPayments: [],
-  bucketContributions: [],
   collections: [],
 };
+
+const MES = '2026-09';
 
 /* --------------------------------------------------- reparto de gastos --- */
 
@@ -101,7 +102,7 @@ test('marcar un cobro solo afecta ese mes y esa persona', () => {
 /* --------------------------------------------------------------- plan --- */
 
 test('el plan reproduce exactamente el abono extra de $737.587', () => {
-  const p = monthPlan(estado);
+  const p = monthPlan(estado, MES);
   assert.equal(p.income, 3_600_000);
   assert.equal(p.fixedExpenses, 795_000);
   assert.equal(p.debtPayment, 446_413);
@@ -115,23 +116,23 @@ test('el plan reproduce exactamente el abono extra de $737.587', () => {
 test('reorganizar las categorías no cambia el resultado final', () => {
   // La hoja metía cooperativa y colchón de gastos dentro de "gastos fijos".
   // Este modelo los saca a buckets. El abono extra tiene que dar igual.
-  const p = monthPlan(estado);
+  const p = monthPlan(estado, MES);
   const comoLaHoja = 3_600_000 - 936_000 - 446_413 - 350_000 - 830_000 - 300_000;
   assert.equal(p.availableForExtra, comoLaHoja);
   assert.equal(comoLaHoja, 737_587);
 });
 
 test('el pago total mensual a la deuda son $1.184.000', () => {
-  const p = monthPlan(estado);
+  const p = monthPlan(estado, MES);
   assert.equal(p.debtPayment + p.availableForExtra, 1_184_000);
 });
 
 test('el ahorro no líquido cuenta como ahorro pero se puede distinguir', () => {
-  const noLiquido = estado.buckets.filter((b) => b.type === 'meta' && !b.liquid);
+  const noLiquido = estado.buckets.filter((b) => b.kind === 'meta' && !b.liquid);
   assert.equal(noLiquido.length, 1);
   assert.equal(noLiquido[0].monthlyAmount, 76_000);
   const liquid = estado.buckets
-    .filter((b) => b.type === 'meta' && b.liquid)
+    .filter((b) => b.kind === 'meta' && b.liquid)
     .reduce((s, b) => s + b.monthlyAmount, 0);
   assert.equal(liquid, 350_000, 'lo que sí podrías tocar si hiciera falta');
 });
@@ -149,8 +150,13 @@ const conMovimientos = {
     { id: 't6', type: 'gasto', amount: 180_000, category: 'entretenimiento', date: '2026-09-20',
       paymentMethod: 'credito', cardId: 'c1', cashOutDate: '2026-11-05' },
   ],
-  debtPayments: [{ id: 'pd1', deudaId: 'd1', amount: 1_184_000, date: '2026-09-10' }],
-  bucketContributions: [{ id: 'ap1', bucketId: 'b1', amount: 50_000, date: '2026-09-05' }],
+  // Los abonos y aportes viven dentro de su deuda y su bucket, no sueltos.
+  debts: estado.debts.map((d) => ({
+    ...d, payments: [{ id: 'pd1', amount: 1_184_000, date: '2026-09-10' }],
+  })),
+  buckets: estado.buckets.map((b) => (b.id === 'b1'
+    ? { ...b, contributions: [{ id: 'ap1', amount: 50_000, date: '2026-09-05' }] }
+    : b)),
 };
 
 test('lo real se clasifica en las mismas líneas del plan', () => {
@@ -263,7 +269,7 @@ test('la app arranca sin datos sin romperse', () => {
 /* ------------------------------------------------------------ simulador -- */
 
 test('bajar el colchón acorta la deuda, y dice en cuánto', () => {
-  const r = simulatePlanChange(estado, { cushion: -150_000 });
+  const r = simulatePlanChange(estado, { cushion: -150_000 }, MES);
   assert.equal(r.extraBefore, 737_587);
   assert.equal(r.extraAfter, 887_587);
   assert.equal(r.before.months, 14);
@@ -273,14 +279,14 @@ test('bajar el colchón acorta la deuda, y dice en cuánto', () => {
 });
 
 test('subir el colchón alarga la deuda, y también lo dice', () => {
-  const r = simulatePlanChange(estado, { cushion: 100_000 });
+  const r = simulatePlanChange(estado, { cushion: 100_000 }, MES);
   assert.equal(r.extraAfter, 637_587);
   assert.equal(r.monthsDifference, -1, 'un mes más');
   assert.ok(r.interestDifference < 0, 'y cuesta más intereses');
 });
 
 test('varios cambios a la vez se acumulan', () => {
-  const r = simulatePlanChange(estado, { cushion: -100_000, variable: -50_000 });
+  const r = simulatePlanChange(estado, { cushion: -100_000, variable: -50_000 }, MES);
   assert.equal(r.extraAfter, 737_587 + 150_000);
 });
 
@@ -288,7 +294,7 @@ test('un gasto que se come el excedente deja el plan en déficit', () => {
   // Si los fijos suben 1,5 millones, el abono extra queda en negativo: no
   // alcanza ni para la cuota mínima. La app tiene que decirlo, no fingir
   // que simplemente "no abonas extra".
-  const r = simulatePlanChange(estado, { fixedExpenses: 1_500_000 });
+  const r = simulatePlanChange(estado, { fixedExpenses: 1_500_000 }, MES);
   assert.equal(r.deficit, true);
   assert.ok(r.extraAfter < 0, `abono quedó en ${r.abonoDespues}`);
   assert.equal(r.becomesUnpayable, true, 'con menos que la cuota, la deuda no se acaba');
@@ -296,10 +302,40 @@ test('un gasto que se come el excedente deja el plan en déficit', () => {
 });
 
 test('un plan holgado no se marca en déficit', () => {
-  const r = simulatePlanChange(estado, { cushion: -150_000 });
+  const r = simulatePlanChange(estado, { cushion: -150_000 }, MES);
   assert.equal(r.deficit, false);
 });
 
 test('sin deudas no hay nada que simular', () => {
-  assert.equal(simulatePlanChange({ ...estado, debts: [] }, { cushion: -100_000 }), null);
+  assert.equal(simulatePlanChange({ ...estado, debts: [] }, { cushion: -100_000 }, MES), null);
+});
+
+/* ---------------------------------------------------------- mes cerrado -- */
+
+test('un mes cerrado se juzga contra el plan que tenía, no contra el de hoy', () => {
+  const cerrado = {
+    ...estado,
+    monthlyPlans: [
+      ...estado.monthlyPlans,
+      { month: '2026-08', expectedIncome: 3_600_000, fixedExpenses: 700_000,
+        debtPayment: 446_413, savings: 426_000, variableEstimate: 900_000,
+        cushion: 365_000, locked: true },
+    ],
+  };
+  const agosto = monthPlan(cerrado, '2026-08');
+  assert.equal(agosto.locked, true);
+  assert.equal(agosto.fixedExpenses, 700_000, 'los fijos de agosto, no los de hoy');
+  assert.equal(agosto.variable, 900_000);
+  assert.equal(agosto.availableForExtra, 762_587);
+
+  // Septiembre sigue vivo y se recalcula con los gastos actuales.
+  const sept = monthPlan(cerrado, MES);
+  assert.equal(sept.locked, false);
+  assert.equal(sept.fixedExpenses, 795_000);
+});
+
+test('sin plan guardado, el gasto variable estimado es cero', () => {
+  const p = monthPlan(estado, '2026-12');
+  assert.equal(p.variable, 0, 'no se hereda el estimado de otro mes');
+  assert.equal(p.fixedExpenses, 795_000, 'lo demás sí se calcula igual');
 });

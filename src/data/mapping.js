@@ -7,29 +7,61 @@
  * Ver src/data/mapping.test.js.
  */
 
+import { monthKeyFromDate } from '../lib/dates.js';
+
+/*
+ * Orden de escritura: cada tabla va después de aquellas a las que apunta con
+ * una llave foránea. Para borrar hay que recorrerlo al revés.
+ *
+ * `transactions` va de última porque referencia gastos fijos, deudas, abonos,
+ * buckets y fuentes de ingreso.
+ */
 export const TABLES = [
   'user_settings',
   'custom_categories',
   'credit_cards',
+  'people',
+  'income_sources',
   'fixed_expenses',
+  'fixed_expense_shares',
+  'collections',
   'debts',
   'debt_payments',
   'savings_goals',
   'goal_contributions',
+  'buckets',
+  'bucket_contributions',
+  'monthly_plans',
   'transactions',
 ];
 
-/*
- * Orden de escritura: las tablas con llaves foráneas van después de aquellas a
- * las que apuntan. Para borrar hay que ir al revés.
- */
 export const WRITE_ORDER = TABLES;
+
+/*
+ * Con qué columna se identifica una fila dentro de su tabla. Casi todas usan
+ * `id`; `monthly_plans` no tiene id propio porque solo puede haber un plan por
+ * mes, así que el mes ES la llave. `user_settings` es la fila única del usuario.
+ */
+const KEY_BY_TABLE = { monthly_plans: 'month', user_settings: 'user_id' };
+
+export const SINGLETON_TABLE = 'user_settings';
+
+export function keyColumn(table) {
+  return KEY_BY_TABLE[table] || 'id';
+}
 
 const num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
 const int = (v) => (v === '' || v === null || v === undefined ? null : parseInt(v, 10));
 const str = (v) => (v === null || v === undefined ? null : String(v));
 const bool = (v) => !!v;
 const date = (v) => (v ? String(v).slice(0, 10) : null);
+
+/*
+ * A qué mes del plan cuenta un registro. Casi siempre el de su fecha, pero si
+ * la quincena del 30 cae domingo y te pagan el 2, ese ingreso sigue contando
+ * en el mes anterior — por eso el mes se guarda y no solo se deduce.
+ */
+const monthOf = (r) => r.month || monthKeyFromDate(r.date) || null;
 
 /* ============================ estado -> filas ============================ */
 
@@ -56,6 +88,12 @@ export function transactionToRow(t) {
     fixed_expense_id: str(t.fixedExpenseId) || null,
     debt_id: str(t.debtId) || null,
     debt_payment_id: str(t.debtPaymentId) || null,
+    bucket_id: str(t.bucketId) || null,
+    income_source_id: str(t.incomeSourceId) || null,
+    month: monthOf(t),
+    // Cuándo sale la plata de verdad: con débito es el mismo día, con tarjeta
+    // de crédito es cuando pagas la factura.
+    cash_out_date: date(t.cashOutDate) || date(t.date),
   };
 }
 
@@ -75,7 +113,14 @@ export function fixedExpenseToRow(f) {
     id: f.id,
     name: f.name,
     category: f.category,
+    /*
+     * `amount` es la columna vieja: lo que pagabas antes de que existiera el
+     * reparto. Sigue ahí porque las pantallas actuales todavía la leen, pero la
+     * verdad de cuánto te toca a ti es myShare() en lib/month.js — total menos
+     * lo repartido. Se va cuando las pantallas migren.
+     */
     amount: num(f.amount),
+    total_amount: num(f.totalAmount) !== null ? num(f.totalAmount) : num(f.amount),
     due_day: int(f.dueDay),
     payment_method: str(f.paymentMethod),
     card_id: str(f.cardId) || null,
@@ -93,6 +138,11 @@ export function debtToRow(d) {
     start_date: date(d.startDate),
     currency: d.currency === 'USD' ? 'USD' : 'COP',
     exchange_rate: num(d.exchangeRate),
+    /* La cuota pactada con el banco, que no cambia al abonar de más. */
+    fixed_payment: num(d.fixedPayment) !== null ? num(d.fixedPayment) : num(d.monthlyPayment) || 0,
+    payoff_mode: d.payoffMode === 'reducir-cuota' ? 'reducir-cuota' : 'reducir-plazo',
+    /* El saldo que reporta el banco. Si es null, se deduce de los abonos. */
+    current_balance: num(d.currentBalance),
   };
 }
 
@@ -102,6 +152,63 @@ export function goalToRow(g) {
     name: g.name,
     target_amount: num(g.targetAmount),
     target_date: date(g.targetDate) || null,
+  };
+}
+
+export function personToRow(p) {
+  return {
+    id: p.id,
+    name: p.name,
+    /* Reservado para cuando dos cuentas se vinculen. Hoy siempre null. */
+    linked_user_id: p.linkedUserId || null,
+  };
+}
+
+export function incomeSourceToRow(i) {
+  return {
+    id: i.id,
+    name: i.name,
+    /* Lo esperado es el PLAN, no la verdad: lo que entró son movimientos. */
+    expected: num(i.expected) || 0,
+    variable: bool(i.variable),
+    active: i.active === undefined ? true : bool(i.active),
+  };
+}
+
+export function collectionToRow(c) {
+  return {
+    id: c.id,
+    month: c.month,
+    share_id: c.shareId,
+    collected_at: date(c.collectedAt),
+  };
+}
+
+export function bucketToRow(b) {
+  return {
+    id: b.id,
+    name: b.name,
+    /* 'meta' tiene un objetivo al que llegar; 'colchon' es margen sin destino. */
+    kind: b.kind === 'colchon' ? 'colchon' : 'meta',
+    /* false = está ahí pero no lo puedes tocar (aporte a cooperativa). */
+    liquid: b.liquid === undefined ? true : bool(b.liquid),
+    monthly_amount: num(b.monthlyAmount) || 0,
+    target_amount: num(b.targetAmount),
+    target_date: date(b.targetDate),
+  };
+}
+
+export function monthlyPlanToRow(p) {
+  return {
+    month: p.month,
+    expected_income: num(p.expectedIncome) || 0,
+    fixed_expenses: num(p.fixedExpenses) || 0,
+    debt_payment: num(p.debtPayment) || 0,
+    savings: num(p.savings) || 0,
+    variable_estimate: num(p.variableEstimate) || 0,
+    cushion: num(p.cushion) || 0,
+    /* Un mes cerrado ya no se recalcula: se juzga contra el plan que tenía. */
+    locked: bool(p.locked),
   };
 }
 
@@ -118,15 +225,25 @@ export function customCategoryToRow(c) {
 export function settingsToRow(state) {
   return {
     category_labels: state.categoryLabels || {},
+    setup_completed_at: state.setupCompletedAt || null,
   };
 }
 
-/* Aplana las deudas y metas: los abonos y aportes viven en su propia tabla. */
+/*
+ * Aplana los hijos que en memoria viven dentro de su padre: los abonos dentro
+ * de la deuda, los aportes dentro del bucket, el reparto dentro del gasto fijo.
+ * En Postgres cada uno es su propia tabla.
+ */
 export function stateToRows(state) {
   const debtPayments = [];
   (state.debts || []).forEach((d) => {
     (d.payments || []).forEach((p) => {
-      debtPayments.push({ id: p.id, debt_id: d.id, amount: num(p.amount), date: date(p.date) });
+      debtPayments.push({
+        id: p.id, debt_id: d.id, amount: num(p.amount), date: date(p.date),
+        month: monthOf(p),
+        /* El saldo que quedó según el banco, para cuadrar contra el modelo. */
+        balance_after: num(p.balanceAfter),
+      });
     });
   });
 
@@ -137,15 +254,40 @@ export function stateToRows(state) {
     });
   });
 
+  const shares = [];
+  (state.fixedExpenses || []).forEach((f) => {
+    (f.shares || []).forEach((r) => {
+      shares.push({
+        id: r.id, fixed_expense_id: f.id, person_id: r.personId, amount: num(r.amount) || 0,
+      });
+    });
+  });
+
+  const bucketContributions = [];
+  (state.buckets || []).forEach((b) => {
+    (b.contributions || []).forEach((c) => {
+      bucketContributions.push({
+        id: c.id, bucket_id: b.id, amount: num(c.amount), date: date(c.date), month: monthOf(c),
+      });
+    });
+  });
+
   return {
     user_settings: [settingsToRow(state)],
     custom_categories: (state.customCategories || []).map(customCategoryToRow),
     credit_cards: (state.creditCards || []).map(cardToRow),
+    people: (state.people || []).map(personToRow),
+    income_sources: (state.incomeSources || []).map(incomeSourceToRow),
     fixed_expenses: (state.fixedExpenses || []).map(fixedExpenseToRow),
+    fixed_expense_shares: shares,
+    collections: (state.collections || []).map(collectionToRow),
     debts: (state.debts || []).map(debtToRow),
     debt_payments: debtPayments,
     savings_goals: (state.savingsGoals || []).map(goalToRow),
     goal_contributions: goalContributions,
+    buckets: (state.buckets || []).map(bucketToRow),
+    bucket_contributions: bucketContributions,
+    monthly_plans: (state.monthlyPlans || []).map(monthlyPlanToRow),
     transactions: (state.transactions || []).map(transactionToRow),
   };
 }
@@ -175,23 +317,39 @@ export function rowToTransaction(r) {
     fixedExpenseId: r.fixed_expense_id,
     debtId: r.debt_id,
     debtPaymentId: r.debt_payment_id,
+    bucketId: r.bucket_id || null,
+    incomeSourceId: r.income_source_id || null,
+    month: r.month || monthKeyFromDate(r.date) || null,
+    cashOutDate: date(r.cash_out_date) || date(r.date),
   };
 }
 
 export function rowsToState(rows) {
   const settings = (rows.user_settings || [])[0] || {};
-  const paymentsByDebt = {};
-  (rows.debt_payments || []).forEach((p) => {
-    (paymentsByDebt[p.debt_id] = paymentsByDebt[p.debt_id] || []).push({
-      id: p.id, amount: num(p.amount), date: date(p.date),
+
+  const groupBy = (list, field, make) => {
+    const out = {};
+    (list || []).forEach((r) => {
+      (out[r[field]] = out[r[field]] || []).push(make(r));
     });
-  });
-  const contributionsByGoal = {};
-  (rows.goal_contributions || []).forEach((c) => {
-    (contributionsByGoal[c.goal_id] = contributionsByGoal[c.goal_id] || []).push({
-      id: c.id, amount: num(c.amount), date: date(c.date),
-    });
-  });
+    return out;
+  };
+
+  const paymentsByDebt = groupBy(rows.debt_payments, 'debt_id', (p) => ({
+    id: p.id, amount: num(p.amount), date: date(p.date),
+    month: p.month || monthKeyFromDate(p.date) || null,
+    balanceAfter: num(p.balance_after),
+  }));
+  const contributionsByGoal = groupBy(rows.goal_contributions, 'goal_id', (c) => ({
+    id: c.id, amount: num(c.amount), date: date(c.date),
+  }));
+  const sharesByExpense = groupBy(rows.fixed_expense_shares, 'fixed_expense_id', (r) => ({
+    id: r.id, personId: r.person_id, amount: num(r.amount) || 0,
+  }));
+  const contributionsByBucket = groupBy(rows.bucket_contributions, 'bucket_id', (c) => ({
+    id: c.id, amount: num(c.amount), date: date(c.date),
+    month: c.month || monthKeyFromDate(c.date) || null,
+  }));
 
   return {
     transactions: (rows.transactions || []).map(rowToTransaction),
@@ -200,15 +358,35 @@ export function rowsToState(rows) {
       currency: c.currency === 'USD' ? 'USD' : 'COP',
       cutDay: int(c.cut_day), paymentDay: int(c.payment_day),
     })),
+    people: (rows.people || []).map((p) => ({
+      id: p.id, name: p.name, linkedUserId: p.linked_user_id || null,
+    })),
+    incomeSources: (rows.income_sources || []).map((i) => ({
+      id: i.id, name: i.name, expected: num(i.expected) || 0,
+      variable: bool(i.variable), active: i.active === undefined ? true : bool(i.active),
+    })),
     fixedExpenses: (rows.fixed_expenses || []).map((f) => ({
       id: f.id, name: f.name, category: f.category, amount: num(f.amount),
+      totalAmount: num(f.total_amount) !== null ? num(f.total_amount) : num(f.amount),
       dueDay: int(f.due_day), paymentMethod: f.payment_method, cardId: f.card_id,
+      shares: sharesByExpense[f.id] || [],
+    })),
+    /*
+     * Los cobros van sueltos y no dentro del gasto fijo: solo existen los que
+     * YA se cobraron. Lo pendiente se deduce del reparto, así no hay que
+     * generar cinco filas cada mes ni salir a limpiarlas si algo cambia.
+     */
+    collections: (rows.collections || []).map((c) => ({
+      id: c.id, month: c.month, shareId: c.share_id, collectedAt: date(c.collected_at),
     })),
     debts: (rows.debts || []).map((d) => ({
       id: d.id, name: d.name, totalAmount: num(d.total_amount),
       interestRate: num(d.interest_rate) || 0, monthlyPayment: num(d.monthly_payment) || 0,
       dueDay: int(d.due_day), startDate: date(d.start_date),
       currency: d.currency === 'USD' ? 'USD' : 'COP', exchangeRate: num(d.exchange_rate),
+      fixedPayment: num(d.fixed_payment) !== null ? num(d.fixed_payment) : num(d.monthly_payment) || 0,
+      payoffMode: d.payoff_mode === 'reducir-cuota' ? 'reducir-cuota' : 'reducir-plazo',
+      currentBalance: num(d.current_balance),
       payments: paymentsByDebt[d.id] || [],
     })),
     savingsGoals: (rows.savings_goals || []).map((g) => ({
@@ -216,10 +394,29 @@ export function rowsToState(rows) {
       targetDate: date(g.target_date) || '',
       contributions: contributionsByGoal[g.id] || [],
     })),
+    buckets: (rows.buckets || []).map((b) => ({
+      id: b.id, name: b.name,
+      kind: b.kind === 'colchon' ? 'colchon' : 'meta',
+      liquid: b.liquid === undefined ? true : bool(b.liquid),
+      monthlyAmount: num(b.monthly_amount) || 0,
+      targetAmount: num(b.target_amount), targetDate: date(b.target_date),
+      contributions: contributionsByBucket[b.id] || [],
+    })),
+    monthlyPlans: (rows.monthly_plans || []).map((p) => ({
+      month: p.month,
+      expectedIncome: num(p.expected_income) || 0,
+      fixedExpenses: num(p.fixed_expenses) || 0,
+      debtPayment: num(p.debt_payment) || 0,
+      savings: num(p.savings) || 0,
+      variableEstimate: num(p.variable_estimate) || 0,
+      cushion: num(p.cushion) || 0,
+      locked: bool(p.locked),
+    })),
     customCategories: (rows.custom_categories || []).map((c) => ({
       id: c.id, type: c.type, label: c.label, iconKey: c.icon_key, color: c.color,
     })),
     categoryLabels: settings.category_labels || {},
+    setupCompletedAt: settings.setup_completed_at || null,
   };
 }
 

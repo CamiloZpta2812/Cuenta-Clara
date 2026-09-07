@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { COLOR_CHOICES } from '../lib/constants.js';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, ALL_CATEGORIES, ICON_CHOICES, getCategory } from '../lib/categories.js';
 import { todayStr, daysInMonth, monthKeyFromDate, currentMonthKey, monthLabel, computeChargeDate, addMonths } from '../lib/dates.js';
@@ -47,6 +47,18 @@ export function FinanceProvider({ children }) {
   const [fixedExpenses, setFixedExpenses] = useState([]);
   const [categoryLabels, setCategoryLabelsState] = useState({});
   const [customCategories, setCustomCategoriesState] = useState([]);
+
+  /*
+   * Esquema v2: plan mensual, gastos compartidos y buckets. Las pantallas que
+   * los editan todavía no existen, pero el estado tiene que cargarlos igual —
+   * si no, el primer guardado los vería ausentes y los borraría de Supabase.
+   */
+  const [people, setPeople] = useState([]);
+  const [incomeSources, setIncomeSources] = useState([]);
+  const [collections, setCollections] = useState([]);
+  const [buckets, setBuckets] = useState([]);
+  const [monthlyPlans, setMonthlyPlans] = useState([]);
+  const [setupCompletedAt, setSetupCompletedAt] = useState(null);
 
   /*
    * Estos setters dejan userConfig sincronizado ANTES de pedir el re-render,
@@ -100,6 +112,20 @@ export function FinanceProvider({ children }) {
   const [newCatIngreso, setNewCatIngreso] = useState({ label: '', iconKey: ICON_CHOICES[0].key, color: COLOR_CHOICES[0] });
 
   /*
+   * La foto completa del estado, en un solo lugar. Antes esta lista estaba
+   * escrita tres veces —guardado, reintento y export— y agregar una tabla
+   * significaba acordarse de las tres: la que se olvidara se guardaría vacía y
+   * borraría esos datos en el servidor.
+   */
+  const snapshot = useCallback(() => ({
+    transactions, debts, savingsGoals, creditCards, fixedExpenses,
+    customCategories, categoryLabels,
+    people, incomeSources, collections, buckets, monthlyPlans, setupCompletedAt,
+  }), [transactions, debts, savingsGoals, creditCards, fixedExpenses,
+       customCategories, categoryLabels,
+       people, incomeSources, collections, buckets, monthlyPlans, setupCompletedAt]);
+
+  /*
    * persistedRef guarda la última foto que sabemos que está en la base. El
    * guardado compara contra ella, así que si una escritura falla el cambio
    * queda pendiente y se reintenta junto con el siguiente, sin perderse.
@@ -124,6 +150,12 @@ export function FinanceProvider({ children }) {
         setFixedExpenses(state.fixedExpenses || []);
         setCategoryLabels(state.categoryLabels || {});
         setCustomCategories(state.customCategories || []);
+        setPeople(state.people || []);
+        setIncomeSources(state.incomeSources || []);
+        setCollections(state.collections || []);
+        setBuckets((state.buckets || []).map((b) => ({ ...b, contributions: b.contributions || [] })));
+        setMonthlyPlans(state.monthlyPlans || []);
+        setSetupCompletedAt(state.setupCompletedAt || null);
         setSelectedMonth(monthKeyFromDate(todayStr()));
       }
 
@@ -170,8 +202,7 @@ export function FinanceProvider({ children }) {
   /* ---------- Guardado automático ---------- */
   useEffect(() => {
     if (loading || loadError) return undefined;
-    const next = { transactions, debts, savingsGoals, creditCards, fixedExpenses,
-                   customCategories, categoryLabels };
+    const next = snapshot();
     const prev = persistedRef.current;
     if (!prev) { persistedRef.current = next; return undefined; }
 
@@ -202,7 +233,9 @@ export function FinanceProvider({ children }) {
       }
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [transactions, debts, savingsGoals, creditCards, categoryLabels, customCategories, fixedExpenses, loading, loadError]);
+    // snapshot cambia cuando cambia cualquier parte del estado, así que agregar
+    // una tabla nueva arriba no obliga a acordarse de esta lista.
+  }, [snapshot, loading, loadError]);
 
   /* ---------- Conexión ---------- */
   /*
@@ -212,8 +245,7 @@ export function FinanceProvider({ children }) {
   async function reintentarPendientes() {
     const prev = persistedRef.current;
     if (!prev) return;
-    const next = { transactions, debts, savingsGoals, creditCards, fixedExpenses,
-                   customCategories, categoryLabels };
+    const next = snapshot();
     const diff = diffState(prev, next);
     if (isEmptyDiff(diff)) { setOffline(false); setPendingChanges(false); return; }
     try {
@@ -725,8 +757,7 @@ export function FinanceProvider({ children }) {
     try {
       // import() dinámico: ExcelJS solo se descarga cuando de verdad se usa.
       const { exportToExcel } = await import('../lib/exportExcel.js');
-      await exportToExcel({ transactions, debts, savingsGoals, creditCards, fixedExpenses,
-                            customCategories, categoryLabels });
+      await exportToExcel(snapshot());
       setExporting('');
     } catch (err) {
       setExporting(err.message || 'No se pudo generar el archivo.');
@@ -751,8 +782,10 @@ export function FinanceProvider({ children }) {
     availableMonths,
     cardForm,
     cardLabel,
+    buckets,
     cashBalance,
     categoryLabels,
+    collections,
     configTab,
     contributionInputs,
     creditCards,
@@ -770,6 +803,9 @@ export function FinanceProvider({ children }) {
     fixedExpenses,
     fixedForm,
     getInstallmentGroup,
+    incomeSources,
+    monthlyPlans,
+    people,
     goalForm,
     handleAddCard,
     handleAddCustomCategory,

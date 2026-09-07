@@ -1,6 +1,6 @@
 import { supabase } from '../supabaseClient.js';
 import { STORAGE_KEY } from '../lib/constants.js';
-import { TABLES, stateToRows, rowsToState } from './mapping.js';
+import { TABLES, SINGLETON_TABLE, stateToRows, rowsToState } from './mapping.js';
 import { planWrites } from './sync.js';
 
 /*
@@ -50,7 +50,7 @@ export async function fetchState() {
 }
 
 export function hasAnyRows(rows) {
-  return TABLES.some((t) => t !== 'user_settings' && (rows[t] || []).length > 0);
+  return TABLES.some((t) => t !== SINGLETON_TABLE && (rows[t] || []).length > 0);
 }
 
 /* ---------------------------------------------------------------- escritura */
@@ -60,7 +60,7 @@ export async function applyDiff(diff) {
   for (const step of planWrites(diff, userId)) {
     if (step.op === 'delete') {
       const { error } = await supabase.from(step.table).delete()
-        .eq('user_id', step.userId).in('id', step.ids);
+        .eq('user_id', step.userId).in(step.keyColumn, step.ids);
       if (error) throw new Error(`Al borrar en ${step.table}: ${error.message}`);
     } else {
       const { error } = await supabase.from(step.table)

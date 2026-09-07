@@ -24,6 +24,16 @@
 const MAX_MESES = 1200; // 100 años: tope de seguridad, no un límite real
 
 /*
+ * La deuda guarda UNA sola cifra de tasa: `interestRate`, el porcentaje mensual
+ * (1,67 = 1,67%), que es como la reporta el banco y como ya la pedían las
+ * pantallas viejas. Los motores trabajan en decimal, así que la conversión vive
+ * aquí en vez de guardarse dos veces y poder descuadrar.
+ */
+export function monthlyRateOf(debt) {
+  return (Number(debt && debt.interestRate) || 0) / 100;
+}
+
+/*
  * Corre el crédito mes a mes hasta liquidarlo.
  *
  *   principal   saldo inicial

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { diffState, planWrites } from './sync.js';
+import { diffState, planWrites, diffSize } from './sync.js';
 
 const UID = 'user-abc';
 
@@ -87,4 +87,105 @@ test('una carga grande se parte en varias peticiones', () => {
 
 test('sin cambios no se manda ninguna petición', () => {
   assert.deepEqual(planWrites(diffState(conDeuda, clone(conDeuda)), UID), []);
+});
+
+
+/* ============================== esquema v2 ============================== */
+
+/*
+ * Un estado v2 con las cadenas de llaves foráneas que importan:
+ * persona -> reparto -> cobro, y bucket -> aporte.
+ */
+const v2 = {
+  people: [{ id: 'p1', name: 'Juanjo', linkedUserId: null }],
+  incomeSources: [{ id: 'i1', name: 'Salario', expected: 3400000, variable: false, active: true }],
+  fixedExpenses: [{ id: 'f1', name: 'HBO Max', category: 'entretenimiento', amount: 8300,
+                    totalAmount: 12450, dueDay: 5, paymentMethod: 'debito', cardId: null,
+                    shares: [{ id: 's1', personId: 'p1', amount: 4150 }] }],
+  collections: [{ id: 'co1', month: '2026-09', shareId: 's1', collectedAt: '2026-09-06' }],
+  buckets: [{ id: 'b1', name: 'Ahorro', kind: 'meta', liquid: true, monthlyAmount: 50000,
+              targetAmount: null, targetDate: null,
+              contributions: [{ id: 'ap1', amount: 50000, date: '2026-09-05', month: '2026-09' }] }],
+  monthlyPlans: [{ month: '2026-09', expectedIncome: 3400000, fixedExpenses: 8300,
+                   debtPayment: 0, savings: 50000, variableEstimate: 830000,
+                   cushion: 0, locked: false }],
+  transactions: [], creditCards: [], debts: [], savingsGoals: [],
+  customCategories: [], categoryLabels: {},
+};
+
+const v2Vacio = { ...vacio, people: [], incomeSources: [], collections: [],
+                  buckets: [], monthlyPlans: [] };
+
+test('al crear, la persona va antes del reparto y el reparto antes del cobro', () => {
+  const plan = planWrites(diffState(v2Vacio, v2), UID);
+  const pos = (t) => orden(plan).indexOf(`upsert:${t}`);
+  assert.ok(pos('people') < pos('fixed_expense_shares'), 'sin la persona, el reparto no entra');
+  assert.ok(pos('fixed_expenses') < pos('fixed_expense_shares'));
+  assert.ok(pos('fixed_expense_shares') < pos('collections'), 'el cobro apunta al reparto');
+  assert.ok(pos('buckets') < pos('bucket_contributions'));
+});
+
+test('al borrar todo, la cadena se deshace al revés', () => {
+  const plan = planWrites(diffState(v2, v2Vacio), UID);
+  const pos = (t) => orden(plan).indexOf(`delete:${t}`);
+  assert.ok(pos('collections') < pos('fixed_expense_shares'), 'el cobro antes que el reparto');
+  assert.ok(pos('fixed_expense_shares') < pos('fixed_expenses'));
+  assert.ok(pos('fixed_expense_shares') < pos('people'), 'el reparto antes que la persona');
+  assert.ok(pos('bucket_contributions') < pos('buckets'));
+});
+
+test('el plan del mes resuelve el conflicto por mes, no por id', () => {
+  const next = clone(v2);
+  next.monthlyPlans[0].variableEstimate = 900000;
+  const plan = planWrites(diffState(v2, next), UID);
+  const planes = plan.find((s) => s.table === 'monthly_plans');
+  assert.equal(planes.onConflict, 'user_id,month', 'monthly_plans no tiene columna id');
+  assert.equal(planes.rows[0].month, '2026-09');
+  assert.equal(planes.rows[0].id, undefined);
+});
+
+test('borrar el plan de un mes se acota por la columna month', () => {
+  const next = clone(v2);
+  next.monthlyPlans = [];
+  const paso = planWrites(diffState(v2, next), UID).find((s) => s.table === 'monthly_plans');
+  assert.equal(paso.op, 'delete');
+  assert.equal(paso.keyColumn, 'month', 'con .in("id", ...) Postgres no encontraría la columna');
+  assert.deepEqual(paso.ids, ['2026-09']);
+});
+
+test('los borrados de las demás tablas siguen yendo por id', () => {
+  const next = clone(v2);
+  next.collections = [];
+  const paso = planWrites(diffState(v2, next), UID).find((s) => s.table === 'collections');
+  assert.equal(paso.keyColumn, 'id');
+  assert.deepEqual(paso.ids, ['co1']);
+});
+
+test('cambiar el plan de un mes no reescribe los otros meses', () => {
+  const conDosMeses = clone(v2);
+  conDosMeses.monthlyPlans.push({ month: '2026-10', expectedIncome: 3400000, fixedExpenses: 8300,
+                                  debtPayment: 0, savings: 50000, variableEstimate: 700000,
+                                  cushion: 0, locked: false });
+  const next = clone(conDosMeses);
+  next.monthlyPlans[1].variableEstimate = 750000;
+  const d = diffState(conDosMeses, next);
+  assert.equal(diffSize(d), 1);
+  assert.deepEqual(d.upserts.monthly_plans.map((r) => r.month), ['2026-10']);
+});
+
+test('marcar un cobro toca una sola fila', () => {
+  const next = clone(v2);
+  next.collections.push({ id: 'co2', month: '2026-10', shareId: 's1', collectedAt: '2026-10-03' });
+  const d = diffState(v2, next);
+  assert.equal(diffSize(d), 1);
+  assert.deepEqual(d.upserts.collections.map((r) => r.id), ['co2']);
+});
+
+test('cambiar el reparto no reescribe el gasto fijo', () => {
+  const next = clone(v2);
+  next.fixedExpenses[0].shares[0].amount = 4200;
+  const d = diffState(v2, next);
+  assert.equal(diffSize(d), 1);
+  assert.equal(d.upserts.fixed_expenses, undefined, 'el total no cambió');
+  assert.equal(d.upserts.fixed_expense_shares[0].amount, 4200);
 });

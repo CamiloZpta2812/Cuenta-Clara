@@ -23,7 +23,7 @@
  */
 
 import { monthKeyFromDate } from './dates.js';
-import { simulate } from './amortization.js';
+import { simulate, monthlyRateOf } from './amortization.js';
 
 const num = (v) => Number(v) || 0;
 const sum = (arr, f) => (arr || []).reduce((s, x) => s + num(f(x)), 0);
@@ -69,21 +69,37 @@ export function monthCollections(fixedExpenses, collections, month) {
 
 /* ------------------------------------------------------------- planeado -- */
 
-export function monthPlan(estado) {
+/*
+ * El plan guardado de un mes, si existe. `monthlyPlans` es la foto de cada mes:
+ * si en diciembre te sube el arriendo, noviembre no debería reescribirse.
+ */
+export function storedPlan(estado, month) {
+  return (estado.monthlyPlans || []).find((p) => p.month === month) || null;
+}
+
+export function monthPlan(estado, month) {
+  const guardado = storedPlan(estado, month);
+
+  /*
+   * Un mes cerrado ya no se recalcula: se juzga contra los números que tenía
+   * entonces. Recalcularlo con los gastos de hoy diría que en marzo te
+   * desviaste por un arriendo que solo subió en diciembre.
+   */
+  if (guardado && guardado.locked) return frozenPlan(guardado);
+
   const fuentes = estado.incomeSources || [];
   const fijos = estado.fixedExpenses || [];
   const buckets = estado.buckets || [];
   const debts = estado.debts || [];
-  const plan = estado.plan || {};
 
-  const metas = buckets.filter((b) => b.type === 'meta');
-  const colchones = buckets.filter((b) => b.type === 'colchon');
+  const metas = buckets.filter((b) => b.kind === 'meta');
+  const colchones = buckets.filter((b) => b.kind === 'colchon');
 
   const income = sum(fuentes, (f) => f.expected);
   const fixedExpenses = sum(fijos, myShare);
   const debtPayment = sum(debts, (d) => d.fixedPayment);
   const savings = sum(metas, (b) => b.monthlyAmount);
-  const variable = num(plan.variableEstimate);
+  const variable = num(guardado && guardado.variableEstimate);
   const cushion = sum(colchones, (b) => b.monthlyAmount);
 
   const grossSurplus = income - fixedExpenses - debtPayment - savings - variable;
@@ -98,10 +114,37 @@ export function monthPlan(estado) {
     cushion,
     availableForExtra: grossSurplus - cushion,
     receivable: sum(fijos, othersShare),
+    locked: false,
+  };
+}
+
+/* Un mes cerrado: los mismos campos, leídos de la foto en vez de recalculados. */
+function frozenPlan(p) {
+  const grossSurplus = num(p.expectedIncome) - num(p.fixedExpenses)
+    - num(p.debtPayment) - num(p.savings) - num(p.variableEstimate);
+  return {
+    income: num(p.expectedIncome),
+    fixedExpenses: num(p.fixedExpenses),
+    debtPayment: num(p.debtPayment),
+    savings: num(p.savings),
+    variable: num(p.variableEstimate),
+    grossSurplus,
+    cushion: num(p.cushion),
+    availableForExtra: grossSurplus - num(p.cushion),
+    receivable: 0,
+    locked: true,
   };
 }
 
 /* ----------------------------------------------------------------- real -- */
+
+/*
+ * Los abonos y los aportes viven dentro de su deuda y de su bucket, igual que
+ * en el resto de la app. Aquí se aplanan para poder filtrarlos por mes; tenerlos
+ * además sueltos en el estado sería el mismo dato dos veces.
+ */
+const debtPayments = (estado) => (estado.debts || []).flatMap((d) => d.payments || []);
+const bucketContributions = (estado) => (estado.buckets || []).flatMap((b) => b.contributions || []);
 
 /*
  * Clasifica los movimientos del mes en las mismas líneas del plan.
@@ -118,11 +161,11 @@ export function monthActual(estado, month) {
   const gastos = transactions.filter((t) => t.type === 'gasto');
 
   const fixedExpenses = sum(gastos.filter((t) => t.fixedExpenseId), (t) => t.amount);
-  const debtPayment = sum((estado.debtPayments || []).filter((p) => monthKeyFromDate(p.date) === month), (p) => p.amount);
-  const savings = sum((estado.bucketContributions || []).filter((a) => monthKeyFromDate(a.date) === month), (a) => a.amount);
+  const debtPayment = sum(debtPayments(estado).filter((p) => monthKeyFromDate(p.date) === month), (p) => p.amount);
+  const savings = sum(bucketContributions(estado).filter((a) => monthKeyFromDate(a.date) === month), (a) => a.amount);
 
   // Variable es todo lo demás: ni fijo, ni abono a deuda, ni aporte a ahorro.
-  const variable = sum(gastos.filter((t) => !t.fixedExpenseId && !t.deudaId && !t.bucketId), (t) => t.amount);
+  const variable = sum(gastos.filter((t) => !t.fixedExpenseId && !t.debtId && !t.bucketId), (t) => t.amount);
 
   return {
     income,
@@ -191,7 +234,7 @@ export function monthAlerts(estado, month, plan, real) {
       severity: 'aviso',
       title: 'Entró menos de lo planeado',
       amount: plan.income - real.income,
-      detail: `Esperabas ${shortMoney(plan.ingresos)} y llevas ${shortMoney(real.ingresos)}.`,
+      detail: `Esperabas ${shortMoney(plan.income)} y llevas ${shortMoney(real.income)}.`,
     });
   }
 
@@ -207,7 +250,7 @@ function shortMoney(n) {
 /* ---------------------------------------------------------------- todo --- */
 
 export function monthSummary(estado, month) {
-  const plan = monthPlan(estado);
+  const plan = monthPlan(estado, month);
   const real = monthActual(estado, month);
   const salidas = monthCashOut(estado, month);
 
@@ -240,8 +283,8 @@ export function monthSummary(estado, month) {
  * Los cambios son sumas o restas sobre las líneas del plan, no valores nuevos:
  * { colchon: -150000 } significa "bajo el colchón en 150.000".
  */
-export function simulatePlanChange(estado, cambios = {}) {
-  const plan = monthPlan(estado);
+export function simulatePlanChange(estado, cambios = {}, month) {
+  const plan = monthPlan(estado, month);
   const deuda = (estado.debts || [])[0];
   if (!deuda) return null;
 
@@ -255,11 +298,12 @@ export function simulatePlanChange(estado, cambios = {}) {
    * que verse. Recortarlo mostraría un plan de pago que no existe.
    */
   const pago = (a) => num(deuda.fixedPayment) + a;
+  const tasa = monthlyRateOf(deuda);
   const before = simulate({
-    principal: deuda.currentBalance, monthlyRate: deuda.monthlyRate, payment: pago(extraBefore),
+    principal: deuda.currentBalance, monthlyRate: tasa, payment: pago(extraBefore),
   });
   const after = simulate({
-    principal: deuda.currentBalance, monthlyRate: deuda.monthlyRate, payment: pago(extraAfter),
+    principal: deuda.currentBalance, monthlyRate: tasa, payment: pago(extraAfter),
   });
 
   return {

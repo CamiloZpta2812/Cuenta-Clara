@@ -86,5 +86,7 @@ test('una deuda creada sin señal llega con sus abonos', () => {
                      payments: [{ id: 'p1', amount: 50, date: '2026-09-02' }] });
   const resultado = reconciliar(alPerderSenal, alPerderSenal, local);
   assert.equal(resultado.debts.length, 1);
-  assert.deepEqual(resultado.debts[0].payments, [{ id: 'p1', amount: 50, date: '2026-09-02' }]);
+  assert.deepEqual(resultado.debts[0].payments,
+                   [{ id: 'p1', amount: 50, date: '2026-09-02',
+                      month: '2026-09', balanceAfter: null }]);
 });
