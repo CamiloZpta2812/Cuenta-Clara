@@ -1,8 +1,9 @@
-import { LayoutDashboard, ArrowLeftRight, CreditCard, PiggyBank, Landmark, Settings, Repeat } from 'lucide-react';
+import { LayoutDashboard, ArrowLeftRight, CreditCard, PiggyBank, Landmark, Settings, Repeat, CalendarRange } from 'lucide-react';
 import Logo from './Logo';
 
 export default function Sidebar({ activeTab, onChangeTab }) {
   const items = [
+    { id: 'mes', label: 'El mes', Icon: CalendarRange },
     { id: 'resumen', label: 'Resumen', Icon: LayoutDashboard },
     { id: 'movimientos', label: 'Movimientos', Icon: ArrowLeftRight },
     { id: 'gastosfijos', label: 'Gastos fijos', Icon: Repeat },

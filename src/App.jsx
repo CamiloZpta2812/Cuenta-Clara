@@ -3,6 +3,7 @@ import { STYLES } from './styles.js';
 import { FinanceProvider, useFinance } from './state/financeStore';
 import Sidebar from './components/Sidebar';
 import Resumen from './views/Resumen';
+import Mes from './views/Mes';
 import Movimientos from './views/Movimientos';
 import GastosFijos from './views/GastosFijos';
 import Tarjetas from './views/Tarjetas';
@@ -12,6 +13,7 @@ import Configuracion from './views/Configuracion';
 import PrintReport from './views/PrintReport';
 
 const TABS = {
+  mes: Mes,
   resumen: Resumen,
   movimientos: Movimientos,
   gastosfijos: GastosFijos,

@@ -11,7 +11,8 @@ import { readCache, writeCache } from '../data/localCache.js';
 import { userConfig } from '../lib/userConfig.js';
 import { uid } from '../lib/id.js';
 import { buildRecommendations, getStatus } from '../lib/insights.js';
-import { buildCardStatements, nextStatement, buildCommitments } from '../lib/projections.js';
+import { buildCardStatements, nextStatement, buildCommitments, activeInstallmentGroups } from '../lib/projections.js';
+import { monthSummary } from '../lib/month.js';
 
 /*
  * Todo el estado de la app vive aquí: lo que se persiste en Supabase, lo que se
@@ -775,8 +776,38 @@ export function FinanceProvider({ children }) {
     setCategoryLabels({});
   }
 
+  /*
+   * El mes: plan contra realidad. Todo el cálculo vive en lib/month.js, que es
+   * puro y está probado; aquí solo se le pasa el estado y el mes elegido.
+   */
+  const monthReport = useMemo(() => monthSummary(snapshot(), selectedMonth), [snapshot, selectedMonth]);
+
+  /*
+   * Lo que la tarjeta de crédito aplaza.
+   *
+   * No hace falta una pantalla para navegar los movimientos de la tarjeta —eso
+   * es un filtro—. Lo que no se puede ver de otra forma son dos cosas: qué va a
+   * llegar en la próxima factura, y cuánta plata está ya comprometida en cuotas
+   * que todavía no se han cobrado. Eso segundo es justo lo que uno cree tener
+   * libre y no tiene.
+   */
+  const cardOutlook = useMemo(() => {
+    const statements = creditCards
+      .map((card) => ({ card, next: nextStatement(buildCardStatements(transactions, card)) }))
+      .filter((c) => c.next);
+    const groups = activeInstallmentGroups(transactions);
+    return {
+      statements,
+      dueNext: statements.reduce((s, c) => s + c.next.total, 0),
+      groups,
+      committed: groups.reduce((s, g) => s + g.monthly * g.remaining, 0),
+    };
+  }, [creditCards, transactions]);
+
   const value = {
     activeTab,
+    cardOutlook,
+    monthReport,
     allExpenseCategories,
     allIncomeCategories,
     availableMonths,
