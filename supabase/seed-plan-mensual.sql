@@ -11,6 +11,13 @@
 -- gasto fijo, que en este modelo es un colchón).
 -- =============================================================================
 
+/*
+ * Aquí queda el usuario que resolvió el bloque de abajo, para que el informe
+ * del final no tenga que volver a averiguarlo. Antes el correo había que
+ * escribirlo en dos sitios, y escribirlo en uno solo dejaba el informe vacío.
+ */
+create temp table if not exists seed_uid (id uuid);
+
 do $$
 declare
   /*
@@ -36,8 +43,12 @@ begin
   elsif usuarios = 0 then
     raise exception 'No hay usuarios registrados. Entra una vez a la app antes de sembrar.';
   else
-    raise exception 'Hay % usuarios. Pon tu correo en la variable `correo` de arriba. Corre: select email from auth.users;', usuarios;
+    raise exception 'Hay % cuentas (%). Pon en la variable `correo` de arriba la que usas en AlDía.',
+      usuarios, (select string_agg(email, ', ' order by email) from auth.users);
   end if;
+
+  delete from seed_uid;
+  insert into seed_uid (id) values (uid);
 
   -- ===========================================================================
   -- 1. Las personas a las que les cobras
@@ -204,16 +215,7 @@ end $$;
 -- estar ahí —"Mantenimiento Moto", "Cooperativa", "Colchón"— es un dato viejo
 -- del modelo anterior y lo puedes borrar desde la app.
 -- =============================================================================
-/*
- * La misma regla de arriba: si hay un solo usuario se toma ese; si pusiste un
- * correo en la variable, escríbelo también aquí.
- */
-with uid as (
-  select id from auth.users
-   where (select count(*) from auth.users) = 1
-      or email = ''            -- <-- si arriba pusiste un correo, ponlo aquí
-   limit 1
-)
+with uid as (select id from seed_uid)
 select 'personas' as que, name as detalle, null::numeric as valor
   from public.people where user_id = (select id from uid)
 union all
