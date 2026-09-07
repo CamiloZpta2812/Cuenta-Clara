@@ -107,6 +107,12 @@ export function FinanceProvider({ children }) {
   const [debtFormError, setDebtFormError] = useState('');
   const [paymentInputs, setPaymentInputs] = useState({});
 
+  const [bucketInputs, setBucketInputs] = useState({});
+  const [showBucketForm, setShowBucketForm] = useState(false);
+  const [bucketForm, setBucketForm] = useState({
+    name: '', kind: 'meta', liquid: true, monthlyAmount: '', targetAmount: '', targetDate: '',
+  });
+
   const [showGoalForm, setShowGoalForm] = useState(false);
   const [goalForm, setGoalForm] = useState({ name: '', targetAmount: '', targetDate: '', initialAmount: '' });
   const [contributionInputs, setContributionInputs] = useState({});
@@ -781,6 +787,48 @@ export function FinanceProvider({ children }) {
     setCategoryLabels({});
   }
 
+  /* ---------- Buckets: metas y colchones ---------- */
+
+  function handleAddBucket(e) {
+    e.preventDefault();
+    if (!bucketForm.name.trim()) return;
+    setBuckets((prev) => [...prev, {
+      id: uid(),
+      name: bucketForm.name.trim(),
+      kind: bucketForm.kind === 'colchon' ? 'colchon' : 'meta',
+      liquid: !!bucketForm.liquid,
+      monthlyAmount: parseFloat(bucketForm.monthlyAmount) || 0,
+      /* Un colchón no tiene objetivo: es margen, no una meta a la que llegar. */
+      targetAmount: bucketForm.kind === 'meta' ? (parseFloat(bucketForm.targetAmount) || null) : null,
+      targetDate: bucketForm.kind === 'meta' ? (bucketForm.targetDate || null) : null,
+      contributions: [],
+    }]);
+    setBucketForm({ name: '', kind: 'meta', liquid: true, monthlyAmount: '', targetAmount: '', targetDate: '' });
+    setShowBucketForm(false);
+  }
+
+  function handleDeleteBucket(id) {
+    const b = buckets.find((x) => x.id === id);
+    if (!window.confirm(`¿Eliminar "${b ? b.name : ''}" y todos sus aportes?`)) return;
+    setBuckets((prev) => prev.filter((x) => x.id !== id));
+  }
+
+  /*
+   * Un retiro es un aporte negativo, no una tabla aparte: es el mismo hecho
+   * —plata que entra o sale del bucket— y separarlos obligaría a sumar dos
+   * listas para saber cuánto hay.
+   */
+  function handleBucketMovement(bucketId, sign) {
+    const amt = parseFloat(bucketInputs[bucketId]);
+    if (!amt || amt <= 0) return;
+    const hoy = todayStr();
+    setBuckets((prev) => prev.map((b) => (b.id === bucketId
+      ? { ...b, contributions: [...(b.contributions || []),
+          { id: uid(), amount: amt * sign, date: hoy, month: monthKeyFromDate(hoy) }] }
+      : b)));
+    setBucketInputs((prev) => ({ ...prev, [bucketId]: '' }));
+  }
+
   /*
    * Marcar (o desmarcar) un cobro.
    *
@@ -825,9 +873,18 @@ export function FinanceProvider({ children }) {
 
   const value = {
     activeTab,
+    bucketForm,
+    bucketInputs,
     cardOutlook,
+    handleAddBucket,
+    handleBucketMovement,
+    handleDeleteBucket,
     handleToggleCollection,
     monthReport,
+    setBucketForm,
+    setBucketInputs,
+    setShowBucketForm,
+    showBucketForm,
     allExpenseCategories,
     allIncomeCategories,
     availableMonths,

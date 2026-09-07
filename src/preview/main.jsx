@@ -5,12 +5,13 @@ import { FinanceContext } from '../state/financeStore';
 import { buildValue } from './fixture.js';
 import Mes from '../views/Mes';
 import Cobros from '../views/Cobros';
+import Buckets from '../views/Buckets';
 
 /*
  * Banco de pruebas de las pantallas. Se abre con `npm run dev` en /preview.html
  * y no entra en el build de produccion: vite solo empaqueta index.html.
  */
-const PANTALLAS = { Mes, Cobros };
+const PANTALLAS = { Mes, Cobros, Buckets };
 
 function Preview() {
   const [cual, setCual] = useState('Mes');
