@@ -1,4 +1,4 @@
-import { stateToRows, TABLES, WRITE_ORDER } from './mapping.js';
+import { stateToRows, TABLES, WRITE_ORDER, SINGLETON_TABLE, keyColumn } from './mapping.js';
 
 /*
  * Antes la app serializaba TODO su estado y reescribía una sola fila gigante en
@@ -9,11 +9,13 @@ import { stateToRows, TABLES, WRITE_ORDER } from './mapping.js';
  * tocar. Es pura para poder probarla sin base de datos (ver sync.test.js).
  */
 
-const key = (r) => r.id;
-
-function indexById(rows) {
+/*
+ * Casi toda tabla se identifica por `id`, pero `monthly_plans` se identifica
+ * por el mes: solo puede haber un plan por mes, así que ese es su nombre.
+ */
+function indexByKey(rows, col) {
   const map = new Map();
-  (rows || []).forEach((r) => map.set(key(r), r));
+  (rows || []).forEach((r) => map.set(r[col], r));
   return map;
 }
 
@@ -35,9 +37,10 @@ export function diffRows(prevRows, nextRows) {
   const deletes = {};
 
   TABLES.forEach((table) => {
-    if (table === 'user_settings') return; // fila única, se trata aparte
-    const before = indexById(prevRows[table]);
-    const after = indexById(nextRows[table]);
+    if (table === SINGLETON_TABLE) return; // fila única, se trata aparte
+    const col = keyColumn(table);
+    const before = indexByKey(prevRows[table], col);
+    const after = indexByKey(nextRows[table], col);
 
     const changed = [];
     after.forEach((row, id) => {
@@ -93,7 +96,8 @@ function chunks(arr, size = CHUNK) {
  *  - los borrados van primero y en orden inverso, para que los abonos salgan
  *    antes que su deuda y no choquen con la llave foránea;
  *  - los upserts van de padres a hijos;
- *  - cada fila lleva user_id, sin el cual RLS rechaza la escritura.
+ *  - cada fila lleva user_id, sin el cual RLS rechaza la escritura;
+ *  - cada borrado dice por cuál columna identificar la fila.
  */
 export function planWrites(diff, userId, chunkSize = CHUNK) {
   const plan = [];
@@ -102,14 +106,14 @@ export function planWrites(diff, userId, chunkSize = CHUNK) {
     const ids = diff.deletes[table];
     if (!ids || !ids.length) continue;
     for (const part of chunks(ids, chunkSize)) {
-      plan.push({ op: 'delete', table, userId, ids: part });
+      plan.push({ op: 'delete', table, userId, keyColumn: keyColumn(table), ids: part });
     }
   }
 
   for (const table of WRITE_ORDER) {
     const rows = diff.upserts[table];
     if (!rows || !rows.length) continue;
-    const onConflict = table === 'user_settings' ? 'user_id' : 'user_id,id';
+    const onConflict = table === SINGLETON_TABLE ? 'user_id' : `user_id,${keyColumn(table)}`;
     for (const part of chunks(rows, chunkSize)) {
       plan.push({ op: 'upsert', table, onConflict, rows: part.map((r) => ({ ...r, user_id: userId })) });
     }
@@ -136,13 +140,14 @@ export function planWrites(diff, userId, chunkSize = CHUNK) {
 export function replayLocalChanges(serverRows, pendingDiff) {
   const out = {};
   TABLES.forEach((table) => {
+    const col = keyColumn(table);
     const base = [...(serverRows[table] || [])];
     const borrados = new Set(pendingDiff.deletes[table] || []);
     const nuevos = pendingDiff.upserts[table] || [];
 
-    const kept = base.filter((r) => !borrados.has(r.id));
+    const kept = base.filter((r) => !borrados.has(r[col]));
     nuevos.forEach((row) => {
-      const i = kept.findIndex((r) => r.id === row.id);
+      const i = kept.findIndex((r) => r[col] === row[col]);
       if (i >= 0) kept[i] = row; else kept.push(row);
     });
     out[table] = kept;

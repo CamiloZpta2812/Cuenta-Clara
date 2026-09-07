@@ -8,5 +8,4 @@
 export const userConfig = {
   categoryLabels: {},
   customCategories: [],
-  monthStartDay: 1,
 };

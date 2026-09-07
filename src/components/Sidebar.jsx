@@ -1,14 +1,15 @@
-import { LayoutDashboard, ArrowLeftRight, CreditCard, PiggyBank, Landmark, Settings, Repeat } from 'lucide-react';
+import { LayoutDashboard, ArrowLeftRight, CreditCard, Settings, Repeat, CalendarRange, HandCoins, Shield } from 'lucide-react';
 import Logo from './Logo';
 
 export default function Sidebar({ activeTab, onChangeTab }) {
   const items = [
+    { id: 'mes', label: 'El mes', Icon: CalendarRange },
+    { id: 'cobros', label: 'Cobros', Icon: HandCoins },
     { id: 'resumen', label: 'Resumen', Icon: LayoutDashboard },
     { id: 'movimientos', label: 'Movimientos', Icon: ArrowLeftRight },
     { id: 'gastosfijos', label: 'Gastos fijos', Icon: Repeat },
-    { id: 'tarjetas', label: 'Tarjetas', Icon: Landmark },
-    { id: 'deudas', label: 'Deudas', Icon: CreditCard },
-    { id: 'ahorros', label: 'Ahorros', Icon: PiggyBank },
+    { id: 'deuda', label: 'Deuda', Icon: CreditCard },
+    { id: 'buckets', label: 'Ahorro y colchones', Icon: Shield },
     { id: 'configuracion', label: 'Configuración', Icon: Settings },
   ];
   return (

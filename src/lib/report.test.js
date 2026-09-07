@@ -25,7 +25,7 @@ const datos = {
   savingsGoals: [{ id: 'g1', name: 'Fondo', targetAmount: 6000000, targetDate: '2027-06-30',
                    contributions: [{ id: 'a1', amount: 500000, date: '2026-07-01' },
                                    { id: 'a2', amount: -100000, date: '2026-08-01' }] }],
-  customCategories: [], categoryLabels: {}, monthStartDay: 1,
+  customCategories: [], categoryLabels: {},
 };
 
 const hojas = buildReportSheets(datos);

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { COLOR_CHOICES } from '../lib/constants.js';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, ALL_CATEGORIES, ICON_CHOICES, getCategory } from '../lib/categories.js';
 import { todayStr, daysInMonth, monthKeyFromDate, currentMonthKey, monthLabel, computeChargeDate, addMonths } from '../lib/dates.js';
@@ -11,14 +11,21 @@ import { readCache, writeCache } from '../data/localCache.js';
 import { userConfig } from '../lib/userConfig.js';
 import { uid } from '../lib/id.js';
 import { buildRecommendations, getStatus } from '../lib/insights.js';
-import { buildCardStatements, nextStatement, buildCommitments } from '../lib/projections.js';
+import { buildCardStatements, nextStatement, buildCommitments, activeInstallmentGroups } from '../lib/projections.js';
+import { monthSummary, targetDebt, simulatePlanChange } from '../lib/month.js';
+import { comparePlans, monthlyRateOf } from '../lib/amortization.js';
 
 /*
  * Todo el estado de la app vive aquí: lo que se persiste en Supabase, lo que se
  * deriva de eso y las acciones que lo modifican. Las vistas lo consumen con
  * useFinance() en vez de recibir treinta props cada una.
  */
-const FinanceContext = createContext(null);
+/*
+ * Se exporta para el banco de pruebas de src/preview, que monta las pantallas
+ * con datos de mentira y sin Supabase. Sirve para verlas sin tener que entrar
+ * con una cuenta real, que es lo único que no se puede automatizar aquí.
+ */
+export const FinanceContext = createContext(null);
 
 export function useFinance() {
   const ctx = useContext(FinanceContext);
@@ -33,7 +40,8 @@ export function FinanceProvider({ children }) {
   const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
   const [pendingChanges, setPendingChanges] = useState(false);
   const [exporting, setExporting] = useState('');   // '' | 'trabajando' | mensaje de error
-  const [activeTab, setActiveTab] = useState('resumen');
+  /* Arranca en El mes: es la pregunta que la app existe para responder. */
+  const [activeTab, setActiveTab] = useState('mes');
   const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
@@ -47,7 +55,18 @@ export function FinanceProvider({ children }) {
   const [fixedExpenses, setFixedExpenses] = useState([]);
   const [categoryLabels, setCategoryLabelsState] = useState({});
   const [customCategories, setCustomCategoriesState] = useState([]);
-  const [monthStartDay, setMonthStartDayState] = useState(1);
+
+  /*
+   * Esquema v2: plan mensual, gastos compartidos y buckets. Las pantallas que
+   * los editan todavía no existen, pero el estado tiene que cargarlos igual —
+   * si no, el primer guardado los vería ausentes y los borraría de Supabase.
+   */
+  const [people, setPeople] = useState([]);
+  const [incomeSources, setIncomeSources] = useState([]);
+  const [collections, setCollections] = useState([]);
+  const [buckets, setBuckets] = useState([]);
+  const [monthlyPlans, setMonthlyPlans] = useState([]);
+  const [setupCompletedAt, setSetupCompletedAt] = useState(null);
 
   /*
    * Estos setters dejan userConfig sincronizado ANTES de pedir el re-render,
@@ -56,7 +75,6 @@ export function FinanceProvider({ children }) {
    */
   function setCategoryLabels(next) { userConfig.categoryLabels = next; setCategoryLabelsState(next); }
   function setCustomCategories(next) { userConfig.customCategories = next; setCustomCategoriesState(next); }
-  function setMonthStartDay(next) { userConfig.monthStartDay = next; setMonthStartDayState(next); }
 
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey());
 
@@ -91,6 +109,13 @@ export function FinanceProvider({ children }) {
   const [debtFormError, setDebtFormError] = useState('');
   const [paymentInputs, setPaymentInputs] = useState({});
 
+  const [balanceInputs, setBalanceInputs] = useState({});
+  const [bucketInputs, setBucketInputs] = useState({});
+  const [showBucketForm, setShowBucketForm] = useState(false);
+  const [bucketForm, setBucketForm] = useState({
+    name: '', kind: 'meta', liquid: true, monthlyAmount: '', targetAmount: '', targetDate: '',
+  });
+
   const [showGoalForm, setShowGoalForm] = useState(false);
   const [goalForm, setGoalForm] = useState({ name: '', targetAmount: '', targetDate: '', initialAmount: '' });
   const [contributionInputs, setContributionInputs] = useState({});
@@ -100,6 +125,20 @@ export function FinanceProvider({ children }) {
   const [configTab, setConfigTab] = useState('categorias');
   const [newCatGasto, setNewCatGasto] = useState({ label: '', iconKey: ICON_CHOICES[0].key, color: COLOR_CHOICES[0] });
   const [newCatIngreso, setNewCatIngreso] = useState({ label: '', iconKey: ICON_CHOICES[0].key, color: COLOR_CHOICES[0] });
+
+  /*
+   * La foto completa del estado, en un solo lugar. Antes esta lista estaba
+   * escrita tres veces —guardado, reintento y export— y agregar una tabla
+   * significaba acordarse de las tres: la que se olvidara se guardaría vacía y
+   * borraría esos datos en el servidor.
+   */
+  const snapshot = useCallback(() => ({
+    transactions, debts, savingsGoals, creditCards, fixedExpenses,
+    customCategories, categoryLabels,
+    people, incomeSources, collections, buckets, monthlyPlans, setupCompletedAt,
+  }), [transactions, debts, savingsGoals, creditCards, fixedExpenses,
+       customCategories, categoryLabels,
+       people, incomeSources, collections, buckets, monthlyPlans, setupCompletedAt]);
 
   /*
    * persistedRef guarda la última foto que sabemos que está en la base. El
@@ -126,7 +165,12 @@ export function FinanceProvider({ children }) {
         setFixedExpenses(state.fixedExpenses || []);
         setCategoryLabels(state.categoryLabels || {});
         setCustomCategories(state.customCategories || []);
-        setMonthStartDay(state.monthStartDay || 1);
+        setPeople(state.people || []);
+        setIncomeSources(state.incomeSources || []);
+        setCollections(state.collections || []);
+        setBuckets((state.buckets || []).map((b) => ({ ...b, contributions: b.contributions || [] })));
+        setMonthlyPlans(state.monthlyPlans || []);
+        setSetupCompletedAt(state.setupCompletedAt || null);
         setSelectedMonth(monthKeyFromDate(todayStr()));
       }
 
@@ -173,8 +217,7 @@ export function FinanceProvider({ children }) {
   /* ---------- Guardado automático ---------- */
   useEffect(() => {
     if (loading || loadError) return undefined;
-    const next = { transactions, debts, savingsGoals, creditCards, fixedExpenses,
-                   customCategories, categoryLabels, monthStartDay };
+    const next = snapshot();
     const prev = persistedRef.current;
     if (!prev) { persistedRef.current = next; return undefined; }
 
@@ -205,7 +248,9 @@ export function FinanceProvider({ children }) {
       }
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [transactions, debts, savingsGoals, creditCards, categoryLabels, customCategories, monthStartDay, fixedExpenses, loading, loadError]);
+    // snapshot cambia cuando cambia cualquier parte del estado, así que agregar
+    // una tabla nueva arriba no obliga a acordarse de esta lista.
+  }, [snapshot, loading, loadError]);
 
   /* ---------- Conexión ---------- */
   /*
@@ -215,8 +260,7 @@ export function FinanceProvider({ children }) {
   async function reintentarPendientes() {
     const prev = persistedRef.current;
     if (!prev) return;
-    const next = { transactions, debts, savingsGoals, creditCards, fixedExpenses,
-                   customCategories, categoryLabels, monthStartDay };
+    const next = snapshot();
     const diff = diffState(prev, next);
     if (isEmptyDiff(diff)) { setOffline(false); setPendingChanges(false); return; }
     try {
@@ -247,21 +291,12 @@ export function FinanceProvider({ children }) {
   }, []);
 
   /* ---------- Datos derivados ---------- */
-  /*
-   * monthKeyFromDate() lee userConfig.monthStartDay por dentro, cosa que ESLint
-   * no puede ver: por eso marca monthStartDay como dependencia innecesaria en
-   * los useMemo de abajo. Sí hace falta, si no las gráficas se quedan con el
-   * corte de mes viejo al cambiar la configuración.
-   */
-  /* eslint-disable react-hooks/exhaustive-deps */
-  // Dependen de monthStartDay: si el usuario tiene "mi mes empieza el 25", el
-  // corte cambia y hay que recalcular la ventana de meses y todo lo derivado.
-  const monthsWindow = useMemo(() => getLastMonthKeys(6, currentMonthKey()), [monthStartDay]);
+  const monthsWindow = useMemo(() => getLastMonthKeys(6, currentMonthKey()), []);
 
   // Los 6 meses que VIENEN, para ver lo que ya está comprometido.
   const futureMonths = useMemo(
     () => Array.from({ length: 6 }, (_, i) => addMonths(currentMonthKey(), i + 1)),
-    [monthStartDay],
+    [],
   );
   const commitments = useMemo(
     () => buildCommitments(transactions, fixedExpenses, futureMonths),
@@ -282,7 +317,7 @@ export function FinanceProvider({ children }) {
   const availableMonths = useMemo(() => {
     const set = new Set([currentMonthKey(), ...transactions.map((t) => monthKeyFromDate(t.date))]);
     return Array.from(set).sort().reverse();
-  }, [transactions, monthStartDay]);
+  }, [transactions]);
 
   const totalIncome = useMemo(() => transactions.filter((t) => t.type === 'ingreso').reduce((s, t) => s + t.amount, 0), [transactions]);
   const totalExpense = useMemo(() => transactions.filter((t) => t.type === 'gasto').reduce((s, t) => s + t.amount, 0), [transactions]);
@@ -300,9 +335,9 @@ export function FinanceProvider({ children }) {
   );
   const netWorth = cashBalance + totalSavings - totalDebtRemaining;
 
-  const selMonthIncome = useMemo(() => transactions.filter((t) => t.type === 'ingreso' && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth, monthStartDay]);
-  const selMonthExpense = useMemo(() => transactions.filter((t) => t.type === 'gasto' && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth, monthStartDay]);
-  const selMonthFixed = useMemo(() => transactions.filter((t) => t.type === 'gasto' && t.isFixed && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth, monthStartDay]);
+  const selMonthIncome = useMemo(() => transactions.filter((t) => t.type === 'ingreso' && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth]);
+  const selMonthExpense = useMemo(() => transactions.filter((t) => t.type === 'gasto' && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth]);
+  const selMonthFixed = useMemo(() => transactions.filter((t) => t.type === 'gasto' && t.isFixed && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth]);
   const selMonthVariable = Math.max(0, selMonthExpense - selMonthFixed);
   function cardLabel(cardId) {
     const c = creditCards.find((card) => card.id === cardId);
@@ -327,7 +362,10 @@ export function FinanceProvider({ children }) {
       const c = getCategory(id);
       return { name: c.label, value, color: c.color };
     }).sort((a, b) => b.value - a.value);
-  }, [transactions, selectedMonth, categoryLabels, customCategories, monthStartDay]);
+    // categoryLabels y customCategories sí hacen falta: getCategory() los lee
+    // a través de userConfig, cosa que ESLint no puede ver desde aquí.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transactions, selectedMonth, categoryLabels, customCategories]);
 
   const equityEvolution = useMemo(() => monthsWindow.map((key) => {
     const ahorro = savingsGoals.reduce((sum, g) => sum + g.contributions.filter((c) => monthKeyFromDate(c.date) <= key).reduce((s, c) => s + c.amount, 0), 0);
@@ -349,9 +387,11 @@ export function FinanceProvider({ children }) {
     .filter((t) => txFilters.paymentMethod === 'todos' || t.paymentMethod === txFilters.paymentMethod)
     .filter((t) => txFilters.fixed === 'todos' || (txFilters.fixed === 'fijo' ? t.isFixed : !t.isFixed))
     .filter((t) => !txFilters.day || t.date === txFilters.day)
-    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)), [transactions, txFilters, monthStartDay]);
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)), [transactions, txFilters]);
 
-  const recommendations = useMemo(() => buildRecommendations(transactions, debts, savingsGoals), [transactions, debts, savingsGoals, categoryLabels, customCategories, monthStartDay]);
+  // Igual que arriba: buildRecommendations() etiqueta categorías por dentro.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const recommendations = useMemo(() => buildRecommendations(transactions, debts, savingsGoals), [transactions, debts, savingsGoals, categoryLabels, customCategories]);
   const status = getStatus(selMonthIncome, selMonthExpense);
   const allExpenseCategories = [...EXPENSE_CATEGORIES, ...customCategories.filter((c) => c.type === 'gasto')];
   const allIncomeCategories = [...INCOME_CATEGORIES, ...customCategories.filter((c) => c.type === 'ingreso')];
@@ -364,8 +404,6 @@ export function FinanceProvider({ children }) {
   const txChargeDate = txForm.paymentMethod === 'credito' && txSelectedCard?.cutDay && txSelectedCard?.paymentDay
     ? computeChargeDate(txForm.date, txSelectedCard.cutDay, txSelectedCard.paymentDay)
     : null;
-
-  /* eslint-enable react-hooks/exhaustive-deps */
 
   /* ---------- Acciones ---------- */
   function handleAddTransaction(e) {
@@ -533,16 +571,50 @@ export function FinanceProvider({ children }) {
     if (!window.confirm(`¿Eliminar la deuda "${debt ? debt.name : ''}" y su historial de abonos? Los movimientos que ya generó no se borran.`)) return;
     setDebts((prev) => prev.filter((d) => d.id !== id));
   }
+  /*
+   * Registrar un abono a la deuda.
+   *
+   * Además de guardar el abono, baja el saldo. Si no lo bajara, la proyección
+   * seguiría arrancando desde el saldo del primer día para siempre: la deuda
+   * se vería igual de larga en enero que en diciembre, hubieras pagado lo que
+   * hubieras pagado.
+   */
   function handleAddPayment(debtId) {
     const amt = parseFloat(paymentInputs[debtId]);
     if (!amt || amt <= 0) return;
     const debt = debts.find((d) => d.id === debtId);
     const paymentId = uid();
-    setDebts((prev) => prev.map((d) => (d.id === debtId ? { ...d, payments: [...d.payments, { id: paymentId, amount: amt, date: todayStr() }] } : d)));
+    const hoy = todayStr();
+
+    const reportado = parseFloat(balanceInputs[debtId]);
+    const hayReportado = Number.isFinite(reportado) && reportado >= 0;
+
+    /*
+     * El saldo que queda. Si el banco te lo dice, manda ese: es la verdad, y
+     * poder cuadrar el modelo contra el extracto es justamente el punto.
+     * Si no, se modela igual que el crédito: saldo + intereses del mes − pago.
+     */
+    const previo = debt && debt.currentBalance != null ? Number(debt.currentBalance) : null;
+    let saldoNuevo = null;
+    if (hayReportado) saldoNuevo = reportado;
+    else if (previo != null) {
+      saldoNuevo = Math.max(0, previo + (previo * monthlyRateOf(debt)) - amt);
+    }
+
+    setDebts((prev) => prev.map((d) => (d.id === debtId ? {
+      ...d,
+      currentBalance: saldoNuevo != null ? saldoNuevo : d.currentBalance,
+      payments: [...d.payments, {
+        id: paymentId, amount: amt, date: hoy, month: monthKeyFromDate(hoy),
+        balanceAfter: hayReportado ? reportado : null,
+      }],
+    } : d)));
+
     // debtId/debtPaymentId enlazan el movimiento con el abono, para poder
     // deshacer los dos juntos desde Movimientos.
-    setTransactions((prev) => [...prev, { id: uid(), type: 'gasto', category: 'deudas', amount: amt, date: todayStr(), note: debt ? `Abono a ${debt.name}` : 'Abono a deuda', paymentMethod: 'debito', cardId: null, isFixed: false, debtId, debtPaymentId: paymentId }]);
+    setTransactions((prev) => [...prev, { id: uid(), type: 'gasto', category: 'deudas', amount: amt, date: hoy, note: debt ? `Abono a ${debt.name}` : 'Abono a deuda', paymentMethod: 'debito', cardId: null, isFixed: false, debtId, debtPaymentId: paymentId }]);
     setPaymentInputs((prev) => ({ ...prev, [debtId]: '' }));
+    setBalanceInputs((prev) => ({ ...prev, [debtId]: '' }));
   }
 
   function handleAddGoal(e) {
@@ -734,8 +806,7 @@ export function FinanceProvider({ children }) {
     try {
       // import() dinámico: ExcelJS solo se descarga cuando de verdad se usa.
       const { exportToExcel } = await import('../lib/exportExcel.js');
-      await exportToExcel({ transactions, debts, savingsGoals, creditCards, fixedExpenses,
-                            customCategories, categoryLabels, monthStartDay });
+      await exportToExcel(snapshot());
       setExporting('');
     } catch (err) {
       setExporting(err.message || 'No se pudo generar el archivo.');
@@ -751,18 +822,156 @@ export function FinanceProvider({ children }) {
     setFixedExpenses([]);
     setCustomCategories([]);
     setCategoryLabels({});
-    setMonthStartDay(1);
   }
+
+  /* ---------- Buckets: metas y colchones ---------- */
+
+  function handleAddBucket(e) {
+    e.preventDefault();
+    if (!bucketForm.name.trim()) return;
+    setBuckets((prev) => [...prev, {
+      id: uid(),
+      name: bucketForm.name.trim(),
+      kind: bucketForm.kind === 'colchon' ? 'colchon' : 'meta',
+      liquid: !!bucketForm.liquid,
+      monthlyAmount: parseFloat(bucketForm.monthlyAmount) || 0,
+      /* Un colchón no tiene objetivo: es margen, no una meta a la que llegar. */
+      targetAmount: bucketForm.kind === 'meta' ? (parseFloat(bucketForm.targetAmount) || null) : null,
+      targetDate: bucketForm.kind === 'meta' ? (bucketForm.targetDate || null) : null,
+      contributions: [],
+    }]);
+    setBucketForm({ name: '', kind: 'meta', liquid: true, monthlyAmount: '', targetAmount: '', targetDate: '' });
+    setShowBucketForm(false);
+  }
+
+  function handleDeleteBucket(id) {
+    const b = buckets.find((x) => x.id === id);
+    if (!window.confirm(`¿Eliminar "${b ? b.name : ''}" y todos sus aportes?`)) return;
+    setBuckets((prev) => prev.filter((x) => x.id !== id));
+  }
+
+  /*
+   * Un retiro es un aporte negativo, no una tabla aparte: es el mismo hecho
+   * —plata que entra o sale del bucket— y separarlos obligaría a sumar dos
+   * listas para saber cuánto hay.
+   */
+  function handleBucketMovement(bucketId, sign) {
+    const amt = parseFloat(bucketInputs[bucketId]);
+    if (!amt || amt <= 0) return;
+    const hoy = todayStr();
+    setBuckets((prev) => prev.map((b) => (b.id === bucketId
+      ? { ...b, contributions: [...(b.contributions || []),
+          { id: uid(), amount: amt * sign, date: hoy, month: monthKeyFromDate(hoy) }] }
+      : b)));
+    setBucketInputs((prev) => ({ ...prev, [bucketId]: '' }));
+  }
+
+  /*
+   * Marcar (o desmarcar) un cobro.
+   *
+   * Solo se guarda lo YA cobrado: lo pendiente se deduce del reparto. Por eso
+   * desmarcar es borrar la fila, no ponerle un `false` — así no hay que generar
+   * cinco filas cada mes ni salir a limpiarlas si entra alguien nuevo.
+   */
+  function handleToggleCollection(shareId) {
+    const ya = collections.find((c) => c.month === selectedMonth && c.shareId === shareId);
+    if (ya) setCollections((prev) => prev.filter((c) => c.id !== ya.id));
+    else setCollections((prev) => [...prev,
+      { id: uid(), month: selectedMonth, shareId, collectedAt: todayStr() }]);
+  }
+
+  /*
+   * El mes: plan contra realidad. Todo el cálculo vive en lib/month.js, que es
+   * puro y está probado; aquí solo se le pasa el estado y el mes elegido.
+   */
+  const monthReport = useMemo(() => monthSummary(snapshot(), selectedMonth), [snapshot, selectedMonth]);
+
+  /*
+   * Lo que la tarjeta de crédito aplaza.
+   *
+   * No hace falta una pantalla para navegar los movimientos de la tarjeta —eso
+   * es un filtro—. Lo que no se puede ver de otra forma son dos cosas: qué va a
+   * llegar en la próxima factura, y cuánta plata está ya comprometida en cuotas
+   * que todavía no se han cobrado. Eso segundo es justo lo que uno cree tener
+   * libre y no tiene.
+   */
+  const cardOutlook = useMemo(() => {
+    const statements = creditCards
+      .map((card) => ({ card, next: nextStatement(buildCardStatements(transactions, card)) }))
+      .filter((c) => c.next);
+    const groups = activeInstallmentGroups(transactions);
+    return {
+      statements,
+      dueNext: statements.reduce((s, c) => s + c.next.total, 0),
+      groups,
+      committed: groups.reduce((s, g) => s + g.monthly * g.remaining, 0),
+    };
+  }, [creditCards, transactions]);
+
+  /*
+   * La deuda que estás atacando, corrida con y sin el abono extra del plan.
+   *
+   * El número que motiva no es el saldo: es cuántos meses y cuántos intereses
+   * te ahorras por mandarle lo que te sobra. Sin comparar contra pagar solo la
+   * cuota, "abonar de más" es un acto de fe.
+   */
+  const debtOutlook = useMemo(() => {
+    const estado = snapshot();
+    const deuda = targetDebt(estado);
+    if (!deuda) return null;
+
+    const extra = Math.max(0, monthReport.plan.availableForExtra);
+    const principal = deuda.currentBalance != null
+      ? deuda.currentBalance
+      /* Sin saldo reportado por el banco, se deduce de lo abonado. */
+      : Math.max(0, (Number(deuda.totalAmount) || 0)
+        - (deuda.payments || []).reduce((a, p) => a + (Number(p.amount) || 0), 0));
+
+    return {
+      debt: deuda,
+      extra,
+      ...comparePlans({
+        principal,
+        monthlyRate: monthlyRateOf(deuda),
+        minimumPayment: Number(deuda.fixedPayment) || 0,
+        extra,
+      }),
+    };
+  }, [snapshot, monthReport]);
+
+  /* "¿Y si le bajo al colchón?" — lo que se muestra ANTES de mover un número. */
+  const simulate = useCallback(
+    (cambios) => simulatePlanChange(snapshot(), cambios, selectedMonth),
+    [snapshot, selectedMonth],
+  );
 
   const value = {
     activeTab,
+    debtOutlook,
+    simulatePlan: simulate,
+    balanceInputs,
+    bucketForm,
+    bucketInputs,
+    cardOutlook,
+    handleAddBucket,
+    handleBucketMovement,
+    handleDeleteBucket,
+    handleToggleCollection,
+    monthReport,
+    setBalanceInputs,
+    setBucketForm,
+    setBucketInputs,
+    setShowBucketForm,
+    showBucketForm,
     allExpenseCategories,
     allIncomeCategories,
     availableMonths,
     cardForm,
     cardLabel,
+    buckets,
     cashBalance,
     categoryLabels,
+    collections,
     configTab,
     contributionInputs,
     creditCards,
@@ -780,6 +989,9 @@ export function FinanceProvider({ children }) {
     fixedExpenses,
     fixedForm,
     getInstallmentGroup,
+    incomeSources,
+    monthlyPlans,
+    people,
     goalForm,
     handleAddCard,
     handleAddCustomCategory,
@@ -814,7 +1026,6 @@ export function FinanceProvider({ children }) {
     offline,
     pendingChanges,
     loading,
-    monthStartDay,
     monthlyIncomeExpense,
     monthsWindow,
     futureMonths,
@@ -852,7 +1063,6 @@ export function FinanceProvider({ children }) {
     setFixedForm,
     setGoalForm,
     setLoading,
-    setMonthStartDay,
     setNewCatGasto,
     setNewCatIngreso,
     setPaymentInputs,
