@@ -83,19 +83,22 @@ begin
   --
   -- Mantenimiento Moto NO está aquí a propósito: es un colchón (punto 5).
   -- ===========================================================================
-  insert into public.fixed_expenses (user_id, id, name, category, amount, total_amount) values
-    (uid, 'fix-hbo',         'HBO Max',      'entretenimiento',   8300,  12450),
-    (uid, 'fix-spotify',     'Spotify',      'entretenimiento',   6100,  30500),
-    (uid, 'fix-icloud',      'iCloud',       'servicios',        11300,  11300),
-    (uid, 'fix-disney',      'Disney+',      'entretenimiento',  12000,  12000),
-    (uid, 'fix-celular',     'Plan Celular', 'servicios',        53900,  53900),
-    (uid, 'fix-motilada',    'Corte de cabello', 'otros_gasto',  40000,  40000),
-    (uid, 'fix-aporte-casa', 'Aporte Casa',  'vivienda',        300000, 300000),
-    (uid, 'fix-gimnasio',    'Gimnasio',     'salud',           103400, 103400),
-    (uid, 'fix-gasolina',    'Gasolina',     'transporte',      160000, 160000)
+  insert into public.fixed_expenses
+    (user_id, id, name, category, amount, total_amount, payment_method) values
+    (uid, 'fix-hbo',         'HBO Max',      'entretenimiento',   8300,  12450, 'debito'),
+    (uid, 'fix-spotify',     'Spotify',      'entretenimiento',   6100,  30500, 'debito'),
+    (uid, 'fix-icloud',      'iCloud',       'servicios',        11300,  11300, 'debito'),
+    (uid, 'fix-disney',      'Disney+',      'entretenimiento',  12000,  12000, 'debito'),
+    (uid, 'fix-celular',     'Plan Celular', 'servicios',        53900,  53900, 'debito'),
+    (uid, 'fix-motilada',    'Corte de cabello', 'otros_gasto',  40000,  40000, 'debito'),
+    (uid, 'fix-aporte-casa', 'Aporte Casa',  'vivienda',        300000, 300000, 'debito'),
+    (uid, 'fix-gimnasio',    'Gimnasio',     'salud',           103400, 103400, 'debito'),
+    (uid, 'fix-gasolina',    'Gasolina',     'transporte',      160000, 160000, 'debito'),
+    (uid, 'fix-cuota-manejo','Cuota de manejo tarjeta', 'servicios', 51000, 51000, 'debito')
   on conflict (user_id, id) do update
     set name = excluded.name, category = excluded.category,
-        amount = excluded.amount, total_amount = excluded.total_amount;
+        amount = excluded.amount, total_amount = excluded.total_amount,
+        payment_method = excluded.payment_method;
 
   -- ===========================================================================
   -- 4. El reparto
@@ -180,20 +183,20 @@ begin
   -- como cerrados y ya no se recalculan.
   --
   --   3.600.000  ingresos
-  --   −  695.000  gastos fijos (tu parte)
+  --   −  746.000  gastos fijos (tu parte, cuota de manejo incluida)
   --   −  446.413  cuota de la deuda
   --   −  426.000  metas (los dos ahorros + cooperativa)
   --   −  830.000  gasto variable estimado
-  --   = 1.202.587  excedente bruto
+  --   = 1.151.587  excedente bruto
   --   −  465.000  colchones (gatos + moto + seguridad)
-  --   =  737.587  disponible para abonarle de más a la deuda
+  --   =  686.587  disponible para abonarle de más a la deuda
   -- ===========================================================================
   insert into public.monthly_plans (
     user_id, month, expected_income, fixed_expenses, debt_payment,
     savings, variable_estimate, cushion, locked
   ) values (
     uid, to_char(current_date, 'YYYY-MM'),
-    3600000, 695000, 446413, 426000, 830000, 465000, false
+    3600000, 746000, 446413, 426000, 830000, 465000, false
   )
   on conflict (user_id, month) do update
     set expected_income   = excluded.expected_income,
