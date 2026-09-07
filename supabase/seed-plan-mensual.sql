@@ -14,11 +14,11 @@
 do $$
 declare
   /*
-   * Déjalo vacío si tu proyecto de Supabase tiene un solo usuario: el script lo
-   * encuentra solo. Si tienes varios, pon aquí el correo con el que entras a
-   * AlDía — que no es necesariamente el mismo del dashboard de Supabase.
+   * La cuenta con la que entras a AlDía, que no es la misma con la que entras
+   * al dashboard de Supabase. Si algún día queda una sola cuenta en el
+   * proyecto, se puede dejar vacío y el script la encuentra solo.
    */
-  correo   text := '';
+  correo   text := 'camilo.zapatao2000@gmail.com';
   uid      uuid;
   usuarios int;
   deudas   int;
@@ -215,7 +215,11 @@ end $$;
 -- estar ahí —"Mantenimiento Moto", "Cooperativa", "Colchón"— es un dato viejo
 -- del modelo anterior y lo puedes borrar desde la app.
 -- =============================================================================
-with uid as (select current_setting('aldia.uid')::uuid as id)
+/*
+ * El usuario que resolvió el bloque de arriba. Con `true`, si este informe se
+ * corre suelto devuelve vacío en vez de un error que no explica nada.
+ */
+with uid as (select current_setting('aldia.uid', true)::uuid as id)
 select 'personas' as que, name as detalle, null::numeric as valor
   from public.people where user_id = (select id from uid)
 union all
