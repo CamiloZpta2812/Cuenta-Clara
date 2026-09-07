@@ -11,13 +11,6 @@
 -- gasto fijo, que en este modelo es un colchón).
 -- =============================================================================
 
-/*
- * Aquí queda el usuario que resolvió el bloque de abajo, para que el informe
- * del final no tenga que volver a averiguarlo. Antes el correo había que
- * escribirlo en dos sitios, y escribirlo en uno solo dejaba el informe vacío.
- */
-create temp table if not exists seed_uid (id uuid);
-
 do $$
 declare
   /*
@@ -47,8 +40,15 @@ begin
       usuarios, (select string_agg(email, ', ' order by email) from auth.users);
   end if;
 
-  delete from seed_uid;
-  insert into seed_uid (id) values (uid);
+  /*
+   * El usuario resuelto queda guardado en la sesión para que el informe del
+   * final no tenga que volver a averiguarlo. Antes el correo había que
+   * escribirlo en dos sitios, y escribirlo en uno solo dejaba el informe vacío.
+   *
+   * Es un ajuste de sesión, no una tabla: no crea nada en la base, se borra al
+   * cerrar la conexión y nadie más lo ve.
+   */
+  perform set_config('aldia.uid', uid::text, false);
 
   -- ===========================================================================
   -- 1. Las personas a las que les cobras
@@ -215,7 +215,7 @@ end $$;
 -- estar ahí —"Mantenimiento Moto", "Cooperativa", "Colchón"— es un dato viejo
 -- del modelo anterior y lo puedes borrar desde la app.
 -- =============================================================================
-with uid as (select id from seed_uid)
+with uid as (select current_setting('aldia.uid')::uuid as id)
 select 'personas' as que, name as detalle, null::numeric as valor
   from public.people where user_id = (select id from uid)
 union all
