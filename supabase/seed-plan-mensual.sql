@@ -89,7 +89,7 @@ begin
     (uid, 'fix-icloud',      'iCloud',       'servicios',        11300,  11300),
     (uid, 'fix-disney',      'Disney+',      'entretenimiento',  12000,  12000),
     (uid, 'fix-celular',     'Plan Celular', 'servicios',        53900,  53900),
-    (uid, 'fix-motilada',    'Motilada',     'otros_gasto',      40000,  40000),
+    (uid, 'fix-motilada',    'Corte de cabello', 'otros_gasto',  40000,  40000),
     (uid, 'fix-aporte-casa', 'Aporte Casa',  'vivienda',        300000, 300000),
     (uid, 'fix-gimnasio',    'Gimnasio',     'salud',           103400, 103400),
     (uid, 'fix-gasolina',    'Gasolina',     'transporte',      160000, 160000)
