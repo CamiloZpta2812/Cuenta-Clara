@@ -87,7 +87,12 @@ export function monthPlan(estado, month) {
    */
   if (guardado && guardado.locked) return frozenPlan(guardado);
 
-  const fuentes = estado.incomeSources || [];
+  /*
+   * Una fuente inactiva es una que dejaste de recibir —se acabó el contrato,
+   * saliste del club— y no se borra para no perder el historial. Contarla
+   * infla el plan con plata que no va a entrar.
+   */
+  const fuentes = (estado.incomeSources || []).filter((f) => f.active !== false);
   const fijos = estado.fixedExpenses || [];
   const buckets = estado.buckets || [];
   const debts = estado.debts || [];

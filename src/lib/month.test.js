@@ -403,3 +403,12 @@ test('sacar plata del colchón de la moto para un arreglo deja el aporte en cero
   };
   assert.equal(monthActual(conArreglo, MES).cushion, 0);
 });
+
+test('una fuente de ingreso inactiva no se cuenta en el plan', () => {
+  const sinClub = {
+    ...estado,
+    incomeSources: estado.incomeSources.map((f) => (f.id === 'i2' ? { ...f, active: false } : f)),
+  };
+  assert.equal(monthPlan(sinClub, MES).income, 3_400_000, 'solo el salario');
+  assert.equal(monthPlan(estado, MES).income, 3_600_000, 'sin la marca, sigue contando');
+});
