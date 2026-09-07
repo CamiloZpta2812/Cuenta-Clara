@@ -19,7 +19,12 @@ import { monthSummary } from '../lib/month.js';
  * deriva de eso y las acciones que lo modifican. Las vistas lo consumen con
  * useFinance() en vez de recibir treinta props cada una.
  */
-const FinanceContext = createContext(null);
+/*
+ * Se exporta para el banco de pruebas de src/preview, que monta las pantallas
+ * con datos de mentira y sin Supabase. Sirve para verlas sin tener que entrar
+ * con una cuenta real, que es lo único que no se puede automatizar aquí.
+ */
+export const FinanceContext = createContext(null);
 
 export function useFinance() {
   const ctx = useContext(FinanceContext);
@@ -777,6 +782,20 @@ export function FinanceProvider({ children }) {
   }
 
   /*
+   * Marcar (o desmarcar) un cobro.
+   *
+   * Solo se guarda lo YA cobrado: lo pendiente se deduce del reparto. Por eso
+   * desmarcar es borrar la fila, no ponerle un `false` — así no hay que generar
+   * cinco filas cada mes ni salir a limpiarlas si entra alguien nuevo.
+   */
+  function handleToggleCollection(shareId) {
+    const ya = collections.find((c) => c.month === selectedMonth && c.shareId === shareId);
+    if (ya) setCollections((prev) => prev.filter((c) => c.id !== ya.id));
+    else setCollections((prev) => [...prev,
+      { id: uid(), month: selectedMonth, shareId, collectedAt: todayStr() }]);
+  }
+
+  /*
    * El mes: plan contra realidad. Todo el cálculo vive en lib/month.js, que es
    * puro y está probado; aquí solo se le pasa el estado y el mes elegido.
    */
@@ -807,6 +826,7 @@ export function FinanceProvider({ children }) {
   const value = {
     activeTab,
     cardOutlook,
+    handleToggleCollection,
     monthReport,
     allExpenseCategories,
     allIncomeCategories,
