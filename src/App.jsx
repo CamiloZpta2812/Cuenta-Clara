@@ -9,9 +9,6 @@ import Buckets from './views/Buckets';
 import Deuda from './views/Deuda';
 import Movimientos from './views/Movimientos';
 import GastosFijos from './views/GastosFijos';
-import Tarjetas from './views/Tarjetas';
-import Deudas from './views/Deudas';
-import Ahorros from './views/Ahorros';
 import Configuracion from './views/Configuracion';
 import PrintReport from './views/PrintReport';
 
@@ -23,9 +20,6 @@ const TABS = {
   resumen: Resumen,
   movimientos: Movimientos,
   gastosfijos: GastosFijos,
-  tarjetas: Tarjetas,
-  deudas: Deudas,
-  ahorros: Ahorros,
   configuracion: Configuracion,
 };
 

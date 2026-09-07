@@ -40,7 +40,8 @@ export function FinanceProvider({ children }) {
   const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
   const [pendingChanges, setPendingChanges] = useState(false);
   const [exporting, setExporting] = useState('');   // '' | 'trabajando' | mensaje de error
-  const [activeTab, setActiveTab] = useState('resumen');
+  /* Arranca en El mes: es la pregunta que la app existe para responder. */
+  const [activeTab, setActiveTab] = useState('mes');
   const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
@@ -108,6 +109,7 @@ export function FinanceProvider({ children }) {
   const [debtFormError, setDebtFormError] = useState('');
   const [paymentInputs, setPaymentInputs] = useState({});
 
+  const [balanceInputs, setBalanceInputs] = useState({});
   const [bucketInputs, setBucketInputs] = useState({});
   const [showBucketForm, setShowBucketForm] = useState(false);
   const [bucketForm, setBucketForm] = useState({
@@ -569,16 +571,50 @@ export function FinanceProvider({ children }) {
     if (!window.confirm(`¿Eliminar la deuda "${debt ? debt.name : ''}" y su historial de abonos? Los movimientos que ya generó no se borran.`)) return;
     setDebts((prev) => prev.filter((d) => d.id !== id));
   }
+  /*
+   * Registrar un abono a la deuda.
+   *
+   * Además de guardar el abono, baja el saldo. Si no lo bajara, la proyección
+   * seguiría arrancando desde el saldo del primer día para siempre: la deuda
+   * se vería igual de larga en enero que en diciembre, hubieras pagado lo que
+   * hubieras pagado.
+   */
   function handleAddPayment(debtId) {
     const amt = parseFloat(paymentInputs[debtId]);
     if (!amt || amt <= 0) return;
     const debt = debts.find((d) => d.id === debtId);
     const paymentId = uid();
-    setDebts((prev) => prev.map((d) => (d.id === debtId ? { ...d, payments: [...d.payments, { id: paymentId, amount: amt, date: todayStr() }] } : d)));
+    const hoy = todayStr();
+
+    const reportado = parseFloat(balanceInputs[debtId]);
+    const hayReportado = Number.isFinite(reportado) && reportado >= 0;
+
+    /*
+     * El saldo que queda. Si el banco te lo dice, manda ese: es la verdad, y
+     * poder cuadrar el modelo contra el extracto es justamente el punto.
+     * Si no, se modela igual que el crédito: saldo + intereses del mes − pago.
+     */
+    const previo = debt && debt.currentBalance != null ? Number(debt.currentBalance) : null;
+    let saldoNuevo = null;
+    if (hayReportado) saldoNuevo = reportado;
+    else if (previo != null) {
+      saldoNuevo = Math.max(0, previo + (previo * monthlyRateOf(debt)) - amt);
+    }
+
+    setDebts((prev) => prev.map((d) => (d.id === debtId ? {
+      ...d,
+      currentBalance: saldoNuevo != null ? saldoNuevo : d.currentBalance,
+      payments: [...d.payments, {
+        id: paymentId, amount: amt, date: hoy, month: monthKeyFromDate(hoy),
+        balanceAfter: hayReportado ? reportado : null,
+      }],
+    } : d)));
+
     // debtId/debtPaymentId enlazan el movimiento con el abono, para poder
     // deshacer los dos juntos desde Movimientos.
-    setTransactions((prev) => [...prev, { id: uid(), type: 'gasto', category: 'deudas', amount: amt, date: todayStr(), note: debt ? `Abono a ${debt.name}` : 'Abono a deuda', paymentMethod: 'debito', cardId: null, isFixed: false, debtId, debtPaymentId: paymentId }]);
+    setTransactions((prev) => [...prev, { id: uid(), type: 'gasto', category: 'deudas', amount: amt, date: hoy, note: debt ? `Abono a ${debt.name}` : 'Abono a deuda', paymentMethod: 'debito', cardId: null, isFixed: false, debtId, debtPaymentId: paymentId }]);
     setPaymentInputs((prev) => ({ ...prev, [debtId]: '' }));
+    setBalanceInputs((prev) => ({ ...prev, [debtId]: '' }));
   }
 
   function handleAddGoal(e) {
@@ -913,6 +949,7 @@ export function FinanceProvider({ children }) {
     activeTab,
     debtOutlook,
     simulatePlan: simulate,
+    balanceInputs,
     bucketForm,
     bucketInputs,
     cardOutlook,
@@ -921,6 +958,7 @@ export function FinanceProvider({ children }) {
     handleDeleteBucket,
     handleToggleCollection,
     monthReport,
+    setBalanceInputs,
     setBucketForm,
     setBucketInputs,
     setShowBucketForm,

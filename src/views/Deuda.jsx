@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import {
-  CreditCard, TrendingDown, CalendarCheck, Flame, AlertTriangle, Sparkles, ChevronDown,
+  CreditCard, TrendingDown, CalendarCheck, Flame, AlertTriangle, Sparkles, ChevronDown, Plus,
 } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
-import { addMonths, currentMonthKey, monthLabel } from '../lib/dates.js';
+import { addMonths, currentMonthKey, monthKeyFromDate, monthLabel } from '../lib/dates.js';
 import { fmtCOP } from '../lib/money.js';
 import StatCard from '../components/StatCard';
 import EmptyState from '../components/EmptyState';
@@ -36,7 +36,10 @@ function mesesATexto(n) {
 }
 
 export default function Deuda() {
-  const { debtOutlook, simulatePlan } = useFinance();
+  const {
+    debtOutlook, simulatePlan,
+    paymentInputs, setPaymentInputs, balanceInputs, setBalanceInputs, handleAddPayment,
+  } = useFinance();
   const [ajustes, setAjustes] = useState({});
   const [verTabla, setVerTabla] = useState(false);
 
@@ -63,8 +66,21 @@ export default function Deuda() {
   );
   const sim = Object.keys(cambios).length > 0 ? simulatePlan(cambios) : null;
 
+  /*
+   * En qué mes cae la PRIMERA cuota que falta.
+   *
+   * Casi siempre este mes. Pero si ya registraste el abono de este mes, la
+   * proyección empieza el siguiente: si no, la tabla vuelve a cobrarte una
+   * cuota que ya pagaste y todas las fechas quedan corridas un mes.
+   */
+  const mesActual = currentMonthKey();
+  const yaPagoEsteMes = (debt.payments || [])
+    .some((p) => (p.month || monthKeyFromDate(p.date)) === mesActual);
+  const primerMes = yaPagoEsteMes ? addMonths(mesActual, 1) : mesActual;
+
+  /* La última cuota va en el offset months - 1: la primera es el offset 0. */
   const fin = withExtra.feasible
-    ? monthLabel(addMonths(currentMonthKey(), withExtra.months))
+    ? monthLabel(addMonths(primerMes, withExtra.months - 1))
     : null;
 
   return (
@@ -87,6 +103,7 @@ export default function Deuda() {
             </div>
             <p className="cc-page-sub" style={{ marginTop: 8 }}>
               Última cuota en {fin}. Pagarías {fmtCOP(withExtra.totalInterest)} de intereses.
+              {yaPagoEsteMes && ' La cuenta arranca el mes entrante: la de este mes ya la registraste.'}
             </p>
           </>
         ) : (
@@ -123,6 +140,50 @@ export default function Deuda() {
           />
         </div>
       )}
+
+      {/* --------------------------------------------------- registrar abono */}
+      <div className="cc-card" style={{ marginTop: 14 }}>
+        <p className="cc-chart-title">Registrar un pago</p>
+        <p className="cc-page-sub">
+          Anota la cuota y el abono extra juntos, como salieron de tu cuenta. El saldo
+          baja solo y queda un movimiento enlazado, para poder deshacer los dos a la vez.
+        </p>
+        <div className="cc-form" style={{ marginTop: 4 }}>
+          <div className="cc-field">
+            <label>Cuánto pagaste</label>
+            <input
+              className="cc-input" type="number" min="0" step="any"
+              placeholder={String(Math.round((Number(debt.fixedPayment) || 0) + extra))}
+              value={paymentInputs[debt.id] || ''}
+              onChange={(e) => setPaymentInputs((p) => ({ ...p, [debt.id]: e.target.value }))}
+            />
+            <span className="cc-stat-sub" style={{ fontSize: 11 }}>
+              Cuota de {fmtCOP(debt.fixedPayment)}
+              {extra > 0 && ` + ${fmtCOP(extra)} de abono extra`}
+            </span>
+          </div>
+          <div className="cc-field">
+            <label>Saldo que quedó, según el banco (opcional)</label>
+            <input
+              className="cc-input" type="number" min="0" step="any" placeholder="Déjalo vacío si no lo tienes"
+              value={balanceInputs[debt.id] || ''}
+              onChange={(e) => setBalanceInputs((p) => ({ ...p, [debt.id]: e.target.value }))}
+            />
+            <span className="cc-stat-sub" style={{ fontSize: 11 }}>
+              Si lo pones, manda ese: es la verdad, y sirve para cuadrar el modelo contra
+              el extracto. Si lo dejas vacío, el saldo se calcula.
+            </span>
+          </div>
+          <div className="cc-form-actions">
+            <button
+              type="button" className="cc-btn cc-btn-primary"
+              onClick={() => handleAddPayment(debt.id)}
+            >
+              <Plus size={15} /> Registrar pago
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* ------------------------------------------------------- simulador */}
       <div className="cc-card" style={{ marginTop: 14 }}>
@@ -222,7 +283,7 @@ export default function Deuda() {
             {(verTabla ? withExtra.schedule : withExtra.schedule.slice(0, 3)).map((f) => (
               <div key={f.month} className="cc-plan-row">
                 <span className="cc-plan-concept">
-                  {monthLabel(addMonths(currentMonthKey(), f.month - 1))}
+                  {monthLabel(addMonths(primerMes, f.month - 1))}
                 </span>
                 <span className="cc-mono" style={{ color: COLORS.expense }}>
                   {fmtCOP(f.interest)}
