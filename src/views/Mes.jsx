@@ -18,28 +18,50 @@ import { useFinance } from '../state/financeStore';
  * Todo el cálculo viene de lib/month.js. Aquí no se hace ni una resta.
  */
 
-/* Las líneas de la cascada, en el orden en que se restan. */
+/*
+ * Las líneas de la cascada, en el orden en que se restan.
+ *
+ * `clase` dice cómo hay que leer un desvío, que no es lo mismo en todas:
+ *
+ *   rendimiento  la línea mide cómo te fue. Ingresar más es bueno, gastar de
+ *                más es malo, y el color lo dice.
+ *
+ *   compromiso   la línea es plata que YA prometiste y que va a salir sí o sí.
+ *                Quedarte corto no es un logro: es que todavía no ha salido, o
+ *                no la registraste. Decirle "ahorraste" a eso sería mentir —
+ *                justo el error que hacía que la app vieja se sintiera bien
+ *                mientras el mes se desarmaba.
+ */
 const LINEAS = [
-  { key: 'income',        label: 'Ingresos',            Icon: TrendingUp },
-  { key: 'fixedExpenses', label: 'Gastos fijos',        Icon: Landmark },
-  { key: 'debtPayment',   label: 'Cuota de la deuda',   Icon: CreditCard },
-  { key: 'savings',       label: 'Metas de ahorro',     Icon: PiggyBank },
-  { key: 'variable',      label: 'Gasto variable',      Icon: ShoppingBag },
-  { key: 'cushion',       label: 'Colchones',           Icon: Shield },
+  { key: 'income',        label: 'Ingresos',          Icon: TrendingUp,  clase: 'rendimiento', masEsMejor: true },
+  { key: 'fixedExpenses', label: 'Gastos fijos',      Icon: Landmark,    clase: 'compromiso' },
+  { key: 'debtPayment',   label: 'Cuota de la deuda', Icon: CreditCard,  clase: 'compromiso' },
+  { key: 'savings',       label: 'Metas de ahorro',   Icon: PiggyBank,   clase: 'compromiso' },
+  { key: 'variable',      label: 'Gasto variable',    Icon: ShoppingBag, clase: 'rendimiento', masEsMejor: false },
+  { key: 'cushion',       label: 'Colchones',         Icon: Shield,      clase: 'compromiso' },
 ];
 
 /*
- * Un desvío no es bueno ni malo por su signo: gastar de menos es bueno, ingresar
- * de menos es malo. Por eso cada línea dice hacia dónde le conviene desviarse.
+ * Cómo se lee un desvío. Devuelve el texto y el color, juntos, porque decidir
+ * el color sin el texto es lo que producía "$-376.000" en verde para "ahorraste
+ * 376.000 menos de lo que dijiste".
  */
-function tono(key, desvio) {
-  if (Math.abs(desvio) < 1) return 'neutro';
-  const masEsMejor = key === 'income';
-  const bueno = masEsMejor ? desvio > 0 : desvio < 0;
-  return bueno ? 'bien' : 'mal';
-}
+function leerDesvio(linea, desvio) {
+  if (Math.abs(desvio) < 1) return { texto: 'Al día', color: COLORS.inkSoft };
 
-const COLOR_TONO = { bien: COLORS.income, mal: COLORS.expense, neutro: COLORS.inkSoft };
+  if (linea.clase === 'compromiso') {
+    return desvio < 0
+      // Falta que salga: ni bueno ni malo todavía, solo pendiente.
+      ? { texto: `Faltan ${fmtCOP(-desvio)}`, color: COLORS.inkSoft }
+      : { texto: `${fmtCOP(desvio)} de más`, color: COLORS.expense };
+  }
+
+  const bueno = linea.masEsMejor ? desvio > 0 : desvio < 0;
+  return {
+    texto: `${desvio > 0 ? '+' : ''}${fmtCOP(desvio)}`,
+    color: bueno ? COLORS.income : COLORS.expense,
+  };
+}
 
 export default function Mes() {
   const {
@@ -131,28 +153,29 @@ export default function Mes() {
       <div className="cc-card" style={{ marginTop: 14 }}>
         <p className="cc-chart-title">Plan contra realidad</p>
         <div className="cc-commit-list">
-          {LINEAS.map(({ key, label, Icon }) => {
-            const desvio = deviations[key] || 0;
-            const t = tono(key, desvio);
+          <div className="cc-plan-row cc-plan-head">
+            <span>Concepto</span>
+            <span>Planeado</span>
+            <span>Vas</span>
+            <span>Diferencia</span>
+          </div>
+          {LINEAS.map((linea) => {
+            const { key, label, Icon } = linea;
+            const d = leerDesvio(linea, deviations[key] || 0);
             return (
-              <div key={key} className="cc-commit-row">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Icon size={14} /> {label}
-                </span>
-                <span className="cc-mono" style={{ opacity: 0.7 }}>
-                  {fmtCOP(plan[key] || 0)}
-                </span>
+              <div key={key} className="cc-plan-row">
+                <span className="cc-plan-concept"><Icon size={14} /> {label}</span>
+                <span className="cc-mono" style={{ opacity: 0.65 }}>{fmtCOP(plan[key] || 0)}</span>
                 <span className="cc-mono">{fmtCOP(real[key] || 0)}</span>
-                <span className="cc-mono" style={{ color: COLOR_TONO[t] }}>
-                  {desvio === 0 ? '—' : `${desvio > 0 ? '+' : ''}${fmtCOP(desvio)}`}
-                </span>
+                <span className="cc-mono" style={{ color: d.color }}>{d.texto}</span>
               </div>
             );
           })}
         </div>
         <p className="cc-page-sub" style={{ marginTop: 10 }}>
-          Planeado · lo que llevas · la diferencia. Un desvío en verde te deja más plata
-          para la deuda; uno en rojo te la quita.
+          Los gastos fijos, la cuota, el ahorro y los colchones son plata ya comprometida:
+          quedarte corto ahí no es que hayas ahorrado, es que todavía no ha salido. Solo
+          los ingresos y el gasto variable se pintan como algo que te fue bien o mal.
         </p>
       </div>
 
@@ -160,29 +183,29 @@ export default function Mes() {
       <div className="cc-card" style={{ marginTop: 14 }}>
         <p className="cc-chart-title">Lo que sale de tu cuenta</p>
         <div className="cc-commit-list">
-          <div className="cc-commit-row">
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="cc-plan-row" style={{ gridTemplateColumns: '1fr 132px' }}>
+            <span className="cc-plan-concept">
               <ShoppingBag size={14} /> Gastaste este mes
             </span>
             <span className="cc-mono">{fmtCOP(real.fixedExpenses + real.variable)}</span>
           </div>
-          <div className="cc-commit-row">
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="cc-plan-row" style={{ gridTemplateColumns: '1fr 132px' }}>
+            <span className="cc-plan-concept">
               <Wallet size={14} /> Salió de la cuenta
             </span>
             <span className="cc-mono">{fmtCOP(salidas.total)}</span>
           </div>
           {salidas.conTarjeta > 0 && (
-            <div className="cc-commit-row">
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="cc-plan-row" style={{ gridTemplateColumns: '1fr 132px' }}>
+              <span className="cc-plan-concept">
                 <CreditCard size={14} /> De eso, factura de tarjeta
               </span>
               <span className="cc-mono">{fmtCOP(salidas.conTarjeta)}</span>
             </div>
           )}
           {cardOutlook.committed > 0 && (
-            <div className="cc-commit-row">
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="cc-plan-row" style={{ gridTemplateColumns: '1fr 132px' }}>
+              <span className="cc-plan-concept">
                 <CreditCard size={14} /> Comprometido en cuotas
               </span>
               <span className="cc-mono" style={{ color: COLORS.debt }}>
@@ -211,8 +234,8 @@ export default function Mes() {
           <>
             <div className="cc-commit-list">
               {collections.map((c) => (
-                <div key={c.shareId} className="cc-commit-row">
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div key={c.shareId} className="cc-plan-row" style={{ gridTemplateColumns: '1fr 96px 88px' }}>
+                  <span className="cc-plan-concept">
                     {c.collected
                       ? <Check size={14} color={COLORS.income} />
                       : <HandCoins size={14} />}

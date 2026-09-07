@@ -196,6 +196,28 @@ export const STYLES = `
 .cc-commit-detail { color: var(--ink-soft); flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .cc-commit-total { font-weight: 600; margin-left: auto; flex-shrink: 0; }
 
+/*
+ * La cascada del mes: concepto, planeado, lo que va y la diferencia. Columnas
+ * fijas para que las cifras queden alineadas entre filas — leerlas en columna
+ * es justo el punto de la pantalla.
+ */
+.cc-plan-row {
+  display: grid; grid-template-columns: 1fr 108px 108px 132px;
+  align-items: baseline; gap: 10px; font-size: 12.5px;
+  padding: 7px 10px; background: var(--paper); border-radius: 8px;
+}
+.cc-plan-row > :not(:first-child) { text-align: right; }
+.cc-plan-head {
+  background: none; padding-top: 0; padding-bottom: 4px;
+  font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.cc-plan-concept { display: flex; align-items: center; gap: 8px; min-width: 0; }
+@media (max-width: 620px) {
+  .cc-plan-row { grid-template-columns: 1fr 84px 96px; }
+  .cc-plan-row > :nth-child(2), .cc-plan-head > :nth-child(2) { display: none; }
+}
+
 .cc-empty { text-align: center; padding: 34px 16px; color: var(--ink-soft); }
 .cc-empty svg { margin-bottom: 8px; opacity: 0.5; }
 .cc-empty p { margin: 4px 0; font-size: 13.5px; }
