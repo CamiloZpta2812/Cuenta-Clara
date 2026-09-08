@@ -566,8 +566,21 @@ export function FinanceProvider({ children }) {
       startDate: debtForm.startDate || todayStr(),
       currency: isUSD ? 'USD' : 'COP',
       exchangeRate: isUSD ? rate : null,
+      /*
+       * Los campos del modelo nuevo. Sin ellos la deuda entra invisible para
+       * el plan y para la amortización: fixedPayment es lo que el plan resta
+       * cada mes, y currentBalance de dónde arranca la proyección.
+       */
+      fixedPayment: debtForm.monthlyPayment ? parseFloat(debtForm.monthlyPayment) : 0,
+      payoffMode: 'reducir-plazo',
+      currentBalance: total,
       payments: [],
     }]);
+    setDebtForm({ name: '', totalAmount: '', interestRate: '', monthlyPayment: '', dueDay: '', startDate: todayStr(), currency: 'COP', exchangeRate: '' });
+    setShowDebtForm(false);
+  }
+  function handleCancelDebtForm() {
+    setDebtFormError('');
     setDebtForm({ name: '', totalAmount: '', interestRate: '', monthlyPayment: '', dueDay: '', startDate: todayStr(), currency: 'COP', exchangeRate: '' });
     setShowDebtForm(false);
   }
@@ -1050,6 +1063,7 @@ export function FinanceProvider({ children }) {
     cardOutlook,
     editingBucketId,
     handleAddBucket,
+    handleCancelDebtForm,
     handleBucketMovement,
     handleCancelBucketForm,
     handleEditBucket,

@@ -1,7 +1,13 @@
-import { AlertTriangle, Loader2, Plus, CloudOff, Check } from 'lucide-react';
+import { AlertTriangle, Loader2, CloudOff, Check } from 'lucide-react';
 import { STYLES } from './styles.js';
 import { FinanceProvider, useFinance } from './state/financeStore';
 import Sidebar from './components/Sidebar';
+import BotonAgregar from './components/BotonAgregar';
+import Modal from './components/Modal';
+import FormMovimiento from './components/forms/FormMovimiento';
+import FormGastoFijo from './components/forms/FormGastoFijo';
+import FormBucket from './components/forms/FormBucket';
+import FormDeuda from './components/forms/FormDeuda';
 import Resumen from './views/Resumen';
 import Mes from './views/Mes';
 import Cobros from './views/Cobros';
@@ -26,7 +32,13 @@ const TABS = {
 };
 
 function Shell() {
-  const { loading, saveError, loadError, offline, pendingChanges, activeTab, setActiveTab, handleOpenNewMovement } = useFinance();
+  const {
+    loading, saveError, loadError, offline, pendingChanges, activeTab, setActiveTab,
+    showTxForm, handleCancelTxForm, editingTxId,
+    showFixedForm, handleCancelFixedForm, editingFixedId,
+    showBucketForm, handleCancelBucketForm, editingBucketId,
+    showDebtForm, handleCancelDebtForm,
+  } = useFinance();
 
   if (loading) {
     return (
@@ -74,9 +86,38 @@ function Shell() {
           <ActiveView />
         </div>
       </div>
-      <button type="button" className="cc-fab" onClick={handleOpenNewMovement} aria-label="Nuevo movimiento">
-        <Plus size={26} strokeWidth={2.5} />
-      </button>
+      <BotonAgregar />
+
+      {/*
+        * Las ventanas viven en el shell y no en cada pantalla: así se pueden
+        * abrir desde el botón de agregar estés donde estés, sin tener que
+        * navegar primero a la pestaña que las contenía.
+        */}
+      <Modal
+        open={showTxForm} onClose={handleCancelTxForm}
+        title={editingTxId ? 'Editar movimiento' : 'Nuevo movimiento'}
+      >
+        <FormMovimiento />
+      </Modal>
+
+      <Modal
+        open={showFixedForm} onClose={handleCancelFixedForm}
+        title={editingFixedId ? 'Editar gasto fijo' : 'Nuevo gasto fijo'}
+      >
+        <FormGastoFijo />
+      </Modal>
+
+      <Modal
+        open={showBucketForm} onClose={handleCancelBucketForm}
+        title={editingBucketId ? 'Editar meta o colchón' : 'Nueva meta o colchón'}
+      >
+        <FormBucket />
+      </Modal>
+
+      <Modal open={showDebtForm} onClose={handleCancelDebtForm} title="Nueva deuda">
+        <FormDeuda />
+      </Modal>
+
       <PrintReport />
     </>
   );

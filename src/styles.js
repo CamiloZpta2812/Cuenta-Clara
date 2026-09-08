@@ -308,6 +308,24 @@ export const STYLES = `
   .cc-mov-acciones { grid-column: 1 / -1; justify-content: flex-end; }
 }
 
+/*
+ * Una fila de cobro: concepto, monto y el botón de marcar. En el celular no
+ * caben tres columnas —el botón terminaba encima del nombre—, así que el botón
+ * se baja a su propia línea y queda a lo ancho, que además es más fácil de dar.
+ */
+.cc-cobro-row {
+  display: grid; grid-template-columns: 1fr 104px 132px;
+  align-items: center; gap: 10px;
+  padding: 9px 12px; background: var(--paper); border-radius: 9px;
+}
+.cc-cobro-row > :nth-child(2) { text-align: right; }
+.cc-cobro-row > :last-child { justify-self: end; }
+@media (max-width: 560px) {
+  .cc-cobro-row { grid-template-columns: 1fr auto; row-gap: 8px; }
+  .cc-cobro-row > :last-child { grid-column: 1 / -1; justify-self: stretch; }
+  .cc-cobro-row > :last-child > .cc-btn { width: 100%; justify-content: center; }
+}
+
 .cc-fixed-list { display: flex; flex-direction: column; gap: 10px; }
 .cc-fixed-card {
   display: grid; grid-template-columns: auto 1fr auto auto;
@@ -343,7 +361,17 @@ export const STYLES = `
 
 @media (max-width: 860px) {
   .cc-app { flex-direction: column; }
-  .cc-sidebar { width: 100%; min-height: auto; flex-direction: column; align-items: stretch; border-right: none; border-bottom: 1px solid var(--paper-line); padding: 12px 14px; gap: 10px; }
+  /*
+   * En el celular la barra deja de ser blanca: con el fondo crema del papel
+   * detrás, ese blanco translúcido se leía como un marco flotando encima del
+   * logo. Respeta la muesca para no quedar debajo de la hora y la batería.
+   */
+  .cc-sidebar {
+    width: 100%; min-height: auto; flex-direction: column; align-items: stretch;
+    background: transparent; border-right: none;
+    border-bottom: 1px solid var(--paper-line);
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px; gap: 10px;
+  }
   .cc-brand { display: flex; align-items: center; text-align: left; padding: 0 2px; }
   .cc-brand-sub { display: none; }
   .cc-nav { flex-direction: row; flex: none; overflow-x: auto; gap: 2px; }
@@ -357,11 +385,57 @@ export const STYLES = `
   .cc-input, .cc-select { min-width: 0; max-width: 100%; }
 }
 
+/* ------------------------------------------------------- ventana flotante */
+.cc-modal-fondo {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(46, 43, 39, 0.42);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px; overflow-y: auto;
+}
+.cc-modal {
+  background: #fff; border-radius: 16px; width: 100%; max-width: 560px;
+  max-height: calc(100vh - 40px); display: flex; flex-direction: column;
+  box-shadow: 0 18px 50px rgba(0,0,0,.22);
+}
+.cc-modal-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 16px 18px; border-bottom: 1px solid var(--line);
+}
+.cc-modal-titulo { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 16px; }
+.cc-modal-cuerpo { padding: 16px 18px 20px; overflow-y: auto; }
+/* Dentro de la ventana el formulario ya no necesita su propio marco. */
+.cc-modal-cuerpo .cc-form { background: none; border: 0; padding: 0; margin: 0; }
+
+@media (max-width: 560px) {
+  .cc-modal-fondo { padding: 0; align-items: flex-end; }
+  .cc-modal {
+    max-width: none; border-radius: 16px 16px 0 0;
+    max-height: 92vh;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* ------------------------------------------------- el botón y su desplegable */
+.cc-fab-wrap {
+  position: fixed; z-index: 45;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px)); right: 20px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+}
+.cc-fab-menu { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.cc-fab-item {
+  display: flex; align-items: center; gap: 9px; cursor: pointer;
+  padding: 9px 14px; border-radius: 999px; border: 1px solid var(--line);
+  background: #fff; color: var(--ink); font-size: 13px; font-weight: 500;
+  font-family: 'Poppins', sans-serif; white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0,0,0,.12);
+}
+.cc-fab-item.destacado { font-weight: 700; }
+.cc-fab-scrim { position: fixed; inset: 0; z-index: 44; background: rgba(46,43,39,.28); }
+
 .cc-fab {
-  position: fixed; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); right: 20px;
   width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer;
   background: var(--brand, #BB4B34); color: #fff; display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 6px 16px rgba(187,75,52,0.4); z-index: 40; transition: transform 0.15s ease;
+  box-shadow: 0 6px 16px rgba(187,75,52,0.4); transition: transform 0.15s ease;
 }
 .cc-fab:hover { transform: scale(1.06); }
 .cc-fab:active { transform: scale(0.96); }
