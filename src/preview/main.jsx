@@ -19,9 +19,10 @@ const PANTALLAS = { Mes, Cobros, Buckets, Deuda, Resumen, GastosFijos, Movimient
 
 function Preview() {
   const [cual, setCual] = useState('Mes');
+  const [deuda, setDeuda] = useState(null);
   const Vista = PANTALLAS[cual];
   return (
-    <FinanceContext.Provider value={buildValue()}>
+    <FinanceContext.Provider value={buildValue({ selectedDebtId: deuda, setSelectedDebtId: setDeuda })}>
       <style>{STYLES}</style>
       <div className="cc-app">
         <div className="cc-main" style={{ padding: 20 }}>

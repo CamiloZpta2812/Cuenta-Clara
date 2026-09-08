@@ -112,6 +112,11 @@ export function FinanceProvider({ children }) {
 
   const [balanceInputs, setBalanceInputs] = useState({});
   const [paidDateInputs, setPaidDateInputs] = useState({});
+  /*
+   * A cuál deuda le mandas el abono extra. null = la que escoja el motor, que
+   * es la más cara. Con una sola deuda esto nunca se usa.
+   */
+  const [selectedDebtId, setSelectedDebtId] = useState(null);
   const [bucketInputs, setBucketInputs] = useState({});
   const [showBucketForm, setShowBucketForm] = useState(false);
   const [editingBucketId, setEditingBucketId] = useState(null);
@@ -971,7 +976,7 @@ export function FinanceProvider({ children }) {
    */
   const debtOutlook = useMemo(() => {
     const estado = snapshot();
-    const deuda = targetDebt(estado);
+    const deuda = targetDebt(estado, selectedDebtId);
     if (!deuda) return null;
 
     const extra = Math.max(0, monthReport.plan.availableForExtra);
@@ -1019,12 +1024,12 @@ export function FinanceProvider({ children }) {
         extra,
       }),
     };
-  }, [snapshot, monthReport]);
+  }, [snapshot, monthReport, selectedDebtId]);
 
   /* "¿Y si le bajo al colchón?" — lo que se muestra ANTES de mover un número. */
   const simulate = useCallback(
-    (cambios) => simulatePlanChange(snapshot(), cambios, selectedMonth),
-    [snapshot, selectedMonth],
+    (cambios) => simulatePlanChange(snapshot(), cambios, selectedMonth, selectedDebtId),
+    [snapshot, selectedMonth, selectedDebtId],
   );
 
   /*
@@ -1055,6 +1060,8 @@ export function FinanceProvider({ children }) {
     cashFlow,
     debtOutlook,
     planDistribution,
+    selectedDebtId,
+    setSelectedDebtId,
     simulatePlan: simulate,
     balanceInputs,
     bucketForm,

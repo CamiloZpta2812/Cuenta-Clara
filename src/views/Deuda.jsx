@@ -37,7 +37,7 @@ function mesesATexto(n) {
 
 export default function Deuda() {
   const {
-    debtOutlook, simulatePlan,
+    debtOutlook, simulatePlan, debts, selectedDebtId, setSelectedDebtId,
     paymentInputs, setPaymentInputs, balanceInputs, setBalanceInputs, handleAddPayment,
   } = useFinance();
   const [ajustes, setAjustes] = useState({});
@@ -57,6 +57,24 @@ export default function Deuda() {
   }
 
   const { debt, extra, hechas, minimumOnly, withExtra, monthsSaved, interestSaved } = debtOutlook;
+
+  /*
+   * Con más de una deuda hay que decir CUÁL se está mirando: el abono extra va
+   * a una sola, y de eso depende cuánto te ahorras. Antes la pantalla mostraba
+   * una sin avisar que había otras.
+   */
+  const saldoDe = (d) => (d.currentBalance != null
+    ? Number(d.currentBalance)
+    : Math.max(0, (Number(d.totalAmount) || 0)
+      - (d.payments || []).reduce((a, p) => a + (Number(p.amount) || 0), 0)));
+
+  const varias = (debts || []).length > 1;
+  const saldoTotal = (debts || []).reduce((s, d) => s + saldoDe(d), 0);
+  const cuotaTotal = (debts || []).reduce((s, d) => s + (Number(d.fixedPayment) || 0), 0);
+  /* La más cara es a la que conviene mandarle el extra: es la avalancha. */
+  const masCara = [...(debts || [])]
+    .sort((a, b) => (Number(b.interestRate) || 0) - (Number(a.interestRate) || 0))[0];
+  const atacandoLaCara = !masCara || masCara.id === debt.id;
 
   /* Los cambios del simulador son sumas y restas sobre el plan, no valores nuevos. */
   const cambios = Object.fromEntries(
@@ -140,6 +158,45 @@ export default function Deuda() {
         cuota de {fmtCOP(debt.fixedPayment)}
       </p>
 
+      {varias && (
+        <>
+          <div className="cc-stats-grid" style={{ marginBottom: 14 }}>
+            <StatCard
+              label={`Deuda total · ${debts.length} créditos`} value={fmtCOP(saldoTotal)}
+              Icon={CreditCard} color={COLORS.debt} bg="var(--debt-soft)"
+              sub={`${fmtCOP(cuotaTotal)} al mes en cuotas`}
+            />
+          </div>
+
+          <div className="cc-filtros">
+            <span className="cc-page-sub" style={{ marginBottom: 0 }}>Abonarle de más a:</span>
+            <select
+              className="cc-select cc-select-sm" value={selectedDebtId || ''}
+              onChange={(e) => setSelectedDebtId(e.target.value || null)}
+            >
+              <option value="">La más cara ({masCara ? masCara.name : '—'})</option>
+              {debts.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name} · {d.interestRate || 0}% · {fmtCOP(saldoDe(d))}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {!atacandoLaCara && (
+            <div className="cc-banner">
+              <AlertTriangle size={15} />
+              <span>
+                Estás abonándole a <strong>{debt.name}</strong> ({debt.interestRate}% mensual),
+                pero <strong>{masCara.name}</strong> cobra {masCara.interestRate}%. Mandarle el
+                extra a la más cara te ahorra más intereses — aunque a veces conviene cerrar
+                primero la pequeña por quitártela de encima.
+              </span>
+            </div>
+          )}
+        </>
+      )}
+
       {/* ------------------------------------------------------ cuándo se acaba */}
       <div className="cc-card" style={{ textAlign: 'center', padding: '22px 16px' }}>
         {withExtra.feasible ? (
@@ -151,6 +208,7 @@ export default function Deuda() {
               {mesesATexto(withExtra.months)}
             </div>
             <p className="cc-page-sub" style={{ marginTop: 8 }}>
+              {varias && 'Solo esta deuda. '}
               Primera cuota en {monthLabel(primerMes)}, última en {fin}.
               Pagarías {fmtCOP(withExtra.totalInterest)} de intereses.
               {arrancaDespues && (yaPagoEsteMes

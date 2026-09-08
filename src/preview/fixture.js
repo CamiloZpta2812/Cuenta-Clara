@@ -117,7 +117,11 @@ export function buildValue(overrides = {}) {
     .filter((c) => c.next);
   const groups = activeInstallmentGroups(estado.transactions);
 
-  const deuda = targetDebt(estado);
+  /*
+   * El banco de pruebas también deja escoger deuda: si no, el caso de varias
+   * deudas no se puede ver, que es justo para lo que existe esto.
+   */
+  const deuda = targetDebt(estado, overrides.selectedDebtId);
   const extra = Math.max(0, monthSummary(estado, MES).plan.availableForExtra);
 
   return {
@@ -136,7 +140,8 @@ export function buildValue(overrides = {}) {
         extra,
       }),
     },
-    simulatePlan: (cambios) => simulatePlanChange(estado, cambios, MES),
+    simulatePlan: (cambios) => simulatePlanChange(estado, cambios, MES, overrides.selectedDebtId),
+    selectedDebtId: overrides.selectedDebtId || null,
     cashFlow: buildCashFlow(estado, ['2026-07', '2026-08', '2026-09']),
     planDistribution: (() => {
       const p = monthSummary(estado, MES).plan;
