@@ -81,7 +81,7 @@ export function FinanceProvider({ children }) {
 
   const [showTxForm, setShowTxForm] = useState(false);
   const [editingTxId, setEditingTxId] = useState(null);
-  const [txForm, setTxForm] = useState({ type: 'gasto', amount: '', category: 'alimentacion', date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '' });
+  const [txForm, setTxForm] = useState({ type: 'gasto', amount: '', category: 'alimentacion', date: todayStr(), note: '', paymentMethod: 'debito', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '' });
   const [txFilters, setTxFilters] = useState({ type: 'todos', month: 'todos', category: 'todas', paymentMethod: 'todos', fixed: 'todos', day: '' });
   const [txFormError, setTxFormError] = useState('');
 
@@ -103,7 +103,7 @@ export function FinanceProvider({ children }) {
 
   const [showFixedForm, setShowFixedForm] = useState(false);
   const [editingFixedId, setEditingFixedId] = useState(null);
-  const [fixedForm, setFixedForm] = useState({ name: '', category: 'servicios', amount: '', dueDay: '', paymentMethod: 'efectivo', cardId: '' });
+  const [fixedForm, setFixedForm] = useState({ name: '', category: 'servicios', amount: '', dueDay: '', paymentMethod: 'debito', cardId: '' });
 
   const [showDebtForm, setShowDebtForm] = useState(false);
   const [debtForm, setDebtForm] = useState({ name: '', totalAmount: '', interestRate: '', monthlyPayment: '', dueDay: '', startDate: todayStr(), currency: 'COP', exchangeRate: '' });
@@ -111,6 +111,7 @@ export function FinanceProvider({ children }) {
   const [paymentInputs, setPaymentInputs] = useState({});
 
   const [balanceInputs, setBalanceInputs] = useState({});
+  const [paidDateInputs, setPaidDateInputs] = useState({});
   const [bucketInputs, setBucketInputs] = useState({});
   const [showBucketForm, setShowBucketForm] = useState(false);
   const [editingBucketId, setEditingBucketId] = useState(null);
@@ -453,7 +454,7 @@ export function FinanceProvider({ children }) {
     } else {
       setTransactions((prev) => [...prev, { id: uid(), ...built }]);
     }
-    setTxForm({ type: txForm.type, amount: '', category: txForm.type === 'gasto' ? EXPENSE_CATEGORIES[0].id : INCOME_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '' });
+    setTxForm({ type: txForm.type, amount: '', category: txForm.type === 'gasto' ? EXPENSE_CATEGORIES[0].id : INCOME_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'debito', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '' });
     setShowTxForm(false);
   }
   function handleEditTransaction(t) {
@@ -482,7 +483,7 @@ export function FinanceProvider({ children }) {
     setEditingTxId(null);
     setShowTxForm(false);
     setTxFormError('');
-    setTxForm({ type: 'gasto', amount: '', category: EXPENSE_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'efectivo', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '' });
+    setTxForm({ type: 'gasto', amount: '', category: EXPENSE_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'debito', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '' });
   }
   function handleDeleteTransaction(id) {
     const tx = transactions.find((t) => t.id === id);
@@ -701,7 +702,7 @@ export function FinanceProvider({ children }) {
     } else {
       setFixedExpenses((prev) => [...prev, { id: uid(), ...data }]);
     }
-    setFixedForm({ name: '', category: EXPENSE_CATEGORIES[0].id, amount: '', dueDay: '', paymentMethod: 'efectivo', cardId: '' });
+    setFixedForm({ name: '', category: EXPENSE_CATEGORIES[0].id, amount: '', dueDay: '', paymentMethod: 'debito', cardId: '' });
     setShowFixedForm(false);
   }
   function handleEditFixedExpense(fe) {
@@ -719,7 +720,7 @@ export function FinanceProvider({ children }) {
   function handleCancelFixedForm() {
     setEditingFixedId(null);
     setShowFixedForm(false);
-    setFixedForm({ name: '', category: EXPENSE_CATEGORIES[0].id, amount: '', dueDay: '', paymentMethod: 'efectivo', cardId: '' });
+    setFixedForm({ name: '', category: EXPENSE_CATEGORIES[0].id, amount: '', dueDay: '', paymentMethod: 'debito', cardId: '' });
   }
   function handleDeleteFixedExpense(id) {
     if (!window.confirm('¿Eliminar este gasto fijo? Los movimientos que ya generó no se borran.')) return;
@@ -729,9 +730,17 @@ export function FinanceProvider({ children }) {
     const key = monthKeyFromDate(todayStr());
     return transactions.find((t) => t.fixedExpenseId === feId && monthKeyFromDate(t.date) === key);
   }
-  function handleMarkFixedExpensePaid(fe) {
-    let date = todayStr();
-    if (fe.dueDay) {
+  /*
+   * Marcar un gasto fijo como pagado.
+   *
+   * `cuando` es opcional y viene del campo de fecha de la pantalla, que arranca
+   * en hoy: casi siempre lo marcas el mismo día, pero a veces te acuerdas al
+   * otro. Registrar todo como "hoy" corría los pagos de fin de mes al mes
+   * siguiente y descuadraba el mes sin que se notara.
+   */
+  function handleMarkFixedExpensePaid(fe, cuando) {
+    let date = cuando || todayStr();
+    if (!cuando && fe.dueDay) {
       const today = new Date();
       const y = today.getFullYear();
       const m = today.getMonth();
@@ -744,6 +753,7 @@ export function FinanceProvider({ children }) {
       category: fe.category,
       amount: fe.amount,
       date,
+      month: monthKeyFromDate(date),
       note: fe.name,
       paymentMethod: fe.paymentMethod,
       cardId: fe.cardId || null,
@@ -1039,6 +1049,8 @@ export function FinanceProvider({ children }) {
     simulatePlan: simulate,
     balanceInputs,
     bucketForm,
+    paidDateInputs,
+    setPaidDateInputs,
     bucketInputs,
     cardOutlook,
     editingBucketId,

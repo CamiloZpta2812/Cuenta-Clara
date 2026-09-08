@@ -1,4 +1,3 @@
-import Tarjetas from './Tarjetas';
 import { Plus, Trash2 } from 'lucide-react';
 import { COLORS, COLOR_CHOICES } from '../lib/constants.js';
 import { ICON_CHOICES, getCategory } from '../lib/categories.js';
@@ -28,12 +27,6 @@ export default function Configuracion() {
 
   const subTabs = [
     { id: 'categorias', label: 'Categorías' },
-    /*
-     * La tarjeta es configuración, no una sección propia: navegar sus
-     * movimientos es un filtro. Lo que sí necesitabas ver —qué llega en la
-     * próxima factura y cuánto está comprometido en cuotas— vive en El mes.
-     */
-    { id: 'tarjeta', label: 'Tarjeta' },
     { id: 'pin', label: 'Contraseña' },
     { id: 'datos', label: 'Datos y sesión' },
   ];
@@ -54,8 +47,6 @@ export default function Configuracion() {
           </button>
         ))}
       </div>
-
-      {configTab === 'tarjeta' && <Tarjetas />}
 
       {configTab === 'categorias' && (
         <>

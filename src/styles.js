@@ -259,6 +259,33 @@ export const STYLES = `
   color: var(--ink); text-align: left;
 }
 
+/*
+ * Gastos fijos. Antes era una fila de tres líneas de texto de 12px, todas del
+ * mismo peso: el nombre, el monto y el medio de pago se leían igual de fuerte,
+ * o sea ninguno. Ahora el nombre y el monto mandan, y lo demás es contexto.
+ */
+.cc-fixed-list { display: flex; flex-direction: column; gap: 10px; }
+.cc-fixed-card {
+  display: grid; grid-template-columns: auto 1fr auto auto;
+  align-items: center; gap: 14px;
+  padding: 14px 16px; background: var(--card, #fff);
+  border: 1px solid var(--line); border-radius: 12px;
+}
+.cc-fixed-card.pagado { background: var(--income-soft); border-color: transparent; }
+.cc-fixed-info { min-width: 0; }
+.cc-fixed-name { font-size: 15px; font-weight: 600; color: var(--ink); }
+.cc-fixed-meta { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.cc-fixed-monto { font-size: 16px; font-weight: 700; white-space: nowrap; }
+.cc-fixed-acciones { display: flex; align-items: center; gap: 8px; }
+.cc-input-fecha { width: 140px; padding: 6px 8px; font-size: 12px; }
+.cc-tag-ok { background: #fff; color: #2F7D5C; }
+
+@media (max-width: 720px) {
+  .cc-fixed-card { grid-template-columns: auto 1fr; row-gap: 10px; }
+  .cc-fixed-monto { grid-column: 2; text-align: right; }
+  .cc-fixed-acciones { grid-column: 1 / -1; flex-wrap: wrap; }
+}
+
 .cc-split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: center; }
 @media (max-width: 780px) { .cc-split { grid-template-columns: 1fr; } }
 

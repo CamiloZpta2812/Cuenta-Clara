@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar';
 import Resumen from './views/Resumen';
 import Mes from './views/Mes';
 import Cobros from './views/Cobros';
+import Tarjetas from './views/Tarjetas';
 import Buckets from './views/Buckets';
 import Deuda from './views/Deuda';
 import Movimientos from './views/Movimientos';
@@ -15,6 +16,7 @@ import PrintReport from './views/PrintReport';
 const TABS = {
   mes: Mes,
   cobros: Cobros,
+  tarjeta: Tarjetas,
   buckets: Buckets,
   deuda: Deuda,
   resumen: Resumen,
