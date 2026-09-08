@@ -67,16 +67,30 @@ export default function Deuda() {
   const sim = Object.keys(cambios).length > 0 ? simulatePlan(cambios) : null;
 
   /*
-   * En qué mes cae la PRIMERA cuota que falta.
+   * En qué mes cae la PRIMERA cuota que falta. Tres reglas, en orden:
    *
-   * Casi siempre este mes. Pero si ya registraste el abono de este mes, la
-   * proyección empieza el siguiente: si no, la tabla vuelve a cobrarte una
-   * cuota que ya pagaste y todas las fechas quedan corridas un mes.
+   *   1. Si ya registraste el abono de este mes, la cuenta empieza el
+   *      siguiente. Si no, la tabla vuelve a cobrarte una cuota ya pagada.
+   *
+   *   2. Si el crédito se desembolsó este mes, la primera cuota es el mes
+   *      entrante: nadie paga la cuota el mismo mes en que le prestaron.
+   *
+   *   3. Y nunca antes del mes actual, aunque el crédito sea viejo.
    */
   const mesActual = currentMonthKey();
-  const yaPagoEsteMes = (debt.payments || [])
-    .some((p) => (p.month || monthKeyFromDate(p.date)) === mesActual);
-  const primerMes = yaPagoEsteMes ? addMonths(mesActual, 1) : mesActual;
+  const ultimoAbono = (debt.payments || [])
+    .map((p) => p.month || monthKeyFromDate(p.date))
+    .sort()
+    .pop();
+
+  const desembolso = debt.startDate ? monthKeyFromDate(debt.startDate) : null;
+  const candidatos = [mesActual];
+  if (ultimoAbono) candidatos.push(addMonths(ultimoAbono, 1));
+  if (desembolso) candidatos.push(addMonths(desembolso, 1));
+  const primerMes = candidatos.sort().pop();
+
+  const yaPagoEsteMes = ultimoAbono === mesActual;
+  const arrancaDespues = primerMes !== mesActual;
 
   /* La última cuota va en el offset months - 1: la primera es el offset 0. */
   const fin = withExtra.feasible
@@ -102,8 +116,11 @@ export default function Deuda() {
               {mesesATexto(withExtra.months)}
             </div>
             <p className="cc-page-sub" style={{ marginTop: 8 }}>
-              Última cuota en {fin}. Pagarías {fmtCOP(withExtra.totalInterest)} de intereses.
-              {yaPagoEsteMes && ' La cuenta arranca el mes entrante: la de este mes ya la registraste.'}
+              Primera cuota en {monthLabel(primerMes)}, última en {fin}.
+              Pagarías {fmtCOP(withExtra.totalInterest)} de intereses.
+              {arrancaDespues && (yaPagoEsteMes
+                ? ' La de este mes ya la registraste.'
+                : ' Este mes no hay cuota: el crédito se desembolsó apenas.')}
             </p>
           </>
         ) : (

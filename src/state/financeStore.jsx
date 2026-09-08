@@ -112,6 +112,7 @@ export function FinanceProvider({ children }) {
   const [balanceInputs, setBalanceInputs] = useState({});
   const [bucketInputs, setBucketInputs] = useState({});
   const [showBucketForm, setShowBucketForm] = useState(false);
+  const [editingBucketId, setEditingBucketId] = useState(null);
   const [bucketForm, setBucketForm] = useState({
     name: '', kind: 'meta', liquid: true, monthlyAmount: '', targetAmount: '', targetDate: '',
   });
@@ -826,21 +827,54 @@ export function FinanceProvider({ children }) {
 
   /* ---------- Buckets: metas y colchones ---------- */
 
+  const BUCKET_VACIO = {
+    name: '', kind: 'meta', liquid: true, monthlyAmount: '', targetAmount: '', targetDate: '',
+  };
+
+  /*
+   * Crear y editar por el mismo formulario. Los aportes no se tocan: cambiarle
+   * el nombre a un colchón no debería mover ni un peso de lo que ya guardaste.
+   */
   function handleAddBucket(e) {
     e.preventDefault();
     if (!bucketForm.name.trim()) return;
-    setBuckets((prev) => [...prev, {
-      id: uid(),
+    const kind = bucketForm.kind === 'colchon' ? 'colchon' : 'meta';
+    const datos = {
       name: bucketForm.name.trim(),
-      kind: bucketForm.kind === 'colchon' ? 'colchon' : 'meta',
+      kind,
       liquid: !!bucketForm.liquid,
       monthlyAmount: parseFloat(bucketForm.monthlyAmount) || 0,
       /* Un colchón no tiene objetivo: es margen, no una meta a la que llegar. */
-      targetAmount: bucketForm.kind === 'meta' ? (parseFloat(bucketForm.targetAmount) || null) : null,
-      targetDate: bucketForm.kind === 'meta' ? (bucketForm.targetDate || null) : null,
-      contributions: [],
-    }]);
-    setBucketForm({ name: '', kind: 'meta', liquid: true, monthlyAmount: '', targetAmount: '', targetDate: '' });
+      targetAmount: kind === 'meta' ? (parseFloat(bucketForm.targetAmount) || null) : null,
+      targetDate: kind === 'meta' ? (bucketForm.targetDate || null) : null,
+    };
+
+    if (editingBucketId) {
+      setBuckets((prev) => prev.map((b) => (b.id === editingBucketId ? { ...b, ...datos } : b)));
+      setEditingBucketId(null);
+    } else {
+      setBuckets((prev) => [...prev, { id: uid(), ...datos, contributions: [] }]);
+    }
+    setBucketForm(BUCKET_VACIO);
+    setShowBucketForm(false);
+  }
+
+  function handleEditBucket(b) {
+    setEditingBucketId(b.id);
+    setBucketForm({
+      name: b.name,
+      kind: b.kind === 'colchon' ? 'colchon' : 'meta',
+      liquid: b.liquid !== false,
+      monthlyAmount: b.monthlyAmount != null ? String(b.monthlyAmount) : '',
+      targetAmount: b.targetAmount != null ? String(b.targetAmount) : '',
+      targetDate: b.targetDate || '',
+    });
+    setShowBucketForm(true);
+  }
+
+  function handleCancelBucketForm() {
+    setEditingBucketId(null);
+    setBucketForm(BUCKET_VACIO);
     setShowBucketForm(false);
   }
 
@@ -953,8 +987,11 @@ export function FinanceProvider({ children }) {
     bucketForm,
     bucketInputs,
     cardOutlook,
+    editingBucketId,
     handleAddBucket,
     handleBucketMovement,
+    handleCancelBucketForm,
+    handleEditBucket,
     handleDeleteBucket,
     handleToggleCollection,
     monthReport,

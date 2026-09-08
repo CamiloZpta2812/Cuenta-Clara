@@ -1,4 +1,4 @@
-import { PiggyBank, Shield, Plus, X, Trash2, Lock, Check } from 'lucide-react';
+import { PiggyBank, Shield, Plus, X, Trash2, Lock, Check, Pencil } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
 import { monthKeyFromDate, currentMonthKey } from '../lib/dates.js';
 import { fmtCOP } from '../lib/money.js';
@@ -31,7 +31,7 @@ function movidoEnMes(b, mes) {
     .reduce((s, c) => s + (Number(c.amount) || 0), 0);
 }
 
-function Tarjeta({ bucket, input, onInput, onMover, onBorrar }) {
+function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar }) {
   const saldo = acumulado(bucket);
   /* Se lee en cada render y no al cargar el módulo: con la app abierta toda
      la noche, un valor congelado seguiría hablando del mes pasado. */
@@ -63,12 +63,20 @@ function Tarjeta({ bucket, input, onInput, onMover, onBorrar }) {
             {planeado > 0 && ` · ${fmtCOP(planeado)} al mes`}
           </div>
         </div>
-        <button
-          type="button" className="cc-btn cc-btn-danger"
-          onClick={() => onBorrar(bucket.id)} aria-label={`Eliminar ${bucket.name}`}
-        >
-          <Trash2 size={15} />
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            type="button" className="cc-btn cc-btn-outline cc-btn-sm"
+            onClick={() => onEditar(bucket)} aria-label={`Editar ${bucket.name}`}
+          >
+            <Pencil size={14} />
+          </button>
+          <button
+            type="button" className="cc-btn cc-btn-danger"
+            onClick={() => onBorrar(bucket.id)} aria-label={`Eliminar ${bucket.name}`}
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
       </div>
 
       {conObjetivo ? (
@@ -129,8 +137,9 @@ function Tarjeta({ bucket, input, onInput, onMover, onBorrar }) {
 export default function Buckets() {
   const {
     buckets, bucketInputs, setBucketInputs, bucketForm, setBucketForm,
-    showBucketForm, setShowBucketForm,
+    showBucketForm, setShowBucketForm, editingBucketId,
     handleAddBucket, handleBucketMovement, handleDeleteBucket,
+    handleEditBucket, handleCancelBucketForm,
   } = useFinance();
 
   const metas = buckets.filter((b) => b.kind !== 'colchon');
@@ -148,6 +157,7 @@ export default function Buckets() {
     onInput,
     onMover: handleBucketMovement,
     onBorrar: handleDeleteBucket,
+    onEditar: handleEditBucket,
   });
 
   return (
@@ -161,7 +171,7 @@ export default function Buckets() {
         </div>
         <button
           type="button" className="cc-btn cc-btn-primary"
-          onClick={() => setShowBucketForm((v) => !v)}
+          onClick={() => (showBucketForm ? handleCancelBucketForm() : setShowBucketForm(true))}
         >
           {showBucketForm ? <X size={15} /> : <Plus size={15} />}
           {showBucketForm ? 'Cancelar' : 'Nuevo'}
@@ -236,7 +246,9 @@ export default function Buckets() {
             </span>
           </div>
           <div className="cc-form-actions">
-            <button type="submit" className="cc-btn cc-btn-primary">Guardar</button>
+            <button type="submit" className="cc-btn cc-btn-primary">
+              {editingBucketId ? 'Guardar cambios' : 'Guardar'}
+            </button>
           </div>
         </form>
       )}
