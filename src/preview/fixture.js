@@ -25,6 +25,7 @@ export const estado = {
     { id: 'p-andy',   name: 'Andy' },
     { id: 'p-paula',  name: 'Paula' },
     { id: 'p-alex',   name: 'Alex' },
+    { id: 'p-sofi',   name: 'Sofi' },
   ],
   incomeSources: [
     { id: 'inc-salario', name: 'Salario', expected: 3_400_000, variable: true, active: true },
@@ -58,12 +59,18 @@ export const estado = {
   buckets: [
     { id: 'bkt-ahorro-1', name: 'Ahorro personal 1', kind: 'meta', liquid: true, monthlyAmount: 50_000,
       contributions: [{ id: 'ap-1', amount: 50_000, date: '2026-09-05' }] },
-    { id: 'bkt-ahorro-2', name: 'Ahorro personal 2', kind: 'meta', liquid: true, monthlyAmount: 300_000,
-      targetAmount: 6_000_000, targetDate: '2027-06-30',
-      contributions: [{ id: 'ap-3', amount: 1_800_000, date: '2026-06-05' }] },
+    // Fondo común con Sofi: 600.000 al mes entre dos, cada uno mete lo suyo.
+    { id: 'bkt-fondo', name: 'Fondo Sofi', kind: 'meta', liquid: true, monthlyAmount: 600_000,
+      targetAmount: 12_000_000, targetDate: '2027-12-31', movesCash: true,
+      shares: [{ id: 'sh-fondo', personId: 'p-sofi', amount: 300_000 }],
+      contributions: [{ id: 'ap-3', amount: 3_600_000, date: '2026-06-05' }] },
     { id: 'bkt-coop',     name: 'Cooperativa', kind: 'meta', liquid: false, monthlyAmount: 76_000, contributions: [] },
-    { id: 'bkt-gatos',    name: 'Colchón gatos', kind: 'colchon', liquid: true, monthlyAmount: 65_000,
-      contributions: [{ id: 'ap-2', amount: 65_000, date: '2026-09-05' }] },
+    { id: 'bkt-gatos',    name: 'Colchón gatos', kind: 'colchon', liquid: true, monthlyAmount: 130_000,
+      movesCash: true, shares: [{ id: 'sh-gatos', personId: 'p-sofi', amount: 65_000 }],
+      contributions: [{ id: 'ap-2', amount: 130_000, date: '2026-09-05' }] },
+    // Reserva: no mueve plata, se llena con las tanqueadas.
+    { id: 'bkt-gasolina', name: 'Gasolina', kind: 'colchon', liquid: true, monthlyAmount: 160_000,
+      movesCash: false, shares: [], contributions: [] },
     { id: 'bkt-moto',     name: 'Colchón moto', kind: 'colchon', liquid: true, monthlyAmount: 100_000,
       contributions: [{ id: 'ap-4', amount: 300_000, date: '2026-07-05' }, { id: 'ap-5', amount: -180_000, date: '2026-08-14' }] },
     { id: 'bkt-seg',      name: 'Colchón de seguridad', kind: 'colchon', liquid: true, monthlyAmount: 300_000, contributions: [] },
@@ -87,7 +94,7 @@ export const estado = {
     { id: 't1', type: 'ingreso', amount: 3_400_000, category: 'salario', date: '2026-09-30', paymentMethod: 'debito' },
     { id: 't2', type: 'ingreso', amount: 200_000, category: 'otros_ingreso', date: '2026-09-15', paymentMethod: 'debito' },
     { id: 't3', type: 'gasto', amount: 300_000, category: 'vivienda', date: '2026-09-01', fixedExpenseId: 'fix-casa', paymentMethod: 'debito' },
-    { id: 't4', type: 'gasto', amount: 160_000, category: 'transporte', date: '2026-09-02', fixedExpenseId: 'fix-gasolina', paymentMethod: 'debito' },
+    { id: 't4', type: 'gasto', amount: 118_000, category: 'transporte', date: '2026-09-02', bucketId: 'bkt-gasolina', paymentMethod: 'debito', note: 'Tanqueada' },
     { id: 't5', type: 'gasto', amount: 420_000, category: 'alimentacion', date: '2026-09-10', paymentMethod: 'debito' },
     /* Compra a cuotas: gasto de septiembre, plata que sale en noviembre. */
     { id: 't6', type: 'gasto', amount: 100_000, category: 'compras', date: '2026-09-20', note: 'Audífonos',

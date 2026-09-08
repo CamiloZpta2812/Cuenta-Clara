@@ -494,3 +494,90 @@ test('un abono enlazado no se cuenta dos veces', () => {
   assert.equal(r.debtPayment, 446_413, 'una sola vez, no 892.826');
   assert.equal(r.variable, 0);
 });
+
+/* ------------------------------------ buckets compartidos y reservas --- */
+
+/*
+ * El colchón de los gatos son 130.000 al mes entre dos. Sale de tu cuenta la
+ * mitad, pero el veterinario cobra del pote completo.
+ */
+const compartido = {
+  ...estado,
+  people: [...estado.people, { id: 'p6', name: 'Sofi' }],
+  buckets: [
+    { id: 'gatos', name: 'Colchón gatos', kind: 'colchon', liquid: true,
+      monthlyAmount: 130_000, movesCash: true,
+      shares: [{ id: 's-gatos', personId: 'p6', amount: 65_000 }], contributions: [] },
+    { id: 'fondo', name: 'Fondo Sofi', kind: 'meta', liquid: true,
+      monthlyAmount: 600_000, movesCash: true,
+      shares: [{ id: 's-fondo', personId: 'p6', amount: 300_000 }], contributions: [] },
+    { id: 'gasolina', name: 'Gasolina', kind: 'colchon', liquid: true,
+      monthlyAmount: 160_000, movesCash: false, shares: [], contributions: [] },
+  ],
+};
+
+test('de un bucket compartido, el plan solo cuenta tu parte', () => {
+  const p = monthPlan(compartido, MES);
+  assert.equal(p.cushion, 65_000 + 160_000, 'la mitad de los gatos, y la gasolina entera');
+  assert.equal(p.savings, 300_000, 'la mitad del fondo con Sofi');
+});
+
+test('una reserva resta en el plan igual que un colchón', () => {
+  // No mueve plata, pero es cupo que no está disponible: resta igual.
+  const sinGasolina = {
+    ...compartido,
+    buckets: compartido.buckets.filter((b) => b.id !== 'gasolina'),
+  };
+  assert.equal(
+    monthPlan(compartido, MES).cushion - monthPlan(sinGasolina, MES).cushion,
+    160_000,
+  );
+});
+
+test('un aporte al pote cuenta solo por tu fracción', () => {
+  const conAporte = {
+    ...compartido,
+    buckets: compartido.buckets.map((b) => (b.id === 'gatos'
+      ? { ...b, contributions: [{ id: 'a1', amount: 130_000, date: '2026-09-05' }] }
+      : b)),
+  };
+  // Al pote entraron 130.000, pero de tu cuenta salieron 65.000.
+  assert.equal(monthActual(conAporte, MES).cushion, 65_000);
+});
+
+test('una reserva se mide por lo gastado, no por lo aportado', () => {
+  const tanqueadas = {
+    ...compartido,
+    transactions: [
+      { id: 'g1', type: 'gasto', amount: 60_000, category: 'transporte', date: '2026-09-04', bucketId: 'gasolina' },
+      { id: 'g2', type: 'gasto', amount: 58_000, category: 'transporte', date: '2026-09-18', bucketId: 'gasolina' },
+    ],
+  };
+  const r = monthActual(tanqueadas, MES);
+  assert.equal(r.cushion, 118_000, 'llevas 118.000 de los 160.000');
+  assert.equal(r.variable, 0, 'tanquear no es gasto variable: sale de su reserva');
+});
+
+test('un colchón real no cuenta doble el aporte y el gasto', () => {
+  // La plata se movió al aportar. Gastarla después no vuelve a salir de la
+  // cuenta, así que el gasto etiquetado no suma otra vez.
+  const gatosConVet = {
+    ...compartido,
+    buckets: compartido.buckets.map((b) => (b.id === 'gatos'
+      ? { ...b, contributions: [{ id: 'a1', amount: 130_000, date: '2026-09-05' }] }
+      : b)),
+    transactions: [
+      { id: 'vet', type: 'gasto', amount: 200_000, category: 'salud', date: '2026-09-12', bucketId: 'gatos' },
+    ],
+  };
+  assert.equal(monthActual(gatosConVet, MES).cushion, 65_000, 'solo el aporte');
+});
+
+test('sin reparto, todo el bucket es tuyo', () => {
+  const solo = {
+    ...estado,
+    buckets: [{ id: 'x', name: 'Mio', kind: 'colchon', liquid: true, monthlyAmount: 100_000,
+                movesCash: true, shares: [], contributions: [] }],
+  };
+  assert.equal(monthPlan(solo, MES).cushion, 100_000);
+});

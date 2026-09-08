@@ -149,6 +149,7 @@ const v2 = {
     { id: 'p3', name: 'Andy', linkedUserId: null },
     { id: 'p4', name: 'Paula', linkedUserId: null },
     { id: 'p5', name: 'Alex', linkedUserId: null },
+    { id: 'p6', name: 'Sofi', linkedUserId: null },
   ],
   incomeSources: [
     { id: 'i1', name: 'Salario', expected: 3400000, variable: true, active: true },
@@ -179,8 +180,13 @@ const v2 = {
       ] },
     { id: 'b2', name: 'Cooperativa', kind: 'meta', liquid: false, monthlyAmount: 76000,
       targetAmount: null, targetDate: null, contributions: [] },
-    { id: 'b3', name: 'Colchón gatos', kind: 'colchon', liquid: true, monthlyAmount: 65000,
-      targetAmount: null, targetDate: null, contributions: [] },
+    /* Compartido: el monto es el del pote, la parte de Sofi va aparte. */
+    { id: 'b3', name: 'Colchón gatos', kind: 'colchon', liquid: true, monthlyAmount: 130000,
+      movesCash: true, targetAmount: null, targetDate: null,
+      shares: [{ id: 'shb1', personId: 'p6', amount: 65000 }], contributions: [] },
+    /* Reserva: no mueve plata, se llena con los gastos que la etiquetan. */
+    { id: 'b4', name: 'Gasolina', kind: 'colchon', liquid: true, monthlyAmount: 160000,
+      movesCash: false, targetAmount: null, targetDate: null, shares: [], contributions: [] },
   ],
   debts: [
     { id: 'd1', name: 'Libre inversión', totalAmount: 16000000, interestRate: 1.67,
@@ -214,11 +220,11 @@ test('el estado v2 completo sobrevive el viaje de ida y vuelta', () => {
 
 test('cada tabla nueva recibe exactamente sus filas', () => {
   const rows = stateToRows(v2);
-  assert.equal(rows.people.length, 5);
+  assert.equal(rows.people.length, 6);
   assert.equal(rows.income_sources.length, 2);
   assert.equal(rows.fixed_expense_shares.length, 5, 'el reparto sale de dentro del gasto');
   assert.equal(rows.collections.length, 1);
-  assert.equal(rows.buckets.length, 3);
+  assert.equal(rows.buckets.length, 4);
   assert.equal(rows.bucket_contributions.length, 2, 'los aportes salen de dentro del bucket');
   assert.equal(rows.monthly_plans.length, 2);
 });
@@ -337,4 +343,24 @@ test('el estado canónico tiene exactamente estas claves', () => {
     'setupCompletedAt',
     'transactions',
   ]);
+});
+
+test('el reparto de un bucket compartido vuelve a su bucket', () => {
+  const rows = stateToRows(v2);
+  assert.equal(rows.bucket_shares.length, 1);
+  assert.equal(rows.bucket_shares[0].bucket_id, 'b3');
+  assert.equal(rows.bucket_shares[0].person_id, 'p6');
+
+  const back = rowsToState(rows);
+  assert.deepEqual(back.buckets.find((b) => b.id === 'b3').shares,
+                   [{ id: 'shb1', personId: 'p6', amount: 65000 }]);
+  assert.deepEqual(back.buckets.find((b) => b.id === 'b1').shares, []);
+});
+
+test('una reserva se distingue de un colchón de verdad', () => {
+  const rows = stateToRows(v2);
+  assert.equal(rows.buckets.find((b) => b.id === 'b4').moves_cash, false);
+  assert.equal(rows.buckets.find((b) => b.id === 'b3').moves_cash, true);
+  // Un bucket viejo, sin la columna, se asume que sí mueve la plata.
+  assert.equal(rowsToState({ buckets: [{ id: 'x', name: 'Y', kind: 'meta' }] }).buckets[0].movesCash, true);
 });

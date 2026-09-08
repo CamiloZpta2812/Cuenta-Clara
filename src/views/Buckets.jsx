@@ -1,6 +1,7 @@
 import { PiggyBank, Shield, Plus, X, Trash2, Lock, Check, Pencil } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
 import { monthKeyFromDate, currentMonthKey } from '../lib/dates.js';
+import { myBucketShare } from '../lib/month.js';
 import { fmtCOP } from '../lib/money.js';
 import StatCard from '../components/StatCard';
 import EmptyState from '../components/EmptyState';
@@ -31,12 +32,27 @@ function movidoEnMes(b, mes) {
     .reduce((s, c) => s + (Number(c.amount) || 0), 0);
 }
 
-function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar }) {
-  const saldo = acumulado(bucket);
+function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar, nombreDe, gastadoEnMes }) {
+  const total = Number(bucket.monthlyAmount) || 0;
+  const mio = myBucketShare(bucket);
+  const compartido = (bucket.shares || []).length > 0;
+  const reserva = bucket.movesCash === false;
+
+  /*
+   * Una reserva no tiene aportes: se llena con los gastos que apuntan a ella.
+   * Un colchón de verdad sí, y ahí el saldo es lo que hay en el pote.
+   */
+  const saldo = reserva ? gastadoEnMes(bucket.id) : acumulado(bucket);
+
+  /* Del pote sale lo de todos; de tu cuenta, tu fracción. */
+  const factor = total > 0 ? mio / total : 1;
   /* Se lee en cada render y no al cargar el módulo: con la app abierta toda
      la noche, un valor congelado seguiría hablando del mes pasado. */
-  const esteMes = movidoEnMes(bucket, currentMonthKey());
-  const planeado = Number(bucket.monthlyAmount) || 0;
+  const esteMes = reserva
+    ? gastadoEnMes(bucket.id)
+    : movidoEnMes(bucket, currentMonthKey()) * factor;
+  /* Lo del mes se compara contra TU parte: es lo que sale de tu cuenta. */
+  const planeado = mio;
   const falta = planeado - esteMes;
   const conObjetivo = bucket.kind === 'meta' && bucket.targetAmount > 0;
   const pct = conObjetivo ? Math.min(100, (Math.max(0, saldo) / bucket.targetAmount) * 100) : null;
@@ -60,8 +76,21 @@ function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar }) {
               : bucket.kind === 'colchon'
                 ? 'Margen para lo que llegue, sin monto objetivo'
                 : 'Ahorro abierto, sin monto objetivo'}
-            {planeado > 0 && ` · ${fmtCOP(planeado)} al mes`}
+            {total > 0 && (compartido
+              ? ` · ${fmtCOP(total)} al mes entre todos, tú pones ${fmtCOP(mio)}`
+              : ` · ${fmtCOP(total)} al mes`)}
           </div>
+          {compartido && (
+            <div className="cc-fixed-meta">
+              Con {(bucket.shares || []).map((r) => `${nombreDe(r.personId)} (${fmtCOP(r.amount)})`).join(', ')}
+              {' · '}cada uno mete lo suyo, así que no hay nada que cobrar
+            </div>
+          )}
+          {reserva && (
+            <div className="cc-fixed-meta">
+              Reserva: no mueves la plata, se va gastando de tu cuenta
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
@@ -93,8 +122,20 @@ function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar }) {
       ) : (
         <div className="cc-goal-nums" style={{ justifyContent: 'flex-start' }}>
           <span>
-            {bucket.kind === 'colchon' ? 'Disponible en el colchón' : 'Llevas'}:{' '}
+            {reserva
+              ? 'Gastado de la reserva este mes'
+              : bucket.kind === 'colchon' ? 'Disponible en el colchón' : 'Llevas'}:{' '}
             <strong className="cc-mono">{fmtCOP(saldo)}</strong>
+            {!reserva && compartido && (
+              <span style={{ color: COLORS.inkSoft }}>
+                {' '}· tu parte, {fmtCOP(saldo * factor)}
+              </span>
+            )}
+            {reserva && planeado > 0 && (
+              <span style={{ color: COLORS.inkSoft }}>
+                {' '}de {fmtCOP(planeado)}
+              </span>
+            )}
           </span>
         </div>
       )}
@@ -103,7 +144,7 @@ function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar }) {
         * Lo del mes va aparte del acumulado a propósito: son dos preguntas
         * distintas. "¿Ya aparté lo de este mes?" y "¿alcanza si pasa algo?".
         */}
-      {planeado > 0 && (
+      {planeado > 0 && !reserva && (
         <div className="cc-goal-nums" style={{ justifyContent: 'flex-start', gap: 8 }}>
           {falta <= 0 ? (
             <span style={{ color: COLORS.income, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -117,6 +158,12 @@ function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar }) {
         </div>
       )}
 
+      {reserva ? (
+        <p className="cc-page-sub" style={{ marginTop: 6, marginBottom: 0 }}>
+          Esta reserva no se aporta ni se retira: se llena sola con los gastos que
+          etiquetes con ella. Registra la tanqueada como un movimiento normal y escógela.
+        </p>
+      ) : (
       <div className="cc-inline-form">
         <input
           className="cc-input" type="number" min="0" step="any" placeholder="Monto"
@@ -130,13 +177,14 @@ function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar }) {
           {bucket.kind === 'colchon' ? 'Usar' : 'Retirar'}
         </button>
       </div>
+      )}
     </div>
   );
 }
 
 export default function Buckets() {
   const {
-    buckets, bucketInputs, setBucketInputs, bucketForm, setBucketForm,
+    buckets, people, transactions, bucketInputs, setBucketInputs, bucketForm, setBucketForm,
     showBucketForm, setShowBucketForm, editingBucketId,
     handleAddBucket, handleBucketMovement, handleDeleteBucket,
     handleEditBucket, handleCancelBucketForm,
@@ -150,6 +198,16 @@ export default function Buckets() {
   const liquido = buckets.filter((b) => b.liquid !== false).reduce((s, b) => s + acumulado(b), 0);
 
   const onInput = (id, v) => setBucketInputs((p) => ({ ...p, [id]: v }));
+  /* Lo que llevas gastado de una reserva este mes: los gastos que la etiquetan. */
+  const gastadoEnMes = (bucketId) => (transactions || [])
+    .filter((t) => t.type === 'gasto' && t.bucketId === bucketId
+      && monthKeyFromDate(t.date) === currentMonthKey())
+    .reduce((s, t) => s + (Number(t.amount) || 0), 0);
+
+  const nombreDe = (id) => {
+    const p = (people || []).find((x) => x.id === id);
+    return p ? p.name : 'alguien';
+  };
 
   const props = (b) => ({
     bucket: b,
@@ -158,6 +216,8 @@ export default function Buckets() {
     onMover: handleBucketMovement,
     onBorrar: handleDeleteBucket,
     onEditar: handleEditBucket,
+    nombreDe,
+    gastadoEnMes,
   });
 
   return (
@@ -232,6 +292,20 @@ export default function Buckets() {
               </div>
             </>
           )}
+          <div className="cc-field">
+            <label>¿Mueves la plata a otra cuenta?</label>
+            <select
+              className="cc-select" value={bucketForm.movesCash === false ? 'no' : 'si'}
+              onChange={(e) => setBucketForm((f) => ({ ...f, movesCash: e.target.value === 'si' }))}
+            >
+              <option value="si">Sí, la aparto de verdad</option>
+              <option value="no">No, solo reservo el cupo</option>
+            </select>
+            <span className="cc-stat-sub" style={{ fontSize: 11 }}>
+              La gasolina es lo segundo: guardas $160.000 pero se quedan en tu cuenta y
+              van saliendo cuando tanqueas. Una reserva se mide por lo que gastas de ella.
+            </span>
+          </div>
           <div className="cc-field">
             <label>¿Puedes sacar esta plata cuando quieras?</label>
             <select

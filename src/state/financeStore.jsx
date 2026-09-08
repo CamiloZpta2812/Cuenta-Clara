@@ -116,7 +116,8 @@ export function FinanceProvider({ children }) {
   const [showBucketForm, setShowBucketForm] = useState(false);
   const [editingBucketId, setEditingBucketId] = useState(null);
   const [bucketForm, setBucketForm] = useState({
-    name: '', kind: 'meta', liquid: true, monthlyAmount: '', targetAmount: '', targetDate: '',
+    name: '', kind: 'meta', liquid: true, movesCash: true,
+    monthlyAmount: '', targetAmount: '', targetDate: '',
   });
 
   const [showGoalForm, setShowGoalForm] = useState(false);
@@ -839,7 +840,8 @@ export function FinanceProvider({ children }) {
   /* ---------- Buckets: metas y colchones ---------- */
 
   const BUCKET_VACIO = {
-    name: '', kind: 'meta', liquid: true, monthlyAmount: '', targetAmount: '', targetDate: '',
+    name: '', kind: 'meta', liquid: true, movesCash: true,
+    monthlyAmount: '', targetAmount: '', targetDate: '',
   };
 
   /*
@@ -854,6 +856,7 @@ export function FinanceProvider({ children }) {
       name: bucketForm.name.trim(),
       kind,
       liquid: !!bucketForm.liquid,
+      movesCash: bucketForm.movesCash !== false,
       monthlyAmount: parseFloat(bucketForm.monthlyAmount) || 0,
       /* Un colchón no tiene objetivo: es margen, no una meta a la que llegar. */
       targetAmount: kind === 'meta' ? (parseFloat(bucketForm.targetAmount) || null) : null,
@@ -864,7 +867,7 @@ export function FinanceProvider({ children }) {
       setBuckets((prev) => prev.map((b) => (b.id === editingBucketId ? { ...b, ...datos } : b)));
       setEditingBucketId(null);
     } else {
-      setBuckets((prev) => [...prev, { id: uid(), ...datos, contributions: [] }]);
+      setBuckets((prev) => [...prev, { id: uid(), ...datos, shares: [], contributions: [] }]);
     }
     setBucketForm(BUCKET_VACIO);
     setShowBucketForm(false);
@@ -876,6 +879,7 @@ export function FinanceProvider({ children }) {
       name: b.name,
       kind: b.kind === 'colchon' ? 'colchon' : 'meta',
       liquid: b.liquid !== false,
+      movesCash: b.movesCash !== false,
       monthlyAmount: b.monthlyAmount != null ? String(b.monthlyAmount) : '',
       targetAmount: b.targetAmount != null ? String(b.targetAmount) : '',
       targetDate: b.targetDate || '',
