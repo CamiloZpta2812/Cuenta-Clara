@@ -1,5 +1,5 @@
 import { monthSummary, targetDebt, simulatePlanChange } from '../lib/month.js';
-import { comparePlans, monthlyRateOf } from '../lib/amortization.js';
+import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
 import { buildCashFlow } from '../lib/cashflow.js';
 import { COLORS } from '../lib/constants.js';
 import { activeInstallmentGroups, buildCardStatements, nextStatement } from '../lib/projections.js';
@@ -71,9 +71,10 @@ export const estado = {
   debts: [
     { id: 'debt-li', name: 'Libre inversión Bancolombia', totalAmount: 14_000_000,
       interestRate: 1.67, monthlyPayment: 446_413, fixedPayment: 446_413,
-      payoffMode: 'reducir-plazo', currentBalance: 14_000_000, startDate: '2026-09-01',
+      payoffMode: 'reducir-plazo', currentBalance: 13_100_800, startDate: '2026-09-01',
       currency: 'COP',
-      payments: [{ id: 'pd-1', amount: 446_413, date: '2026-09-10' }] },
+      // Cuota + abono extra, con el saldo que quedó según el modelo.
+      payments: [{ id: 'pd-1', amount: 1_133_000, date: '2026-09-10' }] },
   ],
   monthlyPlans: [
     { month: MES, expectedIncome: 3_600_000, fixedExpenses: 746_000, debtPayment: 446_413,
@@ -116,6 +117,11 @@ export function buildValue(overrides = {}) {
     ...estado,
     debtOutlook: {
       debt: deuda, extra,
+      hechas: replayPayments({
+        principal: deuda.totalAmount,
+        monthlyRate: monthlyRateOf(deuda),
+        payments: deuda.payments,
+      }),
       ...comparePlans({
         principal: deuda.currentBalance,
         monthlyRate: monthlyRateOf(deuda),

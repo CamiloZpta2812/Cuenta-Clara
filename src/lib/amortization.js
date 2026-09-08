@@ -99,6 +99,53 @@ export function simulate({ principal, monthlyRate, payment, extra = 0, maxMonths
 }
 
 /*
+ * Reconstruye lo que YA pagaste, cuota por cuota.
+ *
+ * De un abono solo se guardan tres cosas: cuánto, cuándo, y el saldo que
+ * reportó el banco si lo anotaste. Cuánto de ese pago se fue en intereses no se
+ * guarda — se deduce, corriendo el crédito hacia adelante igual que él:
+ *
+ *   interés = saldo × tasa      capital = pago − interés
+ *
+ * Cuando hay saldo reportado, se usa ESE como saldo de cierre y el modelo se
+ * vuelve a anclar ahí. Así una diferencia con el banco —un seguro, un día de
+ * mora, un redondeo— no se arrastra al resto de la tabla: se queda en su fila.
+ * La fila queda marcada con `anchored` para poder decir cuál viene del banco.
+ */
+export function replayPayments({ principal, monthlyRate, payments }) {
+  const tasa = Number(monthlyRate) || 0;
+  let saldo = Number(principal) || 0;
+
+  return [...(payments || [])]
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    .map((p, i) => {
+      const apertura = saldo;
+      const interes = apertura * tasa;
+      const pago = Number(p.amount) || 0;
+      const reportado = p.balanceAfter;
+      const anchored = reportado !== null && reportado !== undefined && reportado !== '';
+
+      const cierre = anchored
+        ? Math.max(0, Number(reportado))
+        : Math.max(0, apertura + interes - pago);
+
+      saldo = cierre;
+      return {
+        month: i + 1,
+        date: p.date,
+        monthKey: p.month || null,
+        opening: apertura,
+        interest: interes,
+        principal: pago - interes,
+        payment: pago,
+        closing: cierre,
+        anchored,
+        paid: true,
+      };
+    });
+}
+
+/*
  * Cuota fija de un crédito a N meses (fórmula de anualidad).
  * Sirve para deducir la cuota cuando conoces el plazo, o el plazo cuando
  * conoces la cuota.
