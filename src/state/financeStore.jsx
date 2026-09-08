@@ -395,8 +395,10 @@ export function FinanceProvider({ children }) {
 
   // Igual que arriba: buildRecommendations() etiqueta categorías por dentro.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const recommendations = useMemo(() => buildRecommendations(transactions, debts, savingsGoals), [transactions, debts, savingsGoals, categoryLabels, customCategories]);
-  const status = getStatus(selMonthIncome, selMonthExpense);
+  const recommendations = useMemo(
+    () => buildRecommendations(snapshot(), selectedMonth),
+    [snapshot, selectedMonth],
+  );
   const allExpenseCategories = [...EXPENSE_CATEGORIES, ...customCategories.filter((c) => c.type === 'gasto')];
   const allIncomeCategories = [...INCOME_CATEGORIES, ...customCategories.filter((c) => c.type === 'ingreso')];
   const txFilterCategories = (txFilters.type === 'ingreso' ? allIncomeCategories : txFilters.type === 'gasto' ? allExpenseCategories : [...allExpenseCategories, ...allIncomeCategories]).map((c) => getCategory(c.id));
@@ -934,6 +936,9 @@ export function FinanceProvider({ children }) {
    * puro y está probado; aquí solo se le pasa el estado y el mes elegido.
    */
   const monthReport = useMemo(() => monthSummary(snapshot(), selectedMonth), [snapshot, selectedMonth]);
+
+  /* El sello sale del plan, no de lo registrado. Ver lib/insights.js. */
+  const status = getStatus(monthReport.plan);
 
   /*
    * Lo que la tarjeta de crédito aplaza.

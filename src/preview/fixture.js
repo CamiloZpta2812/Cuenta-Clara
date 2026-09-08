@@ -1,6 +1,7 @@
 import { monthSummary, targetDebt, simulatePlanChange } from '../lib/month.js';
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
 import { buildCashFlow } from '../lib/cashflow.js';
+import { buildRecommendations, getStatus } from '../lib/insights.js';
 import { COLORS } from '../lib/constants.js';
 import { activeInstallmentGroups, buildCardStatements, nextStatement } from '../lib/projections.js';
 
@@ -49,7 +50,6 @@ export const estado = {
     { id: 'fix-corte',    name: 'Corte de cabello', category: 'otros_gasto', amount: 40_000, totalAmount: 40_000, paymentMethod: 'debito', shares: [] },
     { id: 'fix-casa',     name: 'Aporte Casa',   category: 'vivienda',    amount: 300_000, totalAmount: 300_000, paymentMethod: 'debito', shares: [] },
     { id: 'fix-gimnasio', name: 'Gimnasio',      category: 'salud',       amount: 103_400, totalAmount: 103_400, paymentMethod: 'debito', shares: [] },
-    { id: 'fix-gasolina', name: 'Gasolina',      category: 'transporte',  amount: 160_000, totalAmount: 160_000, paymentMethod: 'debito', shares: [] },
     { id: 'fix-manejo',   name: 'Cuota de manejo tarjeta', category: 'servicios', amount: 51_000, totalAmount: 51_000, paymentMethod: 'debito', shares: [] },
   ],
   /* Yeison ya pagó su Spotify; los otros cuatro cobros siguen pendientes. */
@@ -151,8 +151,8 @@ export function buildValue(overrides = {}) {
     })(),
     selMonthIncome: 3_600_000, selMonthExpense: 980_000,
     selMonthFixed: 460_000, selMonthVariable: 520_000,
-    status: { color: COLORS.income, label: 'Vas bien', Icon: () => null },
-    recommendations: [],
+    status: getStatus(monthSummary(estado, MES).plan),
+    recommendations: buildRecommendations(estado, MES),
     exporting: '', handleExportExcel: () => {},
     paymentInputs: {}, setPaymentInputs: () => {},
     balanceInputs: {}, setBalanceInputs: () => {},
