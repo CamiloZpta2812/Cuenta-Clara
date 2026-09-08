@@ -169,7 +169,23 @@ export function monthActual(estado, month) {
   const gastos = transactions.filter((t) => t.type === 'gasto');
 
   const fixedExpenses = sum(gastos.filter((t) => t.fixedExpenseId), (t) => t.amount);
-  const debtPayment = sum(debtPayments(estado).filter((p) => monthKeyFromDate(p.date) === month), (p) => p.amount);
+
+  /*
+   * Abonar a una deuda no es gastar: es cambiar de sitio un pasivo. La plata
+   * sale, sí, pero el plan ya la tiene contada en su propia línea.
+   *
+   * Los abonos llegan por dos vías. Los que se registran desde la pantalla de
+   * deuda dejan una fila en `payments` y un movimiento enlazado por
+   * debtPaymentId. Los que alguien anota a mano —al consolidar deudas, por
+   * ejemplo— son solo un movimiento en la categoría "deudas".
+   *
+   * Se suman las dos, pero el movimiento enlazado se descuenta: su fila en
+   * `payments` ya lo representa, y contarlo dos veces diría que pagaste el
+   * doble.
+   */
+  const abonosRegistrados = debtPayments(estado).filter((p) => monthKeyFromDate(p.date) === month);
+  const abonosSueltos = gastos.filter((t) => t.category === 'deudas' && !t.debtPaymentId);
+  const debtPayment = sum(abonosRegistrados, (p) => p.amount) + sum(abonosSueltos, (t) => t.amount);
 
   /*
    * Un aporte a un colchón no es lo mismo que uno a una meta, y meterlos en la
@@ -182,7 +198,10 @@ export function monthActual(estado, month) {
   const cushion = sum(aportes.filter((a) => a.kind === 'colchon'), (a) => a.amount);
 
   // Variable es todo lo demás: ni fijo, ni abono a deuda, ni aporte a ahorro.
-  const variable = sum(gastos.filter((t) => !t.fixedExpenseId && !t.debtId && !t.bucketId), (t) => t.amount);
+  const variable = sum(
+    gastos.filter((t) => !t.fixedExpenseId && !t.debtId && !t.bucketId && t.category !== 'deudas'),
+    (t) => t.amount,
+  );
 
   const grossSurplus = income - fixedExpenses - debtPayment - savings - variable;
 

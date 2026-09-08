@@ -456,3 +456,41 @@ test('sin deudas el simulador no inventa nada', () => {
   assert.equal(targetDebt({ debts: [] }), null);
   assert.equal(simulatePlanChange({ ...estado, debts: [] }, { cushion: -100_000 }, MES), null);
 });
+
+/* ------------------------------------------------- abonos sin enlazar --- */
+
+/*
+ * Al consolidar deudas se pagan varias de golpe, y esos pagos se anotan a mano
+ * sin quedar enlazados a nada. Si cuentan como gasto variable, la app dice que
+ * te desbordaste el mes en que ordenaste tus deudas.
+ */
+test('un abono anotado a mano cuenta como deuda, no como gasto variable', () => {
+  const consolido = {
+    ...estado,
+    transactions: [
+      { id: 'c1', type: 'gasto', amount: 1_000_000, category: 'deudas', date: '2026-09-01', note: 'Deuda Doña Natalia' },
+      { id: 'c2', type: 'gasto', amount: 250_000, category: 'deudas', date: '2026-09-04', note: 'Abono Sofi' },
+      { id: 'c3', type: 'gasto', amount: 47_300, category: 'alimentacion', date: '2026-09-30' },
+    ],
+  };
+  const r = monthActual(consolido, MES);
+  assert.equal(r.variable, 47_300, 'solo el granizado');
+  assert.equal(r.debtPayment, 1_250_000, 'los dos abonos');
+});
+
+test('un abono enlazado no se cuenta dos veces', () => {
+  const conAbono = {
+    ...estado,
+    debts: estado.debts.map((d) => ({
+      ...d, payments: [{ id: 'pd1', amount: 446_413, date: '2026-09-10' }],
+    })),
+    transactions: [
+      // El movimiento que deja la pantalla de deuda, enlazado a su abono.
+      { id: 'mv1', type: 'gasto', amount: 446_413, category: 'deudas', date: '2026-09-10',
+        debtId: 'd1', debtPaymentId: 'pd1' },
+    ],
+  };
+  const r = monthActual(conAbono, MES);
+  assert.equal(r.debtPayment, 446_413, 'una sola vez, no 892.826');
+  assert.equal(r.variable, 0);
+});
