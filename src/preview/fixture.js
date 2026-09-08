@@ -146,6 +146,7 @@ export function buildValue(overrides = {}) {
     handleAddPayment: () => {},
     selectedMonth: MES,
     setSelectedMonth: () => {},
+    setActiveTab: () => {},
     bucketInputs: {},
     setBucketInputs: () => {},
     bucketForm: { name: '', kind: 'meta', liquid: true, monthlyAmount: '', targetAmount: '', targetDate: '' },

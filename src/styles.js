@@ -218,6 +218,47 @@ export const STYLES = `
   .cc-plan-row > :nth-child(2), .cc-plan-head > :nth-child(2) { display: none; }
 }
 
+/*
+ * El número que importa. Es la única pieza de la app con este peso visual: si
+ * todo se ve igual de importante, nada lo es.
+ */
+.cc-hero {
+  margin-top: 6px; padding: 26px 20px; text-align: center; border-radius: 14px;
+  background: linear-gradient(160deg, var(--income-soft), var(--paper) 70%);
+  border: 1px solid var(--line);
+}
+.cc-hero-alerta { background: linear-gradient(160deg, var(--expense-soft), var(--paper) 70%); }
+.cc-hero-label {
+  font-size: 12px; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--ink-soft); margin: 0 0 6px;
+}
+.cc-hero-num {
+  font-family: var(--mono, inherit); font-size: 40px; font-weight: 700;
+  line-height: 1.1; color: var(--ink);
+}
+.cc-hero-alerta .cc-hero-num { color: #BB4B34; }
+.cc-hero:not(.cc-hero-alerta) .cc-hero-num { color: #2F7D5C; }
+.cc-hero-sub {
+  margin: 10px auto 0; max-width: 52ch; font-size: 12.5px; color: var(--ink-soft);
+}
+@media (max-width: 620px) { .cc-hero-num { font-size: 32px; } }
+
+/* Un aviso por cosa que necesita tu atención. Si no hay ninguna, no hay avisos. */
+.cc-aviso {
+  display: flex; align-items: flex-start; gap: 11px;
+  padding: 12px 14px; margin-bottom: 8px; font-size: 13px;
+  background: var(--card, #fff); border: 1px solid var(--line);
+  border-left: 3px solid var(--line); border-radius: 10px;
+}
+.cc-aviso-sub { color: var(--ink-soft); font-size: 12.5px; margin-top: 2px; }
+
+/* Cabecera plegable: el detalle existe, pero no estorba hasta que lo pidas. */
+.cc-disclosure {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; padding: 0; background: none; border: 0; cursor: pointer;
+  color: var(--ink); text-align: left;
+}
+
 .cc-split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: center; }
 @media (max-width: 780px) { .cc-split { grid-template-columns: 1fr; } }
 
