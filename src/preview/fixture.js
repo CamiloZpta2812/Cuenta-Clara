@@ -1,6 +1,7 @@
 import { monthSummary, targetDebt, simulatePlanChange } from '../lib/month.js';
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
 import { buildCashFlow } from '../lib/cashflow.js';
+import { upcomingCharges } from '../lib/upcoming.js';
 import { buildRecommendations, getStatus } from '../lib/insights.js';
 import { COLORS } from '../lib/constants.js';
 import { activeInstallmentGroups, buildCardStatements, nextStatement } from '../lib/projections.js';
@@ -35,7 +36,7 @@ export const estado = {
   fixedExpenses: [
     { id: 'fix-hbo', name: 'HBO Max', category: 'entretenimiento', amount: 8_300,
       totalAmount: 12_450, paymentMethod: 'debito',
-      shares: [{ id: 'shr-hbo-juanjo', personId: 'p-juanjo', amount: 4_150 }] },
+      shares: [{ id: 'shr-hbo-juanjo', personId: 'p-juanjo', amount: 4_150 }] , dueDay: 12 },
     { id: 'fix-spotify', name: 'Spotify', category: 'entretenimiento', amount: 6_100,
       totalAmount: 30_500, paymentMethod: 'debito',
       shares: [
@@ -44,12 +45,12 @@ export const estado = {
         { id: 'shr-sp-paula',  personId: 'p-paula',  amount: 6_100 },
         { id: 'shr-sp-alex',   personId: 'p-alex',   amount: 6_100 },
       ] },
-    { id: 'fix-icloud',   name: 'iCloud',        category: 'servicios',   amount: 11_300,  totalAmount: 11_300,  paymentMethod: 'debito', shares: [] },
+    { id: 'fix-icloud',   name: 'iCloud',        category: 'servicios',   amount: 11_300,  totalAmount: 11_300,  paymentMethod: 'debito', shares: [] , dueDay: 9 },
     { id: 'fix-disney',   name: 'Disney+',       category: 'entretenimiento', amount: 12_000, totalAmount: 12_000, paymentMethod: 'debito', shares: [] },
-    { id: 'fix-celular',  name: 'Plan Celular',  category: 'servicios',   amount: 53_900,  totalAmount: 53_900,  paymentMethod: 'debito', shares: [] },
+    { id: 'fix-celular',  name: 'Plan Celular',  category: 'servicios',   amount: 53_900,  totalAmount: 53_900,  paymentMethod: 'debito', shares: [] , dueDay: 25 },
     { id: 'fix-corte',    name: 'Corte de cabello', category: 'otros_gasto', amount: 40_000, totalAmount: 40_000, paymentMethod: 'debito', shares: [] },
-    { id: 'fix-casa',     name: 'Aporte Casa',   category: 'vivienda',    amount: 300_000, totalAmount: 300_000, paymentMethod: 'debito', shares: [] },
-    { id: 'fix-gimnasio', name: 'Gimnasio',      category: 'salud',       amount: 103_400, totalAmount: 103_400, paymentMethod: 'debito', shares: [] },
+    { id: 'fix-casa',     name: 'Aporte Casa',   category: 'vivienda',    amount: 300_000, totalAmount: 300_000, paymentMethod: 'debito', shares: [] , dueDay: 5 },
+    { id: 'fix-gimnasio', name: 'Gimnasio',      category: 'salud',       amount: 103_400, totalAmount: 103_400, paymentMethod: 'debito', shares: [] , dueDay: 14 },
     { id: 'fix-manejo',   name: 'Cuota de manejo tarjeta', category: 'servicios', amount: 51_000, totalAmount: 51_000, paymentMethod: 'debito', shares: [] },
   ],
   /* Yeison ya pagó su Spotify; los otros cuatro cobros siguen pendientes. */
@@ -176,6 +177,7 @@ export function buildValue(overrides = {}) {
     fixedForm: { name: '', category: 'servicios', amount: '', dueDay: '', paymentMethod: 'debito', cardId: '' },
     setFixedForm: () => {},
     cardLabel: () => 'Visa 4417',
+    proximosCobros: upcomingCharges(estado, 8, '2026-09-08'),
     filteredTx: [...estado.transactions].sort((a, b) => (a.date < b.date ? 1 : -1)),
     txFilters: { type: 'todos', month: 'todos', category: 'todas', paymentMethod: 'todos', fixed: 'todos', day: '' },
     setTxFilters: () => {},

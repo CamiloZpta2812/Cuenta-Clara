@@ -1,8 +1,8 @@
-import { Plus, Trash2, Check, X, Pencil, Repeat } from 'lucide-react';
+import { Plus, Trash2, Check, X, Pencil, Repeat, CalendarClock, AlertTriangle } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
 import { PAYMENT_METHODS, getCategory, getPaymentMethod } from '../lib/categories.js';
 import { fmtCOP } from '../lib/money.js';
-import { todayStr } from '../lib/dates.js';
+import { todayStr, formatDateHuman } from '../lib/dates.js';
 import IconCircle from '../components/IconCircle';
 import StatCard from '../components/StatCard';
 import { useFinance } from '../state/financeStore';
@@ -20,6 +20,7 @@ export default function GastosFijos() {
     handleDeleteFixedExpense,
     handleEditFixedExpense,
     handleMarkFixedExpensePaid,
+    proximosCobros,
     paidDateInputs,
     setPaidDateInputs,
     handleUndoFixedExpensePaid,
@@ -93,6 +94,42 @@ export default function GastosFijos() {
       {fixedExpenses.length === 0 ? (
         <p className="cc-stat-sub">Aún no tienes gastos fijos registrados.</p>
       ) : (
+        <>
+        {/*
+          * Lo que se viene. Va arriba de la lista completa porque es la
+          * pregunta con fecha: la lista dice qué pagas cada mes, esto dice qué
+          * te cobran esta semana.
+          */}
+        {proximosCobros.length > 0 && (
+          <div className="cc-card" style={{ marginBottom: 14 }}>
+            <p className="cc-chart-title">Esta semana te cobran</p>
+            <div className="cc-commit-list">
+              {proximosCobros.map((c) => (
+                <div
+                  key={c.id} className="cc-plan-row"
+                  style={{ gridTemplateColumns: '1fr 120px 120px' }}
+                >
+                  <span className="cc-plan-concept">
+                    {c.vencido
+                      ? <AlertTriangle size={14} color={COLORS.expense} />
+                      : <CalendarClock size={14} />}
+                    {c.name}
+                  </span>
+                  <span className="cc-mono">{fmtCOP(c.amount)}</span>
+                  <span style={{ color: c.vencido ? COLORS.expense : COLORS.inkSoft }}>
+                    {c.vencido ? 'Se venció el ' : ''}
+                    {formatDateHuman(new Date(`${c.date}T12:00:00`))}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="cc-page-sub" style={{ marginTop: 10 }}>
+              Solo aparecen los que tienen día de cobro puesto y no has marcado como
+              pagados este mes. De un gasto compartido se anuncia tu parte.
+            </p>
+          </div>
+        )}
+
         <div className="cc-fixed-list">
           {fixedExpenses.map((fe) => {
             const cat = getCategory(fe.category);
@@ -164,6 +201,7 @@ export default function GastosFijos() {
             );
           })}
         </div>
+        </>
       )}
     </>
   );

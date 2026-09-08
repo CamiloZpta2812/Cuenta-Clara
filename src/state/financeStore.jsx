@@ -15,6 +15,7 @@ import { buildCardStatements, nextStatement, buildCommitments, activeInstallment
 import { monthSummary, targetDebt, simulatePlanChange } from '../lib/month.js';
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
 import { buildCashFlow } from '../lib/cashflow.js';
+import { upcomingCharges } from '../lib/upcoming.js';
 
 /*
  * Todo el estado de la app vive aquí: lo que se persiste en Supabase, lo que se
@@ -942,6 +943,13 @@ export function FinanceProvider({ children }) {
    */
   const monthReport = useMemo(() => monthSummary(snapshot(), selectedMonth), [snapshot, selectedMonth]);
 
+  /*
+   * Lo que se viene esta semana. El día de cobro estaba guardado desde
+   * siempre y solo servía para escribir "día 5" en la lista: saber que el
+   * arriendo es el 5 no sirve el día 3 si nadie te lo dice.
+   */
+  const proximosCobros = useMemo(() => upcomingCharges(snapshot(), 8), [snapshot]);
+
   /* El sello sale del plan, no de lo registrado. Ver lib/insights.js. */
   const status = getStatus(monthReport.plan);
 
@@ -1066,6 +1074,7 @@ export function FinanceProvider({ children }) {
     balanceInputs,
     bucketForm,
     paidDateInputs,
+    proximosCobros,
     setPaidDateInputs,
     bucketInputs,
     cardOutlook,
