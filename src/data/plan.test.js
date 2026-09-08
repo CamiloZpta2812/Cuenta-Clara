@@ -10,11 +10,9 @@ const conDeuda = {
   creditCards: [{ id: 'c1', name: 'Visa', lastFour: '1111', currency: 'COP' }],
   debts: [{ id: 'd1', name: 'X', totalAmount: 1000, startDate: '2026-01-01',
             payments: [{ id: 'p1', amount: 200, date: '2026-09-02' }] }],
-  savingsGoals: [{ id: 'g1', name: 'Meta', targetAmount: 500, targetDate: '',
-                   contributions: [{ id: 'a1', amount: 100, date: '2026-05-01' }] }],
   fixedExpenses: [], customCategories: [], categoryLabels: {},
 };
-const vacio = { transactions: [], creditCards: [], debts: [], savingsGoals: [],
+const vacio = { transactions: [], creditCards: [], debts: [],
                 fixedExpenses: [], customCategories: [], categoryLabels: {} };
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -34,7 +32,6 @@ test('al borrar todo, los hijos se borran antes que sus padres', () => {
   const plan = planWrites(diffState(conDeuda, vacio), UID);
   const pos = (t) => orden(plan).indexOf(`delete:${t}`);
   assert.ok(pos('debt_payments') < pos('debts'), 'los abonos antes que la deuda');
-  assert.ok(pos('goal_contributions') < pos('savings_goals'), 'los aportes antes que la meta');
   assert.ok(pos('transactions') < pos('credit_cards'), 'los movimientos antes que la tarjeta');
 });
 
@@ -42,7 +39,6 @@ test('al crear, los padres se escriben antes que los hijos', () => {
   const plan = planWrites(diffState(vacio, conDeuda), UID);
   const pos = (t) => orden(plan).indexOf(`upsert:${t}`);
   assert.ok(pos('debts') < pos('debt_payments'));
-  assert.ok(pos('savings_goals') < pos('goal_contributions'));
   assert.ok(pos('credit_cards') < pos('transactions'));
 });
 
@@ -109,7 +105,7 @@ const v2 = {
   monthlyPlans: [{ month: '2026-09', expectedIncome: 3400000, fixedExpenses: 8300,
                    debtPayment: 0, savings: 50000, variableEstimate: 830000,
                    cushion: 0, locked: false }],
-  transactions: [], creditCards: [], debts: [], savingsGoals: [],
+  transactions: [], creditCards: [], debts: [],
   customCategories: [], categoryLabels: {},
 };
 

@@ -12,7 +12,7 @@ import { userConfig } from '../lib/userConfig.js';
 import { uid } from '../lib/id.js';
 import { buildRecommendations, getStatus } from '../lib/insights.js';
 import { buildCardStatements, nextStatement, buildCommitments, activeInstallmentGroups } from '../lib/projections.js';
-import { monthSummary, targetDebt, simulatePlanChange } from '../lib/month.js';
+import { monthSummary, targetDebt, simulatePlanChange, myBucketShare } from '../lib/month.js';
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
 import { buildCashFlow } from '../lib/cashflow.js';
 import { upcomingCharges } from '../lib/upcoming.js';
@@ -52,7 +52,6 @@ export function FinanceProvider({ children }) {
 
   const [transactions, setTransactions] = useState([]);
   const [debts, setDebts] = useState([]);
-  const [savingsGoals, setSavingsGoals] = useState([]);
   const [creditCards, setCreditCards] = useState([]);
   const [fixedExpenses, setFixedExpenses] = useState([]);
   const [categoryLabels, setCategoryLabelsState] = useState({});
@@ -126,10 +125,6 @@ export function FinanceProvider({ children }) {
     monthlyAmount: '', targetAmount: '', targetDate: '',
   });
 
-  const [showGoalForm, setShowGoalForm] = useState(false);
-  const [goalForm, setGoalForm] = useState({ name: '', targetAmount: '', targetDate: '', initialAmount: '' });
-  const [contributionInputs, setContributionInputs] = useState({});
-
   const [pinForm, setPinForm] = useState({ newPin: '', confirmPin: '' });
   const [pinMessage, setPinMessage] = useState(null); // { kind: 'success' | 'error', text }
   const [configTab, setConfigTab] = useState('categorias');
@@ -143,10 +138,10 @@ export function FinanceProvider({ children }) {
    * borraría esos datos en el servidor.
    */
   const snapshot = useCallback(() => ({
-    transactions, debts, savingsGoals, creditCards, fixedExpenses,
+    transactions, debts, creditCards, fixedExpenses,
     customCategories, categoryLabels,
     people, incomeSources, collections, buckets, monthlyPlans, setupCompletedAt,
-  }), [transactions, debts, savingsGoals, creditCards, fixedExpenses,
+  }), [transactions, debts, creditCards, fixedExpenses,
        customCategories, categoryLabels,
        people, incomeSources, collections, buckets, monthlyPlans, setupCompletedAt]);
 
@@ -170,7 +165,6 @@ export function FinanceProvider({ children }) {
       function aplicar(state) {
         setTransactions(state.transactions || []);
         setDebts((state.debts || []).map((d) => ({ ...d, payments: d.payments || [] })));
-        setSavingsGoals((state.savingsGoals || []).map((g) => ({ ...g, contributions: g.contributions || [] })));
         setCreditCards(state.creditCards || []);
         setFixedExpenses(state.fixedExpenses || []);
         setCategoryLabels(state.categoryLabels || {});
@@ -332,7 +326,18 @@ export function FinanceProvider({ children }) {
   const totalIncome = useMemo(() => transactions.filter((t) => t.type === 'ingreso').reduce((s, t) => s + t.amount, 0), [transactions]);
   const totalExpense = useMemo(() => transactions.filter((t) => t.type === 'gasto').reduce((s, t) => s + t.amount, 0), [transactions]);
   const cashBalance = totalIncome - totalExpense;
-  const totalSavings = useMemo(() => savingsGoals.reduce((s, g) => s + g.contributions.reduce((a, c) => a + c.amount, 0), 0), [savingsGoals]);
+  /*
+   * Lo apartado, contando solo tu parte de los potes compartidos y dejando por
+   * fuera las reservas: en una reserva la plata nunca se movió, sigue en la
+   * cuenta y ya está contada en el saldo.
+   */
+  const totalSavings = useMemo(() => buckets
+    .filter((b) => b.movesCash !== false)
+    .reduce((s, b) => {
+      const total = Number(b.monthlyAmount) || 0;
+      const factor = total > 0 ? myBucketShare(b) / total : 1;
+      return s + (b.contributions || []).reduce((a, c) => a + (Number(c.amount) || 0), 0) * factor;
+    }, 0), [buckets]);
   function debtRemainingCOP(d) {
     const paid = d.payments.reduce((a, p) => a + p.amount, 0);
     const remaining = Math.max(0, parseFloat(d.totalAmount) - paid);
@@ -377,18 +382,6 @@ export function FinanceProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transactions, selectedMonth, categoryLabels, customCategories]);
 
-  const equityEvolution = useMemo(() => monthsWindow.map((key) => {
-    const ahorro = savingsGoals.reduce((sum, g) => sum + g.contributions.filter((c) => monthKeyFromDate(c.date) <= key).reduce((s, c) => s + c.amount, 0), 0);
-    const deuda = debts.reduce((sum, d) => {
-      if (monthKeyFromDate(d.startDate) > key) return sum;
-      const paid = d.payments.filter((p) => monthKeyFromDate(p.date) <= key).reduce((s, p) => s + p.amount, 0);
-      const remaining = Math.max(0, parseFloat(d.totalAmount) - paid);
-      // Igual que debtRemainingCOP: una deuda en USD tiene que convertirse,
-      // si no la línea del gráfico y la tarjeta "Deuda pendiente" no cuadran.
-      return sum + (d.currency === 'USD' ? remaining * (d.exchangeRate || 0) : remaining);
-    }, 0);
-    return { label: monthLabel(key), Ahorro: Math.max(0, ahorro), Deuda: deuda };
-  }), [monthsWindow, savingsGoals, debts]);
 
   const filteredTx = useMemo(() => transactions
     .filter((t) => txFilters.type === 'todos' || t.type === txFilters.type)
@@ -629,28 +622,6 @@ export function FinanceProvider({ children }) {
     setBalanceInputs((prev) => ({ ...prev, [debtId]: '' }));
   }
 
-  function handleAddGoal(e) {
-    e.preventDefault();
-    if (!goalForm.name.trim()) return;
-    const target = goalForm.targetAmount !== '' ? parseFloat(goalForm.targetAmount) : null;
-    if (target != null && (!target || target <= 0)) return;
-    const initial = goalForm.initialAmount !== '' ? parseFloat(goalForm.initialAmount) : 0;
-    const contributions = initial > 0 ? [{ id: uid(), amount: initial, date: todayStr() }] : [];
-    setSavingsGoals((prev) => [...prev, { id: uid(), name: goalForm.name.trim(), targetAmount: target, targetDate: target ? (goalForm.targetDate || '') : '', contributions }]);
-    setGoalForm({ name: '', targetAmount: '', targetDate: '', initialAmount: '' });
-    setShowGoalForm(false);
-  }
-  function handleDeleteGoal(id) {
-    const goal = savingsGoals.find((g) => g.id === id);
-    if (!window.confirm(`¿Eliminar la meta "${goal ? goal.name : ''}" y todos sus aportes?`)) return;
-    setSavingsGoals((prev) => prev.filter((g) => g.id !== id));
-  }
-  function handleContribution(goalId, sign) {
-    const amt = parseFloat(contributionInputs[goalId]);
-    if (!amt || amt <= 0) return;
-    setSavingsGoals((prev) => prev.map((g) => (g.id === goalId ? { ...g, contributions: [...g.contributions, { id: uid(), amount: amt * sign, date: todayStr() }] } : g)));
-    setContributionInputs((prev) => ({ ...prev, [goalId]: '' }));
-  }
 
   function handleAddCard(e) {
     e.preventDefault();
@@ -838,7 +809,6 @@ export function FinanceProvider({ children }) {
     if (!window.confirm('¿Seguro que quieres borrar todos tus datos financieros? Esta acción no se puede deshacer.')) return;
     setTransactions([]);
     setDebts([]);
-    setSavingsGoals([]);
     setCreditCards([]);
     setFixedExpenses([]);
     setCustomCategories([]);
@@ -1101,7 +1071,6 @@ export function FinanceProvider({ children }) {
     categoryLabels,
     collections,
     configTab,
-    contributionInputs,
     creditCards,
     customCategories,
     debtForm,
@@ -1111,7 +1080,6 @@ export function FinanceProvider({ children }) {
     editingCardId,
     editingFixedId,
     editingTxId,
-    equityEvolution,
     filteredTx,
     findFixedExpensePaidThisMonth,
     fixedExpenses,
@@ -1120,23 +1088,19 @@ export function FinanceProvider({ children }) {
     incomeSources,
     monthlyPlans,
     people,
-    goalForm,
     handleAddCard,
     handleAddCustomCategory,
     handleAddDebt,
     handleAddFixedExpense,
-    handleAddGoal,
     handleAddPayment,
     handleAddTransaction,
     handleCancelCardForm,
     handleCancelFixedForm,
     handleCancelTxForm,
-    handleContribution,
     handleDeleteCard,
     handleDeleteCustomCategory,
     handleDeleteDebt,
     handleDeleteFixedExpense,
-    handleDeleteGoal,
     handleDeleteTransaction,
     handleEditCard,
     handleEditFixedExpense,
@@ -1168,7 +1132,6 @@ export function FinanceProvider({ children }) {
     pinMessage,
     recommendations,
     saveError,
-    savingsGoals,
     selMonthExpense,
     selMonthFixed,
     selMonthIncome,
@@ -1178,7 +1141,6 @@ export function FinanceProvider({ children }) {
     setCardForm,
     setCategoryLabels,
     setConfigTab,
-    setContributionInputs,
     setCreditCards,
     setCustomCategories,
     setDebtForm,
@@ -1189,7 +1151,6 @@ export function FinanceProvider({ children }) {
     setEditingTxId,
     setFixedExpenses,
     setFixedForm,
-    setGoalForm,
     setLoading,
     setNewCatGasto,
     setNewCatIngreso,
@@ -1197,12 +1158,10 @@ export function FinanceProvider({ children }) {
     setPinForm,
     setPinMessage,
     setSaveError,
-    setSavingsGoals,
     setSelectedMonth,
     setShowCardForm,
     setShowDebtForm,
     setShowFixedForm,
-    setShowGoalForm,
     setShowTxForm,
     setTransactions,
     setTxFilters,
@@ -1213,7 +1172,6 @@ export function FinanceProvider({ children }) {
     showCardForm,
     showDebtForm,
     showFixedForm,
-    showGoalForm,
     showTxForm,
     status,
     totalCardSpendCOP,

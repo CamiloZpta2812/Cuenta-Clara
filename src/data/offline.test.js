@@ -9,7 +9,7 @@ const alPerderSenal = {
     { id: 't1', type: 'gasto', amount: 50000, category: 'alimentacion', date: '2026-09-01', note: 'Mercado' },
     { id: 't2', type: 'gasto', amount: 20000, category: 'transporte', date: '2026-09-02', note: 'Taxi' },
   ],
-  creditCards: [], debts: [], savingsGoals: [], fixedExpenses: [],
+  creditCards: [], debts: [], fixedExpenses: [],
   customCategories: [], categoryLabels: {},
 };
 

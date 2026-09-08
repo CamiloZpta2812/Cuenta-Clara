@@ -36,14 +36,6 @@ const blob = {
       monthlyPayment: 0, dueDay: null, startDate: '2026-03-01', currency: 'USD',
       exchangeRate: 4100, payments: [] },
   ],
-  savingsGoals: [
-    { id: 'g1', name: 'Fondo de emergencia', targetAmount: 6000000, targetDate: '2027-06-30',
-      contributions: [
-        { id: 'a1', amount: 500000, date: '2026-07-01' },
-        { id: 'a2', amount: -100000, date: '2026-08-01' },
-      ] },
-    { id: 'g2', name: 'Sin meta fija', targetAmount: null, targetDate: '', contributions: [] },
-  ],
   customCategories: [
     { id: 'custom-x1', type: 'gasto', label: 'Peluquería', iconKey: 'utensils', color: '#B0524B' },
   ],
@@ -62,8 +54,6 @@ test('no se pierde ni se inventa ningún registro', () => {
   assert.equal(rows.fixed_expenses.length, 1);
   assert.equal(rows.debts.length, 2);
   assert.equal(rows.debt_payments.length, 1, 'los abonos salen de dentro de la deuda');
-  assert.equal(rows.savings_goals.length, 2);
-  assert.equal(rows.goal_contributions.length, 2);
   assert.equal(rows.custom_categories.length, 1);
 });
 
@@ -73,14 +63,12 @@ test('los abonos y aportes vuelven a la deuda y meta correctas', () => {
                    [{ id: 'p1', amount: 200000, date: '2026-09-02',
                       month: '2026-09', balanceAfter: null }]);
   assert.deepEqual(back.debts.find((d) => d.id === 'd2').payments, []);
-  assert.equal(back.savingsGoals.find((g) => g.id === 'g1').contributions.length, 2);
-  assert.equal(back.savingsGoals.find((g) => g.id === 'g2').contributions.length, 0);
 });
 
-test('un aporte negativo (retiro de la meta) mantiene el signo', () => {
-  const back = rowsToState(stateToRows(blob));
-  const aportes = back.savingsGoals.find((g) => g.id === 'g1').contributions;
-  assert.equal(aportes.find((c) => c.id === 'a2').amount, -100000);
+test('un retiro de un bucket mantiene el signo negativo', () => {
+  const back = rowsToState(stateToRows(v2));
+  const aportes = back.buckets.find((b) => b.id === 'b1').contributions;
+  assert.equal(aportes.find((c) => c.id === 'ap2').amount, -20000);
 });
 
 test('las referencias entre registros se conservan', () => {
@@ -339,7 +327,6 @@ test('el estado canónico tiene exactamente estas claves', () => {
     'incomeSources',
     'monthlyPlans',
     'people',
-    'savingsGoals',
     'setupCompletedAt',
     'transactions',
   ]);

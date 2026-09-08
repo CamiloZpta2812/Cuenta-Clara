@@ -104,7 +104,6 @@ export const estado = {
   ],
   customCategories: [],
   categoryLabels: {},
-  savingsGoals: [],
 };
 
 /*

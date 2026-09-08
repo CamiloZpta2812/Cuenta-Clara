@@ -22,9 +22,16 @@ const datos = {
   debts: [{ id: 'd1', name: 'Crédito', totalAmount: 1000000, interestRate: 1.5, monthlyPayment: 100000,
             dueDay: 10, startDate: '2026-01-15', currency: 'COP',
             payments: [{ id: 'p1', amount: 200000, date: '2026-09-02' }] }],
-  savingsGoals: [{ id: 'g1', name: 'Fondo', targetAmount: 6000000, targetDate: '2027-06-30',
-                   contributions: [{ id: 'a1', amount: 500000, date: '2026-07-01' },
-                                   { id: 'a2', amount: -100000, date: '2026-08-01' }] }],
+  buckets: [
+    { id: 'b1', name: 'Fondo Sofi', kind: 'meta', liquid: true, movesCash: true,
+      monthlyAmount: 600000, targetAmount: 6000000, targetDate: '2027-06-30',
+      shares: [{ id: 'sh1', personId: 'p-sofi', amount: 300000 }],
+      contributions: [{ id: 'a1', amount: 500000, date: '2026-07-01' },
+                      { id: 'a2', amount: -100000, date: '2026-08-01' }] },
+    /* Una reserva: no mueve plata, así que no suma al ahorro del resumen. */
+    { id: 'b2', name: 'Gasolina', kind: 'colchon', liquid: true, movesCash: false,
+      monthlyAmount: 160000, shares: [], contributions: [] },
+  ],
   customCategories: [], categoryLabels: {},
 };
 
@@ -36,7 +43,7 @@ test('el reporte trae todas las hojas', () => {
   assert.deepEqual(hojas.map((h) => h.name), [
     'Resumen', 'Por mes', 'Movimientos', 'Gastos por categoría', 'Ingresos',
     'Tarjetas', 'Facturas de tarjeta', 'Movimientos de tarjeta', 'Cuotas activas',
-    'Deudas', 'Abonos a deudas', 'Metas de ahorro', 'Aportes a metas',
+    'Deudas', 'Abonos a deudas', 'Ahorro y colchones', 'Aportes y retiros',
     'Gastos fijos', 'Compromisos futuros',
   ]);
 });
@@ -133,11 +140,17 @@ test('deudas, abonos, metas y aportes salen completos', () => {
   assert.equal(d.pendiente, 800000);
   assert.equal(hoja('Abonos a deudas').rows.length, 1);
 
-  const m = hoja('Metas de ahorro').rows[0];
-  assert.equal(m.ahorrado, 400000);
-  assert.equal(m.falta, 5600000);
-  assert.equal(m.avance, 7);
-  const aportes = hoja('Aportes a metas').rows;
+  const m = hoja('Ahorro y colchones').rows[0];
+  assert.equal(m.tipo, 'Meta');
+  assert.equal(m.acumulado, 400000);
+  assert.equal(m.mensual, 600000, 'el pote completo');
+  assert.equal(m.mio, 300000, 'y tu parte, restando la de Sofi');
+
+  const reserva = hoja('Ahorro y colchones').rows.find((r) => r.nombre === 'Gasolina');
+  assert.equal(reserva.tipo, 'Colchón');
+  assert.equal(reserva.mueve, 'No (reserva)');
+
+  const aportes = hoja('Aportes y retiros').rows;
   assert.equal(aportes.length, 2);
   assert.equal(aportes.find((a) => a.monto < 0).tipo, 'Retiro');
 });
