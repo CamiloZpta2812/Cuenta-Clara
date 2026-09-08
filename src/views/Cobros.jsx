@@ -109,8 +109,7 @@ export default function Cobros() {
                 {filas.map((c) => (
                   <div
                     key={c.shareId}
-                    className="cc-plan-row"
-                    style={{ gridTemplateColumns: '1fr 104px 128px' }}
+                    className="cc-cobro-row"
                   >
                     <span className="cc-plan-concept">
                       {c.collected
