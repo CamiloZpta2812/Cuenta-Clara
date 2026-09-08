@@ -1,5 +1,7 @@
 import { monthSummary, targetDebt, simulatePlanChange } from '../lib/month.js';
 import { comparePlans, monthlyRateOf } from '../lib/amortization.js';
+import { buildCashFlow } from '../lib/cashflow.js';
+import { COLORS } from '../lib/constants.js';
 import { activeInstallmentGroups, buildCardStatements, nextStatement } from '../lib/projections.js';
 
 /*
@@ -122,6 +124,23 @@ export function buildValue(overrides = {}) {
       }),
     },
     simulatePlan: (cambios) => simulatePlanChange(estado, cambios, MES),
+    cashFlow: buildCashFlow(estado, ['2026-07', '2026-08', '2026-09']),
+    planDistribution: (() => {
+      const p = monthSummary(estado, MES).plan;
+      return [
+        { name: 'Gastos fijos',   value: p.fixedExpenses, color: COLORS.debt },
+        { name: 'Cuota de deuda', value: p.debtPayment,   color: '#8C6BB1' },
+        { name: 'Abono extra',    value: Math.max(0, p.availableForExtra), color: COLORS.income },
+        { name: 'Metas',          value: p.savings,       color: COLORS.savings },
+        { name: 'Colchones',      value: p.cushion,       color: '#3E7FB0' },
+        { name: 'Gasto variable', value: p.variable,      color: COLORS.expense },
+      ].filter((x) => x.value > 0);
+    })(),
+    selMonthIncome: 3_600_000, selMonthExpense: 980_000,
+    selMonthFixed: 460_000, selMonthVariable: 520_000,
+    status: { color: COLORS.income, label: 'Vas bien', Icon: () => null },
+    recommendations: [],
+    exporting: '', handleExportExcel: () => {},
     paymentInputs: {}, setPaymentInputs: () => {},
     balanceInputs: {}, setBalanceInputs: () => {},
     handleAddPayment: () => {},

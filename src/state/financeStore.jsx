@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { COLOR_CHOICES } from '../lib/constants.js';
+import { COLOR_CHOICES, COLORS } from '../lib/constants.js';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, ALL_CATEGORIES, ICON_CHOICES, getCategory } from '../lib/categories.js';
 import { todayStr, daysInMonth, monthKeyFromDate, currentMonthKey, monthLabel, computeChargeDate, addMonths } from '../lib/dates.js';
 import { supabase } from '../supabaseClient.js';
@@ -14,6 +14,7 @@ import { buildRecommendations, getStatus } from '../lib/insights.js';
 import { buildCardStatements, nextStatement, buildCommitments, activeInstallmentGroups } from '../lib/projections.js';
 import { monthSummary, targetDebt, simulatePlanChange } from '../lib/month.js';
 import { comparePlans, monthlyRateOf } from '../lib/amortization.js';
+import { buildCashFlow } from '../lib/cashflow.js';
 
 /*
  * Todo el estado de la app vive aquí: lo que se persiste en Supabase, lo que se
@@ -979,9 +980,34 @@ export function FinanceProvider({ children }) {
     [snapshot, selectedMonth],
   );
 
+  /*
+   * A dónde va cada peso del plan. La suma da el ingreso completo, así que los
+   * porcentajes se leen sin tener que hacer la cuenta: cuánto de lo que entra
+   * ya tiene dueño antes de que llegue.
+   */
+  const planDistribution = useMemo(() => {
+    const p = monthReport.plan;
+    return [
+      { name: 'Gastos fijos',   value: p.fixedExpenses, color: COLORS.debt },
+      { name: 'Cuota de deuda', value: p.debtPayment,   color: '#8C6BB1' },
+      { name: 'Abono extra',    value: Math.max(0, p.availableForExtra), color: COLORS.income },
+      { name: 'Metas',          value: p.savings,       color: COLORS.savings },
+      { name: 'Colchones',      value: p.cushion,       color: '#3E7FB0' },
+      { name: 'Gasto variable', value: p.variable,      color: COLORS.expense },
+    ].filter((x) => x.value > 0);
+  }, [monthReport]);
+
+  /* El pulso del mes, movimiento a movimiento. Ver lib/cashflow.js. */
+  const cashFlow = useMemo(
+    () => buildCashFlow(snapshot(), getLastMonthKeys(3, selectedMonth)),
+    [snapshot, selectedMonth],
+  );
+
   const value = {
     activeTab,
+    cashFlow,
     debtOutlook,
+    planDistribution,
     simulatePlan: simulate,
     balanceInputs,
     bucketForm,

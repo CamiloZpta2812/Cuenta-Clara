@@ -218,6 +218,9 @@ export const STYLES = `
   .cc-plan-row > :nth-child(2), .cc-plan-head > :nth-child(2) { display: none; }
 }
 
+.cc-split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: center; }
+@media (max-width: 780px) { .cc-split { grid-template-columns: 1fr; } }
+
 .cc-empty { text-align: center; padding: 34px 16px; color: var(--ink-soft); }
 .cc-empty svg { margin-bottom: 8px; opacity: 0.5; }
 .cc-empty p { margin: 4px 0; font-size: 13.5px; }
