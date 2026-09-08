@@ -16,6 +16,14 @@ import { monthKeyFromDate } from '../lib/dates.js';
  * `transactions` va de última porque referencia gastos fijos, deudas, abonos,
  * buckets y fuentes de ingreso.
  */
+/*
+ * `savings_goals` y `goal_contributions` NO están en esta lista a propósito.
+ * Las reemplazaron los buckets, que saben dos cosas que una meta no sabía: si
+ * es meta o colchón, y si puedes tocar la plata.
+ *
+ * Las tablas siguen en Postgres, vacías, como respaldo. Fuera de aquí la app
+ * ni las lee ni las escribe.
+ */
 export const TABLES = [
   'user_settings',
   'custom_categories',
@@ -27,9 +35,8 @@ export const TABLES = [
   'collections',
   'debts',
   'debt_payments',
-  'savings_goals',
-  'goal_contributions',
   'buckets',
+  'bucket_shares',
   'bucket_contributions',
   'monthly_plans',
   'transactions',
@@ -146,15 +153,6 @@ export function debtToRow(d) {
   };
 }
 
-export function goalToRow(g) {
-  return {
-    id: g.id,
-    name: g.name,
-    target_amount: num(g.targetAmount),
-    target_date: date(g.targetDate) || null,
-  };
-}
-
 export function personToRow(p) {
   return {
     id: p.id,
@@ -190,6 +188,11 @@ export function bucketToRow(b) {
     name: b.name,
     /* 'meta' tiene un objetivo al que llegar; 'colchon' es margen sin destino. */
     kind: b.kind === 'colchon' ? 'colchon' : 'meta',
+    /*
+     * false = reserva: no mueves la plata, solo apartas el cupo, y va saliendo
+     * con cada gasto. La gasolina. Ver lib/month.js.
+     */
+    moves_cash: b.movesCash === undefined ? true : bool(b.movesCash),
     /* false = está ahí pero no lo puedes tocar (aporte a cooperativa). */
     liquid: b.liquid === undefined ? true : bool(b.liquid),
     monthly_amount: num(b.monthlyAmount) || 0,
@@ -247,18 +250,20 @@ export function stateToRows(state) {
     });
   });
 
-  const goalContributions = [];
-  (state.savingsGoals || []).forEach((g) => {
-    (g.contributions || []).forEach((c) => {
-      goalContributions.push({ id: c.id, goal_id: g.id, amount: num(c.amount), date: date(c.date) });
-    });
-  });
-
   const shares = [];
   (state.fixedExpenses || []).forEach((f) => {
     (f.shares || []).forEach((r) => {
       shares.push({
         id: r.id, fixed_expense_id: f.id, person_id: r.personId, amount: num(r.amount) || 0,
+      });
+    });
+  });
+
+  const bucketShares = [];
+  (state.buckets || []).forEach((b) => {
+    (b.shares || []).forEach((r) => {
+      bucketShares.push({
+        id: r.id, bucket_id: b.id, person_id: r.personId, amount: num(r.amount) || 0,
       });
     });
   });
@@ -283,9 +288,8 @@ export function stateToRows(state) {
     collections: (state.collections || []).map(collectionToRow),
     debts: (state.debts || []).map(debtToRow),
     debt_payments: debtPayments,
-    savings_goals: (state.savingsGoals || []).map(goalToRow),
-    goal_contributions: goalContributions,
     buckets: (state.buckets || []).map(bucketToRow),
+    bucket_shares: bucketShares,
     bucket_contributions: bucketContributions,
     monthly_plans: (state.monthlyPlans || []).map(monthlyPlanToRow),
     transactions: (state.transactions || []).map(transactionToRow),
@@ -340,10 +344,10 @@ export function rowsToState(rows) {
     month: p.month || monthKeyFromDate(p.date) || null,
     balanceAfter: num(p.balance_after),
   }));
-  const contributionsByGoal = groupBy(rows.goal_contributions, 'goal_id', (c) => ({
-    id: c.id, amount: num(c.amount), date: date(c.date),
-  }));
   const sharesByExpense = groupBy(rows.fixed_expense_shares, 'fixed_expense_id', (r) => ({
+    id: r.id, personId: r.person_id, amount: num(r.amount) || 0,
+  }));
+  const sharesByBucket = groupBy(rows.bucket_shares, 'bucket_id', (r) => ({
     id: r.id, personId: r.person_id, amount: num(r.amount) || 0,
   }));
   const contributionsByBucket = groupBy(rows.bucket_contributions, 'bucket_id', (c) => ({
@@ -389,17 +393,14 @@ export function rowsToState(rows) {
       currentBalance: num(d.current_balance),
       payments: paymentsByDebt[d.id] || [],
     })),
-    savingsGoals: (rows.savings_goals || []).map((g) => ({
-      id: g.id, name: g.name, targetAmount: num(g.target_amount),
-      targetDate: date(g.target_date) || '',
-      contributions: contributionsByGoal[g.id] || [],
-    })),
     buckets: (rows.buckets || []).map((b) => ({
       id: b.id, name: b.name,
       kind: b.kind === 'colchon' ? 'colchon' : 'meta',
       liquid: b.liquid === undefined ? true : bool(b.liquid),
       monthlyAmount: num(b.monthly_amount) || 0,
+      movesCash: b.moves_cash === undefined ? true : bool(b.moves_cash),
       targetAmount: num(b.target_amount), targetDate: date(b.target_date),
+      shares: sharesByBucket[b.id] || [],
       contributions: contributionsByBucket[b.id] || [],
     })),
     monthlyPlans: (rows.monthly_plans || []).map((p) => ({

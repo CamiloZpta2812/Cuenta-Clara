@@ -42,7 +42,7 @@ function debtRemainingCOP(d) {
 export function buildReportSheets(data) {
   const transactions = data.transactions || [];
   const debts = data.debts || [];
-  const savingsGoals = data.savingsGoals || [];
+  const buckets = data.buckets || [];
   const creditCards = data.creditCards || [];
   const fixedExpenses = data.fixedExpenses || [];
 
@@ -55,7 +55,11 @@ export function buildReportSheets(data) {
   const gastos = transactions.filter((t) => t.type === 'gasto');
   const totalIngresos = sum(ingresos, (t) => t.amount);
   const totalGastos = sum(gastos, (t) => t.amount);
-  const totalAhorro = sum(savingsGoals, (g) => sum(g.contributions || [], (c) => c.amount));
+  /* Solo lo que de verdad se apartó: en una reserva la plata nunca se movió. */
+  const totalAhorro = sum(
+    buckets.filter((b) => b.movesCash !== false),
+    (b) => sum(b.contributions || [], (c) => c.amount),
+  );
   const totalDeuda = sum(debts, debtRemainingCOP);
 
   const meses = [...new Set(transactions.map((t) => monthKeyFromDate(t.date)))].sort();
@@ -88,7 +92,7 @@ export function buildReportSheets(data) {
       { concepto: 'Tarjetas registradas', valor: creditCards.length },
       { concepto: 'Gastos fijos registrados', valor: fixedExpenses.length },
       { concepto: 'Deudas registradas', valor: debts.length },
-      { concepto: 'Metas de ahorro', valor: savingsGoals.length },
+      { concepto: 'Metas y colchones', valor: buckets.length },
     ],
   });
 
@@ -354,46 +358,51 @@ export function buildReportSheets(data) {
       .map((p) => ({ deuda: d.name, fecha: toDate(p.date), monto: p.amount }))),
   });
 
-  /* --------------------------------------------------------- Ahorros ------ */
+  /* --------------------------------------------------- Ahorro y colchones -- */
   hojas.push({
-    name: 'Metas de ahorro',
+    name: 'Ahorro y colchones',
     columns: [
-      { header: 'Meta', key: 'nombre', width: 28 },
+      { header: 'Nombre', key: 'nombre', width: 28 },
+      { header: 'Tipo', key: 'tipo', width: 10 },
+      { header: 'Al mes (total)', key: 'mensual', width: 15, numFmt: COP },
+      { header: 'Al mes (tu parte)', key: 'mio', width: 16, numFmt: COP },
+      { header: 'Acumulado', key: 'acumulado', width: 15, numFmt: COP },
       { header: 'Objetivo', key: 'objetivo', width: 15, numFmt: COP },
-      { header: 'Ahorrado', key: 'ahorrado', width: 15, numFmt: COP },
-      { header: 'Falta', key: 'falta', width: 15, numFmt: COP },
-      { header: 'Avance %', key: 'avance', width: 11 },
       { header: 'Fecha meta', key: 'fecha', width: 13 },
-      { header: 'Aportes', key: 'aportes', width: 10 },
+      { header: 'Disponible', key: 'liquido', width: 12 },
+      { header: 'Mueve la plata', key: 'mueve', width: 14 },
     ],
-    rows: savingsGoals.map((g) => {
-      const ahorrado = sum(g.contributions || [], (c) => c.amount);
-      const objetivo = g.targetAmount != null ? Number(g.targetAmount) : null;
+    rows: buckets.map((b) => {
+      const acumulado = sum(b.contributions || [], (c) => c.amount);
+      const objetivo = b.targetAmount != null ? Number(b.targetAmount) : null;
       return {
-        nombre: g.name,
+        nombre: b.name,
+        tipo: b.kind === 'colchon' ? 'Colchón' : 'Meta',
+        mensual: Number(b.monthlyAmount) || 0,
+        /* Tu parte se resta, igual que en la app: nunca se guarda por aparte. */
+        mio: (Number(b.monthlyAmount) || 0) - sum(b.shares || [], (r) => r.amount),
+        acumulado,
         objetivo: objetivo != null ? objetivo : '',
-        ahorrado,
-        falta: objetivo != null ? Math.max(0, objetivo - ahorrado) : '',
-        avance: objetivo ? Math.round((ahorrado / objetivo) * 100) : '',
-        fecha: toDate(g.targetDate),
-        aportes: (g.contributions || []).length,
+        fecha: toDate(b.targetDate),
+        liquido: b.liquid === false ? 'No' : 'Sí',
+        mueve: b.movesCash === false ? 'No (reserva)' : 'Sí',
       };
     }),
   });
 
   hojas.push({
-    name: 'Aportes a metas',
+    name: 'Aportes y retiros',
     columns: [
-      { header: 'Meta', key: 'meta', width: 28 },
+      { header: 'Bucket', key: 'bucket', width: 28 },
       { header: 'Fecha', key: 'fecha', width: 12 },
       { header: 'Monto', key: 'monto', width: 15, numFmt: COP },
       { header: 'Tipo', key: 'tipo', width: 12 },
     ],
-    rows: savingsGoals.flatMap((g) => (g.contributions || [])
+    rows: buckets.flatMap((b) => (b.contributions || [])
       .slice()
-      .sort((a, b) => (a.date < b.date ? -1 : 1))
+      .sort((a, c) => (a.date < c.date ? -1 : 1))
       .map((c) => ({
-        meta: g.name,
+        bucket: b.name,
         fecha: toDate(c.date),
         monto: c.amount,
         tipo: c.amount < 0 ? 'Retiro' : 'Aporte',

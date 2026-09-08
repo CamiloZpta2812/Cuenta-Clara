@@ -50,9 +50,14 @@ export const ICON_CHOICES = [
 
 export const ICON_MAP = Object.fromEntries(ICON_CHOICES.map((i) => [i.key, i.Icon]));
 
+/*
+ * El débito va de primero porque es de lejos el más usado: es el que aparece
+ * puesto en los formularios, y el que se asume cuando un registro viejo no
+ * dice cuál fue (ver getPaymentMethod).
+ */
 export const PAYMENT_METHODS = [
+  { id: 'debito', label: 'Débito / ahorros', icon: Wallet },
   { id: 'efectivo', label: 'Efectivo', icon: Banknote },
-  { id: 'debito', label: 'Tarjeta débito', icon: Wallet },
   { id: 'credito', label: 'Tarjeta crédito', icon: CreditCard },
 ];
 

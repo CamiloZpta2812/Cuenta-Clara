@@ -36,6 +36,22 @@ export function myShare(gastoFijo) {
   return num(gastoFijo.totalAmount) - sum(gastoFijo.shares, (r) => r.amount);
 }
 
+/*
+ * Lo que TÚ pones en un bucket compartido, al mes.
+ *
+ * Mismo cálculo que en un gasto fijo, y por la misma razón: el monto guardado
+ * es el del pote y tu parte se resta. El colchón de los gatos son $130.000
+ * entre dos; lo que sale de tu cuenta son $65.000, pero cuando el veterinario
+ * cobra, cobra de los $130.000.
+ *
+ * La diferencia con un gasto fijo compartido está en el dinero, no en la
+ * cuenta: en el Spotify pagas tú y te devuelven, así que hay cobro. Acá cada
+ * uno mete lo suyo, así que no hay nada que cobrar.
+ */
+export function myBucketShare(bucket) {
+  return num(bucket.monthlyAmount) - sum(bucket.shares, (r) => r.amount);
+}
+
 /* Lo que te deben en total por un gasto fijo compartido. */
 export function othersShare(gastoFijo) {
   return sum(gastoFijo.shares, (r) => r.amount);
@@ -103,9 +119,13 @@ export function monthPlan(estado, month) {
   const income = sum(fuentes, (f) => f.expected);
   const fixedExpenses = sum(fijos, myShare);
   const debtPayment = sum(debts, (d) => d.fixedPayment);
-  const savings = sum(metas, (b) => b.monthlyAmount);
+  /*
+   * Solo tu parte, igual que en los gastos fijos: de un fondo común de 600.000
+   * entre dos, lo que sale de tu cuenta son 300.000.
+   */
+  const savings = sum(metas, myBucketShare);
   const variable = num(guardado && guardado.variableEstimate);
-  const cushion = sum(colchones, (b) => b.monthlyAmount);
+  const cushion = sum(colchones, myBucketShare);
 
   const grossSurplus = income - fixedExpenses - debtPayment - savings - variable;
 
@@ -150,9 +170,26 @@ function frozenPlan(p) {
  */
 const debtPayments = (estado) => (estado.debts || []).flatMap((d) => d.payments || []);
 
-/* Cada aporte se lleva el tipo de su bucket: el plan separa metas de colchones. */
-const bucketContributions = (estado) => (estado.buckets || [])
-  .flatMap((b) => (b.contributions || []).map((c) => ({ ...c, kind: b.kind })));
+/*
+ * Cada aporte se lleva el tipo de su bucket, si mueve plata, y qué fracción del
+ * pote es tuya. Un aporte de 130.000 a un colchón compartido a medias son
+ * 65.000 saliendo de tu cuenta.
+ */
+const bucketContributions = (estado) => (estado.buckets || []).flatMap((b) => {
+  const total = num(b.monthlyAmount);
+  const mio = myBucketShare(b);
+  /* Sin monto mensual no hay proporción que sacar: el aporte es todo tuyo. */
+  const factor = total > 0 ? mio / total : 1;
+  return (b.contributions || []).map((c) => ({
+    ...c, kind: b.kind, movesCash: b.movesCash !== false, factor,
+  }));
+});
+
+/* De qué tipo es la reserva a la que apunta un gasto, si es que apunta a una. */
+function reservaKind(estado, bucketId) {
+  const b = (estado.buckets || []).find((x) => x.id === bucketId);
+  return b && b.movesCash === false ? b.kind : null;
+}
 
 /*
  * Clasifica los movimientos del mes en las mismas líneas del plan.
@@ -192,10 +229,32 @@ export function monthActual(estado, month) {
    * misma línea haría que guardar para los gatos apareciera como si te hubieras
    * pasado de ahorro. El plan los separa; lo real tiene que separarlos igual o
    * el desvío compara peras con manzanas.
+   *
+   * Y un bucket se mide distinto según si mueve la plata o no:
+   *
+   *   colchón real  por lo que aportaste — la plata se fue a otra cuenta
+   *   reserva       por lo que llevas gastado de ella — la plata nunca se movió
+   *
+   * De un bucket compartido se cuenta solo tu parte: el pote se mueve completo,
+   * pero de tu cuenta sale la fracción que te toca.
    */
   const aportes = bucketContributions(estado).filter((a) => monthKeyFromDate(a.date) === month);
-  const savings = sum(aportes.filter((a) => a.kind !== 'colchon'), (a) => a.amount);
-  const cushion = sum(aportes.filter((a) => a.kind === 'colchon'), (a) => a.amount);
+  const gastosDeReserva = gastos.filter((t) => t.bucketId);
+
+  const porBucket = (kind) => {
+    const deAportes = sum(
+      aportes.filter((a) => a.kind === kind && a.movesCash !== false),
+      (a) => a.amount * a.factor,
+    );
+    const deGastos = sum(
+      gastosDeReserva.filter((t) => reservaKind(estado, t.bucketId) === kind),
+      (t) => t.amount,
+    );
+    return deAportes + deGastos;
+  };
+
+  const savings = porBucket('meta');
+  const cushion = porBucket('colchon');
 
   // Variable es todo lo demás: ni fijo, ni abono a deuda, ni aporte a ahorro.
   const variable = sum(

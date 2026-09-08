@@ -259,6 +259,77 @@ export const STYLES = `
   color: var(--ink); text-align: left;
 }
 
+/*
+ * Gastos fijos. Antes era una fila de tres líneas de texto de 12px, todas del
+ * mismo peso: el nombre, el monto y el medio de pago se leían igual de fuerte,
+ * o sea ninguno. Ahora el nombre y el monto mandan, y lo demás es contexto.
+ */
+/*
+ * Filtros de Movimientos. Antes eran seis desplegables de ancho completo, uno
+ * por fila: ocupaban más pantalla que los movimientos que venían a filtrar.
+ */
+.cc-filtros { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.cc-filtros-extra { padding: 10px; background: var(--paper); border-radius: 10px; }
+.cc-select-sm { padding: 6px 10px; font-size: 12.5px; max-width: 190px; }
+
+/* El tipo es el filtro que de verdad se usa: va a un clic, no en un menú. */
+.cc-seg { display: inline-flex; background: var(--paper); border: 1px solid var(--line); border-radius: 9px; padding: 2px; }
+.cc-seg button {
+  border: 0; background: none; cursor: pointer; border-radius: 7px;
+  padding: 5px 13px; font-size: 12.5px; font-weight: 500; color: var(--ink-soft);
+}
+.cc-seg button.active { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.07); }
+.cc-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 17px; height: 17px; margin-left: 5px; padding: 0 4px;
+  border-radius: 9px; background: #BB4B34; color: #fff; font-size: 10.5px; font-weight: 700;
+}
+
+/* Un encabezado por día: la lista se lee como lo que pasó, no como un extracto. */
+.cc-dia-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 14px 4px 6px; font-size: 12px; font-weight: 600;
+  color: var(--ink-soft); text-transform: capitalize;
+}
+.cc-mov {
+  display: grid; grid-template-columns: auto 1fr auto auto;
+  align-items: center; gap: 12px;
+  padding: 11px 14px; margin-bottom: 6px;
+  background: var(--card, #fff); border: 1px solid var(--line); border-radius: 11px;
+}
+.cc-mov-info { min-width: 0; }
+.cc-mov-titulo { font-size: 14px; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.cc-mov-meta { font-size: 11.5px; color: var(--ink-soft); margin-top: 1px; }
+.cc-mov-monto { font-size: 15px; font-weight: 700; white-space: nowrap; }
+.cc-mov-acciones { display: flex; gap: 6px; }
+
+@media (max-width: 620px) {
+  .cc-mov { grid-template-columns: auto 1fr auto; }
+  .cc-mov-acciones { grid-column: 1 / -1; justify-content: flex-end; }
+}
+
+.cc-fixed-list { display: flex; flex-direction: column; gap: 10px; }
+.cc-fixed-card {
+  display: grid; grid-template-columns: auto 1fr auto auto;
+  align-items: center; gap: 14px;
+  padding: 14px 16px; background: var(--card, #fff);
+  border: 1px solid var(--line); border-radius: 12px;
+}
+.cc-fixed-card.pagado { background: var(--income-soft); border-color: transparent; }
+.cc-fixed-info { min-width: 0; }
+.cc-fixed-name { font-size: 15px; font-weight: 600; color: var(--ink); }
+.cc-fixed-meta { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.cc-fixed-monto { font-size: 16px; font-weight: 700; white-space: nowrap; }
+.cc-fixed-acciones { display: flex; align-items: center; gap: 8px; }
+.cc-input-fecha { width: 140px; padding: 6px 8px; font-size: 12px; }
+.cc-tag-ok { background: #fff; color: #2F7D5C; }
+
+@media (max-width: 720px) {
+  .cc-fixed-card { grid-template-columns: auto 1fr; row-gap: 10px; }
+  .cc-fixed-monto { grid-column: 2; text-align: right; }
+  .cc-fixed-acciones { grid-column: 1 / -1; flex-wrap: wrap; }
+}
+
 .cc-split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: center; }
 @media (max-width: 780px) { .cc-split { grid-template-columns: 1fr; } }
 

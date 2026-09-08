@@ -8,18 +8,21 @@ import Cobros from '../views/Cobros';
 import Buckets from '../views/Buckets';
 import Deuda from '../views/Deuda';
 import Resumen from '../views/Resumen';
+import GastosFijos from '../views/GastosFijos';
+import Movimientos from '../views/Movimientos';
 
 /*
  * Banco de pruebas de las pantallas. Se abre con `npm run dev` en /preview.html
  * y no entra en el build de produccion: vite solo empaqueta index.html.
  */
-const PANTALLAS = { Mes, Cobros, Buckets, Deuda, Resumen };
+const PANTALLAS = { Mes, Cobros, Buckets, Deuda, Resumen, GastosFijos, Movimientos };
 
 function Preview() {
   const [cual, setCual] = useState('Mes');
+  const [deuda, setDeuda] = useState(null);
   const Vista = PANTALLAS[cual];
   return (
-    <FinanceContext.Provider value={buildValue()}>
+    <FinanceContext.Provider value={buildValue({ selectedDebtId: deuda, setSelectedDebtId: setDeuda })}>
       <style>{STYLES}</style>
       <div className="cc-app">
         <div className="cc-main" style={{ padding: 20 }}>

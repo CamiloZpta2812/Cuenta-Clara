@@ -10,7 +10,7 @@ export default function PrintReport() {
     netWorth,
     pieData,
     recommendations,
-    savingsGoals,
+    buckets,
     selMonthExpense,
     selMonthFixed,
     selMonthIncome,
@@ -88,19 +88,29 @@ export default function PrintReport() {
         </>
       )}
 
-      {savingsGoals.length > 0 && (
+      {buckets.length > 0 && (
         <>
-          <h2>Metas de ahorro</h2>
+          <h2>Ahorro y colchones</h2>
           <table className="cc-print-table">
-            <thead><tr><th>Meta</th><th>Objetivo</th><th>Ahorrado</th></tr></thead>
+            <thead>
+              <tr><th>Nombre</th><th>Tipo</th><th>Al mes (tu parte)</th><th>Acumulado</th></tr>
+            </thead>
             <tbody>
-              {savingsGoals.map((g) => {
-                const saved = (g.contributions || []).reduce((s, c) => s + c.amount, 0);
+              {buckets.map((b) => {
+                const acumulado = (b.contributions || []).reduce((s, c) => s + c.amount, 0);
+                const mio = (Number(b.monthlyAmount) || 0)
+                  - (b.shares || []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
                 return (
-                  <tr key={g.id}>
-                    <td>{g.name}</td>
-                    <td>{g.targetAmount != null ? fmtCOP(g.targetAmount) : '—'}</td>
-                    <td>{fmtCOP(saved)}</td>
+                  <tr key={b.id}>
+                    <td>{b.name}</td>
+                    <td>
+                      {b.kind === 'colchon' ? 'Colchón' : 'Meta'}
+                      {b.movesCash === false ? ' (reserva)' : ''}
+                      {b.liquid === false ? ' · amarrado' : ''}
+                    </td>
+                    <td>{fmtCOP(mio)}</td>
+                    {/* Una reserva no acumula: la plata nunca se movió de la cuenta. */}
+                    <td>{b.movesCash === false ? '—' : fmtCOP(acumulado)}</td>
                   </tr>
                 );
               })}

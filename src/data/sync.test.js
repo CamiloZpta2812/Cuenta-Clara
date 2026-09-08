@@ -10,7 +10,6 @@ const base = {
   creditCards: [{ id: 'c1', name: 'Visa', lastFour: '1111', currency: 'COP' }],
   debts: [{ id: 'd1', name: 'X', totalAmount: 1000, startDate: '2026-01-01',
             payments: [{ id: 'p1', amount: 100, date: '2026-02-01' }] }],
-  savingsGoals: [],
   fixedExpenses: [],
   customCategories: [],
   categoryLabels: {},
@@ -94,7 +93,7 @@ test('deshacer un abono borra el abono y el movimiento enlazado', () => {
 });
 
 test('borrar todo produce solo borrados', () => {
-  const vacio = { transactions: [], creditCards: [], debts: [], savingsGoals: [],
+  const vacio = { transactions: [], creditCards: [], debts: [],
                   fixedExpenses: [], customCategories: [], categoryLabels: {} };
   const d = diffState(base, vacio);
   assert.equal(Object.keys(d.upserts).length, 0);

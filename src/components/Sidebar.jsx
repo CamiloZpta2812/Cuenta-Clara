@@ -1,17 +1,24 @@
-import { LayoutDashboard, ArrowLeftRight, CreditCard, Settings, Repeat, CalendarRange, HandCoins, Shield } from 'lucide-react';
+import { LayoutDashboard, ArrowLeftRight, CreditCard, Settings, Repeat, CalendarRange, HandCoins, Shield, Landmark } from 'lucide-react';
 import Logo from './Logo';
 
 export default function Sidebar({ activeTab, onChangeTab }) {
+  /*
+   * El orden es el de la pregunta que uno se hace, de la más frecuente a la
+   * más ocasional. Tarjeta va casi al final porque se consulta poco, pero fuera
+   * de Configuración: esconderla ahí la volvía difícil de encontrar.
+   */
   const items = [
-    { id: 'mes', label: 'El mes', Icon: CalendarRange },
-    { id: 'cobros', label: 'Cobros', Icon: HandCoins },
     { id: 'resumen', label: 'Resumen', Icon: LayoutDashboard },
-    { id: 'movimientos', label: 'Movimientos', Icon: ArrowLeftRight },
+    { id: 'mes', label: 'El mes', Icon: CalendarRange },
     { id: 'gastosfijos', label: 'Gastos fijos', Icon: Repeat },
-    { id: 'deuda', label: 'Deuda', Icon: CreditCard },
+    { id: 'cobros', label: 'Cobros', Icon: HandCoins },
     { id: 'buckets', label: 'Ahorro y colchones', Icon: Shield },
+    { id: 'deuda', label: 'Deuda', Icon: CreditCard },
+    { id: 'movimientos', label: 'Movimientos', Icon: ArrowLeftRight },
+    { id: 'tarjeta', label: 'Tarjeta', Icon: Landmark },
     { id: 'configuracion', label: 'Configuración', Icon: Settings },
   ];
+
   return (
     <div className="cc-sidebar">
       <div className="cc-brand">
