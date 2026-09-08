@@ -181,6 +181,13 @@ export function buildValue(overrides = {}) {
     txFilters: { type: 'todos', month: 'todos', category: 'todas', paymentMethod: 'todos', fixed: 'todos', day: '' },
     setTxFilters: () => {},
     txFilterCategories: [{ id: 'alimentacion', label: 'Alimentación' }],
+    /* Lo que el formulario de movimiento pide del store, ya calculado. */
+    txFormCategories: [
+      { id: 'alimentacion', label: 'Alimentación' },
+      { id: 'transporte', label: 'Transporte' },
+      { id: 'compras', label: 'Compras' },
+    ],
+    txIsUSD: false, txEffectiveRate: 4000, txChargeDate: null,
     handleEditTransaction: () => {}, handleDeleteTransaction: () => {},
     handleAddTransaction: (e) => e.preventDefault(),
     handleCancelTxForm: () => {}, handleOpenNewMovement: () => {},

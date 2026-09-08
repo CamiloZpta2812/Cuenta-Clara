@@ -385,6 +385,16 @@ export const STYLES = `
   .cc-input, .cc-select { min-width: 0; max-width: 100%; }
 }
 
+/*
+ * Estas dos piezas van dentro de .cc-app, que es de donde heredan la
+ * tipografía y el box-sizing. Se repiten aquí porque flotan sobre todo lo
+ * demás y es fácil montarlas por fuera sin darse cuenta: colgadas del body
+ * heredaban la fuente serif del navegador y el alto máximo dejaba de contar el
+ * padding, así que en el celular el formulario se salía por arriba.
+ */
+.cc-modal-fondo, .cc-fab-wrap { font-family: 'Poppins', sans-serif; color: var(--ink); }
+.cc-modal-fondo *, .cc-fab-wrap * { box-sizing: border-box; }
+
 /* ------------------------------------------------------- ventana flotante */
 .cc-modal-fondo {
   position: fixed; inset: 0; z-index: 60;
@@ -407,12 +417,20 @@ export const STYLES = `
 .cc-modal-cuerpo .cc-form { background: none; border: 0; padding: 0; margin: 0; }
 
 @media (max-width: 560px) {
-  .cc-modal-fondo { padding: 0; align-items: flex-end; }
+  /*
+   * Pegada abajo, como una hoja que sube. Con dvh y no vh: en el celular vh
+   * cuenta el alto sin la barra del navegador, así que la ventana quedaba más
+   * alta que la pantalla y el título se salía por arriba.
+   *
+   * El respiro de la muesca va en el fondo y no en la ventana: sumado al alto
+   * máximo la empujaba fuera otra vez.
+   */
+  .cc-modal-fondo { padding: env(safe-area-inset-top, 0px) 0 0; align-items: flex-end; }
   .cc-modal {
     max-width: none; border-radius: 16px 16px 0 0;
-    max-height: 92vh;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    max-height: 88dvh;
   }
+  .cc-modal-cuerpo { padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* ------------------------------------------------- el botón y su desplegable */

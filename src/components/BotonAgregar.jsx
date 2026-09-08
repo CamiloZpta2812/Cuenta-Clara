@@ -14,7 +14,7 @@ import { useFinance } from '../state/financeStore';
  *
  * El orden no es alfabético ni por importancia conceptual: es por cuántas veces
  * al día se usa. Un movimiento se registra a diario; una deuda, dos veces al
- * año. El primero de la lista es el que está más cerca del pulgar.
+ * año — así que el movimiento queda pegado al botón y la deuda arriba del todo.
  */
 
 export default function BotonAgregar() {
@@ -26,31 +26,29 @@ export default function BotonAgregar() {
 
   const cerrarY = (fn) => () => { setAbierto(false); fn(); };
 
+  /*
+   * El menú se dibuja de arriba hacia abajo, así que el ÚLTIMO de esta lista
+   * queda pegado al botón — o sea, el más fácil de alcanzar con el pulgar.
+   * Por eso va al revés de como se lee: lo que más se usa, de último.
+   *
+   * Las dos de arriba no abren ventana, llevan a su pantalla: registrar un
+   * abono necesita ver el saldo y el plan de pago al lado, y marcar un cobro
+   * solo tiene sentido con la lista de quién te debe enfrente.
+   */
   const opciones = [
-    {
-      label: 'Gasto o ingreso', Icon: ArrowLeftRight, destacado: true,
-      onClick: cerrarY(handleOpenNewMovement),
-    },
-    { label: 'Gasto fijo', Icon: Repeat, onClick: cerrarY(() => setShowFixedForm(true)) },
+    { label: 'Nueva deuda', Icon: CreditCard, onClick: cerrarY(() => setShowDebtForm(true)) },
+    { label: 'Pago de deuda', Icon: CreditCard, onClick: cerrarY(() => setActiveTab('deuda')) },
     {
       label: 'Ahorro o colchón',
       Icon: Shield,
       /* Por el cancelar, que además limpia lo que hubiera quedado de una edición. */
       onClick: cerrarY(() => { handleCancelBucketForm(); setShowBucketForm(true); }),
     },
-    { label: 'Nueva deuda', Icon: CreditCard, onClick: cerrarY(() => setShowDebtForm(true)) },
-    /*
-     * Estas dos no abren ventana: llevan a su pantalla. Registrar un abono
-     * necesita ver el saldo y el plan de pago al lado, y marcar un cobro solo
-     * tiene sentido con la lista de quién te debe enfrente.
-     */
+    { label: 'Marcar un cobro', Icon: HandCoins, onClick: cerrarY(() => setActiveTab('cobros')) },
+    { label: 'Gasto fijo', Icon: Repeat, onClick: cerrarY(() => setShowFixedForm(true)) },
     {
-      label: 'Pago de deuda', Icon: CreditCard,
-      onClick: cerrarY(() => setActiveTab('deuda')),
-    },
-    {
-      label: 'Marcar un cobro', Icon: HandCoins,
-      onClick: cerrarY(() => setActiveTab('cobros')),
+      label: 'Gasto o ingreso', Icon: ArrowLeftRight, destacado: true,
+      onClick: cerrarY(handleOpenNewMovement),
     },
   ];
 

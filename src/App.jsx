@@ -85,39 +85,45 @@ function Shell() {
           )}
           <ActiveView />
         </div>
+
+        <BotonAgregar />
+
+        {/*
+          * Las ventanas viven en el shell y no en cada pantalla: así se pueden
+          * abrir desde el botón de agregar estés donde estés, sin tener que
+          * navegar primero a la pestaña que las contenía.
+          *
+          * Y van DENTRO de .cc-app, que es donde están la tipografía y el
+          * box-sizing de la app: colgadas por fuera heredaban la fuente serif
+          * del navegador y el alto máximo no contaba el padding, así que en el
+          * celular el formulario se salía por arriba de la pantalla.
+          */}
+        <Modal
+          open={showTxForm} onClose={handleCancelTxForm}
+          title={editingTxId ? 'Editar movimiento' : 'Nuevo movimiento'}
+        >
+          <FormMovimiento />
+        </Modal>
+
+        <Modal
+          open={showFixedForm} onClose={handleCancelFixedForm}
+          title={editingFixedId ? 'Editar gasto fijo' : 'Nuevo gasto fijo'}
+        >
+          <FormGastoFijo />
+        </Modal>
+
+        <Modal
+          open={showBucketForm} onClose={handleCancelBucketForm}
+          title={editingBucketId ? 'Editar meta o colchón' : 'Nueva meta o colchón'}
+        >
+          <FormBucket />
+        </Modal>
+
+        <Modal open={showDebtForm} onClose={handleCancelDebtForm} title="Nueva deuda">
+          <FormDeuda />
+        </Modal>
+
       </div>
-      <BotonAgregar />
-
-      {/*
-        * Las ventanas viven en el shell y no en cada pantalla: así se pueden
-        * abrir desde el botón de agregar estés donde estés, sin tener que
-        * navegar primero a la pestaña que las contenía.
-        */}
-      <Modal
-        open={showTxForm} onClose={handleCancelTxForm}
-        title={editingTxId ? 'Editar movimiento' : 'Nuevo movimiento'}
-      >
-        <FormMovimiento />
-      </Modal>
-
-      <Modal
-        open={showFixedForm} onClose={handleCancelFixedForm}
-        title={editingFixedId ? 'Editar gasto fijo' : 'Nuevo gasto fijo'}
-      >
-        <FormGastoFijo />
-      </Modal>
-
-      <Modal
-        open={showBucketForm} onClose={handleCancelBucketForm}
-        title={editingBucketId ? 'Editar meta o colchón' : 'Nueva meta o colchón'}
-      >
-        <FormBucket />
-      </Modal>
-
-      <Modal open={showDebtForm} onClose={handleCancelDebtForm} title="Nueva deuda">
-        <FormDeuda />
-      </Modal>
-
       <PrintReport />
     </>
   );
