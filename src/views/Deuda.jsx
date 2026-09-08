@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  CreditCard, TrendingDown, CalendarCheck, Flame, AlertTriangle, Sparkles, ChevronDown, Plus,
+  CreditCard, TrendingDown, CalendarCheck, Flame, AlertTriangle, Sparkles, ChevronDown, Plus, Check,
 } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
 import { addMonths, currentMonthKey, monthKeyFromDate, monthLabel } from '../lib/dates.js';
@@ -56,7 +56,7 @@ export default function Deuda() {
     );
   }
 
-  const { debt, extra, minimumOnly, withExtra, monthsSaved, interestSaved } = debtOutlook;
+  const { debt, extra, hechas, minimumOnly, withExtra, monthsSaved, interestSaved } = debtOutlook;
 
   /* Los cambios del simulador son sumas y restas sobre el plan, no valores nuevos. */
   const cambios = Object.fromEntries(
@@ -67,21 +67,70 @@ export default function Deuda() {
   const sim = Object.keys(cambios).length > 0 ? simulatePlan(cambios) : null;
 
   /*
-   * En qué mes cae la PRIMERA cuota que falta.
+   * En qué mes cae la PRIMERA cuota que falta. Tres reglas, en orden:
    *
-   * Casi siempre este mes. Pero si ya registraste el abono de este mes, la
-   * proyección empieza el siguiente: si no, la tabla vuelve a cobrarte una
-   * cuota que ya pagaste y todas las fechas quedan corridas un mes.
+   *   1. Si ya registraste el abono de este mes, la cuenta empieza el
+   *      siguiente. Si no, la tabla vuelve a cobrarte una cuota ya pagada.
+   *
+   *   2. Si el crédito se desembolsó este mes, la primera cuota es el mes
+   *      entrante: nadie paga la cuota el mismo mes en que le prestaron.
+   *
+   *   3. Y nunca antes del mes actual, aunque el crédito sea viejo.
    */
   const mesActual = currentMonthKey();
-  const yaPagoEsteMes = (debt.payments || [])
-    .some((p) => (p.month || monthKeyFromDate(p.date)) === mesActual);
-  const primerMes = yaPagoEsteMes ? addMonths(mesActual, 1) : mesActual;
+  const ultimoAbono = (debt.payments || [])
+    .map((p) => p.month || monthKeyFromDate(p.date))
+    .sort()
+    .pop();
+
+  const desembolso = debt.startDate ? monthKeyFromDate(debt.startDate) : null;
+  const candidatos = [mesActual];
+  if (ultimoAbono) candidatos.push(addMonths(ultimoAbono, 1));
+  if (desembolso) candidatos.push(addMonths(desembolso, 1));
+  const primerMes = candidatos.sort().pop();
+
+  const yaPagoEsteMes = ultimoAbono === mesActual;
+  const arrancaDespues = primerMes !== mesActual;
+
+  /*
+   * La tabla junta las dos mitades: las cuotas que ya pagaste, reconstruidas
+   * desde el monto original, y la proyección de las que faltan. Antes era solo
+   * la proyección, así que no se veía nada de lo hecho — la tabla se sentía una
+   * simulación en vez de tu plan de pago.
+   */
+  const totalCuotas = hechas.length + withExtra.months;
 
   /* La última cuota va en el offset months - 1: la primera es el offset 0. */
   const fin = withExtra.feasible
     ? monthLabel(addMonths(primerMes, withExtra.months - 1))
     : null;
+
+  const futuras = withExtra.schedule.map((f) => ({
+    key: `f${f.month}`,
+    etiqueta: monthLabel(addMonths(primerMes, f.month - 1)),
+    interest: f.interest,
+    principal: f.principal,
+    closing: f.closing,
+    paid: false,
+  }));
+
+  const pagadas = hechas.map((f) => ({
+    key: `p${f.date}-${f.month}`,
+    etiqueta: monthLabel(f.monthKey || monthKeyFromDate(f.date)),
+    interest: f.interest,
+    principal: f.principal,
+    closing: f.closing,
+    paid: true,
+    anchored: f.anchored,
+  }));
+
+  /*
+   * Plegada, la tabla muestra las últimas dos hechas y las tres que vienen: lo
+   * que uno quiere ver de reojo es dónde va, no el año entero.
+   */
+  const filas = verTabla
+    ? [...pagadas, ...futuras]
+    : [...pagadas.slice(-2), ...futuras.slice(0, 3)];
 
   return (
     <>
@@ -102,8 +151,11 @@ export default function Deuda() {
               {mesesATexto(withExtra.months)}
             </div>
             <p className="cc-page-sub" style={{ marginTop: 8 }}>
-              Última cuota en {fin}. Pagarías {fmtCOP(withExtra.totalInterest)} de intereses.
-              {yaPagoEsteMes && ' La cuenta arranca el mes entrante: la de este mes ya la registraste.'}
+              Primera cuota en {monthLabel(primerMes)}, última en {fin}.
+              Pagarías {fmtCOP(withExtra.totalInterest)} de intereses.
+              {arrancaDespues && (yaPagoEsteMes
+                ? ' La de este mes ya la registraste.'
+                : ' Este mes no hay cuota: el crédito se desembolsó apenas.')}
             </p>
           </>
         ) : (
@@ -257,16 +309,26 @@ export default function Deuda() {
       {withExtra.feasible && (
         <div className="cc-card" style={{ marginTop: 14 }}>
           <div className="cc-section-head" style={{ marginTop: 0 }}>
-            <p className="cc-chart-title" style={{ flex: 1, marginBottom: 0 }}>
-              Cuota por cuota
-            </p>
+            <p className="cc-chart-title" style={{ flex: 1, marginBottom: 0 }}>Tu plan de pago</p>
+            <span className="cc-tag">
+              {hechas.length} de {totalCuotas} {totalCuotas === 1 ? 'cuota' : 'cuotas'}
+            </span>
             <button
               type="button" className="cc-btn cc-btn-outline cc-btn-sm"
               onClick={() => setVerTabla((v) => !v)}
             >
-              <ChevronDown size={13} /> {verTabla ? 'Ocultar' : `Ver los ${withExtra.months} meses`}
+              <ChevronDown size={13} /> {verTabla ? 'Ocultar' : 'Ver todas'}
             </button>
           </div>
+
+          {hechas.length > 0 && (
+            <div className="cc-progress-track" style={{ marginBottom: 10 }}>
+              <div
+                className="cc-progress-fill"
+                style={{ width: `${(hechas.length / totalCuotas) * 100}%`, background: COLORS.income }}
+              />
+            </div>
+          )}
 
           <p className="cc-page-sub">
             Abonar de más no baja la cuota: baja el saldo, así que el mes siguiente se va
@@ -280,23 +342,34 @@ export default function Deuda() {
               <span>Capital</span>
               <span>Saldo</span>
             </div>
-            {(verTabla ? withExtra.schedule : withExtra.schedule.slice(0, 3)).map((f) => (
-              <div key={f.month} className="cc-plan-row">
+
+            {filas.map((f) => (
+              <div
+                key={f.key}
+                className="cc-plan-row"
+                style={f.paid ? { background: 'var(--income-soft)' } : undefined}
+              >
                 <span className="cc-plan-concept">
-                  {monthLabel(addMonths(primerMes, f.month - 1))}
+                  {f.paid && <Check size={13} color={COLORS.income} />}
+                  {f.etiqueta}
+                  {/* Marcamos de dónde salió el saldo: del banco o del modelo. */}
+                  {f.anchored && <span className="cc-tag" style={{ marginLeft: 6 }}>del banco</span>}
                 </span>
-                <span className="cc-mono" style={{ color: COLORS.expense }}>
-                  {fmtCOP(f.interest)}
-                </span>
-                <span className="cc-mono" style={{ color: COLORS.income }}>
-                  {fmtCOP(f.principal)}
-                </span>
+                <span className="cc-mono" style={{ color: COLORS.expense }}>{fmtCOP(f.interest)}</span>
+                <span className="cc-mono" style={{ color: COLORS.income }}>{fmtCOP(f.principal)}</span>
                 <span className="cc-mono">{fmtCOP(f.closing)}</span>
               </div>
             ))}
           </div>
+
+          {!verTabla && filas.length < totalCuotas && (
+            <p className="cc-page-sub" style={{ marginTop: 8 }}>
+              Faltan {totalCuotas - filas.length} cuotas más.
+            </p>
+          )}
         </div>
       )}
+
     </>
   );
 }

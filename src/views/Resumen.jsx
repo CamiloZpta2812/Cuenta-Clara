@@ -1,59 +1,87 @@
 import {
-  BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { LayoutDashboard, CreditCard, PiggyBank, TrendingUp, TrendingDown, Wallet, ShoppingBag, Check, Landmark, Repeat, Sheet, AlertTriangle } from 'lucide-react';
+import {
+  TrendingUp, TrendingDown, ShoppingBag, Check, Landmark, Sheet, AlertTriangle, Activity,
+} from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
-import { getCategory } from '../lib/categories.js';
 import { monthLabel } from '../lib/dates.js';
 import { fmtCOP, fmtShort } from '../lib/money.js';
 import StatCard from '../components/StatCard';
 import RecCard from '../components/RecCard';
 import EmptyState from '../components/EmptyState';
 import { useFinance } from '../state/financeStore';
+
+/*
+ * Resumen: la foto de cómo va la plata.
+ *
+ * Tenía nueve tarjetas y cuatro gráficas, todas del mismo tamaño. Con todo
+ * gritando al mismo volumen no había dónde mirar primero, y varias respondían
+ * preguntas que ya responde otra pantalla mejor.
+ *
+ * Quedan dos gráficas y cuatro números:
+ *
+ *   El pulso   sube con cada ingreso, baja con cada gasto. Enseña la FORMA del
+ *              mes —el escalón de la quincena, la caída del arriendo— que un
+ *              promedio mensual no puede mostrar.
+ *
+ *   El reparto a dónde va cada peso del plan. Suma el ingreso completo, así que
+ *              los porcentajes se leen sin hacer cuentas.
+ */
+
+const ejeFecha = (d) => {
+  const [, m, dia] = String(d).split('-');
+  return `${parseInt(dia, 10)}/${parseInt(m, 10)}`;
+};
+
+const tooltipStyle = {
+  fontFamily: 'Poppins', fontSize: 13, borderRadius: 8, border: `1px solid ${COLORS.line}`,
+};
+
+function PulsoTooltip({ active, payload }) {
+  if (!active || !payload || !payload.length) return null;
+  const p = payload[0].payload;
+  return (
+    <div className="cc-card" style={{ padding: '8px 12px', fontSize: 12.5 }}>
+      <div style={{ fontWeight: 600 }}>{p.date}</div>
+      <div className="cc-mono">{fmtCOP(p.saldo)}</div>
+      {p.label && <div style={{ color: COLORS.inkSoft }}>{p.label}</div>}
+    </div>
+  );
+}
+
 export default function Resumen() {
   const {
-    availableMonths,
-    exporting,
-    handleExportExcel,
-    commitments,
-    cashBalance,
-    equityEvolution,
-    monthlyIncomeExpense,
-    netWorth,
-    pieData,
-    recommendations,
-    selMonthExpense,
-    selMonthFixed,
-    selMonthIncome,
-    selMonthVariable,
-    selectedMonth,
-    setSelectedMonth,
-    status,
-    totalCardSpendCOP,
-    totalDebtRemaining,
-    totalSavings,
+    availableMonths, exporting, handleExportExcel,
+    cashFlow, planDistribution,
+    selMonthExpense, selMonthFixed, selMonthIncome, selMonthVariable,
+    selectedMonth, setSelectedMonth, status, recommendations,
   } = useFinance();
+
+  const totalPlan = planDistribution.reduce((s, x) => s + x.value, 0);
 
   return (
     <>
       <div className="cc-page-title">Resumen</div>
-      <p className="cc-page-sub">Tu balance general y cómo ha evolucionado mes a mes.</p>
+      <p className="cc-page-sub">Cómo se ha movido tu plata y a dónde se va.</p>
 
       <div className="cc-section-head">
         <div className="cc-stamp" style={{ color: status.color }}>
           <status.Icon size={16} /> {status.label}
         </div>
-        <select className="cc-select" style={{ maxWidth: 160 }} value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}>
+        <select
+          className="cc-select" style={{ maxWidth: 160 }}
+          value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}
+        >
           {availableMonths.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
         </select>
         <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => window.print()}>
           <Landmark size={13} /> Reporte del mes (PDF)
         </button>
         <button
-          type="button"
-          className="cc-btn cc-btn-outline cc-btn-sm"
-          onClick={handleExportExcel}
-          disabled={exporting === 'trabajando'}
+          type="button" className="cc-btn cc-btn-outline cc-btn-sm"
+          onClick={handleExportExcel} disabled={exporting === 'trabajando'}
         >
           <Sheet size={13} /> {exporting === 'trabajando' ? 'Generando…' : 'Todo en Excel'}
         </button>
@@ -66,112 +94,109 @@ export default function Resumen() {
       <div className="cc-stats-grid">
         <StatCard label="Ingresos del mes" value={fmtCOP(selMonthIncome)} Icon={TrendingUp} color={COLORS.income} bg="var(--income-soft)" />
         <StatCard label="Gastos del mes" value={fmtCOP(selMonthExpense)} Icon={TrendingDown} color={COLORS.expense} bg="var(--expense-soft)" />
-        <StatCard label="Gastos fijos" value={fmtCOP(selMonthFixed)} Icon={Landmark} color={COLORS.debt} bg="var(--debt-soft)" sub={selMonthExpense > 0 ? `${((selMonthFixed / selMonthExpense) * 100).toFixed(0)}% del gasto del mes` : undefined} />
+        <StatCard label="Gastos fijos" value={fmtCOP(selMonthFixed)} Icon={Landmark} color={COLORS.debt} bg="var(--debt-soft)" />
         <StatCard label="Gastos variables" value={fmtCOP(selMonthVariable)} Icon={ShoppingBag} color={COLORS.savings} bg="var(--savings-soft)" />
-        <StatCard label="Saldo en caja (total)" value={fmtCOP(cashBalance)} Icon={Wallet} color={COLORS.ink} bg="var(--paper)" sub="Ingresos - gastos, histórico" />
-        <StatCard label="Ahorro total" value={fmtCOP(totalSavings)} Icon={PiggyBank} color={COLORS.savings} bg="var(--savings-soft)" />
-        <StatCard label="Deuda pendiente" value={fmtCOP(totalDebtRemaining)} Icon={CreditCard} color={COLORS.debt} bg="var(--debt-soft)" />
-        <StatCard label="Cargado a tarjetas (histórico)" value={fmtCOP(totalCardSpendCOP)} Icon={Landmark} color={COLORS.debt} bg="var(--debt-soft)" sub="Incluye tarjetas en USD, ya convertidas a COP" />
-        <StatCard label="Patrimonio neto" value={fmtCOP(netWorth)} Icon={LayoutDashboard} color={COLORS.ink} bg="var(--paper)" sub="Caja + ahorro - deuda" />
       </div>
 
-      <div className="cc-charts-grid">
-        <div className="cc-card">
-          <p className="cc-chart-title">Ingresos vs. gastos</p>
-          <p className="cc-chart-sub">Últimos 6 meses</p>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={monthlyIncomeExpense} margin={{ top: 6, right: 6, left: -14, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={COLORS.line} vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 12, fill: COLORS.inkSoft }} axisLine={{ stroke: COLORS.line }} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: COLORS.inkSoft }} axisLine={false} tickLine={false} tickFormatter={fmtShort} width={46} />
-              <Tooltip formatter={(v) => fmtCOP(v)} contentStyle={{ fontFamily: 'Poppins', fontSize: 13, borderRadius: 8, border: `1px solid ${COLORS.line}` }} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="Ingresos" fill={COLORS.income} radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Gastos" fill={COLORS.expense} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="cc-card">
-          <p className="cc-chart-title">Gastos por categoría</p>
-          <p className="cc-chart-sub">{monthLabel(selectedMonth)}</p>
-          {pieData.length === 0 ? (
-            <EmptyState Icon={ShoppingBag} title="Sin gastos este mes" text="Registra un gasto para ver la distribución." />
-          ) : (
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={52} outerRadius={88} paddingAngle={2}>
-                  {pieData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
-                </Pie>
-                <Tooltip formatter={(v) => fmtCOP(v)} contentStyle={{ fontFamily: 'Poppins', fontSize: 13, borderRadius: 8, border: `1px solid ${COLORS.line}` }} />
-                <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 11.5 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        <div className="cc-card" style={{ gridColumn: '1 / -1' }}>
-          <p className="cc-chart-title">Ahorro acumulado vs. deuda pendiente</p>
-          <p className="cc-chart-sub">Últimos 6 meses</p>
-          <ResponsiveContainer width="100%" height={230}>
-            <LineChart data={equityEvolution} margin={{ top: 6, right: 6, left: -14, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={COLORS.line} vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 12, fill: COLORS.inkSoft }} axisLine={{ stroke: COLORS.line }} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: COLORS.inkSoft }} axisLine={false} tickLine={false} tickFormatter={fmtShort} width={46} />
-              <Tooltip formatter={(v) => fmtCOP(v)} contentStyle={{ fontFamily: 'Poppins', fontSize: 13, borderRadius: 8, border: `1px solid ${COLORS.line}` }} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="Ahorro" stroke={COLORS.income} strokeWidth={2.5} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="Deuda" stroke={COLORS.debt} strokeWidth={2.5} dot={{ r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/*
-        Lo que ya está comprometido hacia adelante. Antes una compra a 12 cuotas
-        solo mostraba la cuota registrada: nunca se veía que marzo ya venía con
-        plata separada.
-      */}
-      <div className="cc-card" style={{ marginBottom: 22 }}>
-        <p className="cc-chart-title">Lo que ya tienes comprometido</p>
-        <p className="cc-chart-sub">Cuotas pendientes y gastos fijos de los próximos 6 meses</p>
-        {commitments.every((c) => c.total === 0) ? (
+      {/* ----------------------------------------------------------- el pulso */}
+      <div className="cc-card" style={{ marginTop: 18 }}>
+        <p className="cc-chart-title">El pulso de tu plata</p>
+        <p className="cc-chart-sub">
+          Sube con cada ingreso y baja con cada gasto, aporte y abono · últimos 3 meses
+        </p>
+        {cashFlow.length === 0 ? (
           <EmptyState
-            Icon={Repeat}
-            title="Nada comprometido todavía"
-            text="Cuando registres gastos fijos o compras a cuotas, aquí verás cuánto de cada mes que viene ya está apartado."
+            Icon={Activity}
+            title="Todavía no hay movimientos"
+            text="Registra un ingreso o un gasto y aquí verás la forma que va tomando el mes."
           />
         ) : (
           <>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={commitments.map((c) => ({
-                label: monthLabel(c.monthKey), Cuotas: c.installments, 'Gastos fijos': c.fixed,
-              }))} margin={{ top: 6, right: 6, left: -14, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={230}>
+              <AreaChart data={cashFlow} margin={{ top: 6, right: 6, left: -14, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="pulso" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={COLORS.income} stopOpacity={0.28} />
+                    <stop offset="100%" stopColor={COLORS.income} stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={COLORS.line} vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 12, fill: COLORS.inkSoft }} axisLine={{ stroke: COLORS.line }} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: COLORS.inkSoft }} axisLine={false} tickLine={false} tickFormatter={fmtShort} width={46} />
-                <Tooltip formatter={(v) => fmtCOP(v)} contentStyle={{ fontFamily: 'Poppins', fontSize: 13, borderRadius: 8, border: `1px solid ${COLORS.line}` }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="Gastos fijos" stackId="c" fill={COLORS.debt} radius={[0, 0, 0, 0]} />
-                <Bar dataKey="Cuotas" stackId="c" fill={COLORS.savings} radius={[4, 4, 0, 0]} />
-              </BarChart>
+                <XAxis
+                  dataKey="date" tickFormatter={ejeFecha} minTickGap={28}
+                  tick={{ fontSize: 11, fill: COLORS.inkSoft }}
+                  axisLine={{ stroke: COLORS.line }} tickLine={false}
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: COLORS.inkSoft }} axisLine={false}
+                  tickLine={false} tickFormatter={fmtShort} width={46}
+                />
+                <ReferenceLine y={0} stroke={COLORS.inkSoft} strokeDasharray="4 4" />
+                <Tooltip content={<PulsoTooltip />} />
+                <Area
+                  type="monotone" dataKey="saldo" stroke={COLORS.income}
+                  strokeWidth={2.5} fill="url(#pulso)" dot={false} activeDot={{ r: 4 }}
+                />
+              </AreaChart>
             </ResponsiveContainer>
-            <div className="cc-commit-list">
-              {commitments.filter((c) => c.items.length > 0).map((c) => (
-                <div key={c.monthKey} className="cc-commit-row">
-                  <span className="cc-commit-month">{monthLabel(c.monthKey)}</span>
-                  <span className="cc-commit-detail">
-                    {c.items.map((it) => `${it.note || getCategory(it.category).label} (cuota ${it.cuota}/${it.de})`).join(' · ')}
-                  </span>
-                  <span className="cc-commit-total">{fmtCOP(c.total)}</span>
-                </div>
-              ))}
-            </div>
+            <p className="cc-page-sub" style={{ marginTop: 6 }}>
+              Es cuánto has ganado o perdido en la ventana, no el saldo del banco: arranca
+              en cero porque todavía no le hemos dicho con cuánto empezaste.
+            </p>
           </>
         )}
       </div>
 
-      <div className="cc-card">
+      {/* ---------------------------------------------------------- el reparto */}
+      <div className="cc-card" style={{ marginTop: 14 }}>
+        <p className="cc-chart-title">A dónde va cada peso</p>
+        <p className="cc-chart-sub">Según el plan de {monthLabel(selectedMonth)}</p>
+        {planDistribution.length === 0 ? (
+          <EmptyState
+            Icon={ShoppingBag}
+            title="Todavía no hay un plan"
+            text="Cuando tengas ingresos y gastos fijos registrados, aquí verás cómo se reparte lo que entra."
+          />
+        ) : (
+          <div className="cc-split">
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie
+                  data={planDistribution} dataKey="value" nameKey="name"
+                  innerRadius={60} outerRadius={98} paddingAngle={2}
+                >
+                  {planDistribution.map((e) => <Cell key={e.name} fill={e.color} />)}
+                </Pie>
+                <Tooltip formatter={(v) => fmtCOP(v)} contentStyle={tooltipStyle} />
+              </PieChart>
+            </ResponsiveContainer>
+
+            {/*
+              La leyenda va como lista y no dentro de la gráfica: con seis
+              porciones, los rótulos de recharts se pisan entre sí y el
+              porcentaje —que es lo que se vino a leer— queda ilegible.
+            */}
+            <div className="cc-commit-list" style={{ alignSelf: 'center' }}>
+              {planDistribution.map((x) => (
+                <div key={x.name} className="cc-plan-row" style={{ gridTemplateColumns: '1fr 96px 52px' }}>
+                  <span className="cc-plan-concept">
+                    <span style={{
+                      width: 10, height: 10, borderRadius: 3, background: x.color, flexShrink: 0,
+                    }}
+                    />
+                    {x.name}
+                  </span>
+                  <span className="cc-mono">{fmtCOP(x.value)}</span>
+                  <span className="cc-mono" style={{ color: COLORS.inkSoft }}>
+                    {totalPlan > 0 ? `${Math.round((x.value / totalPlan) * 100)}%` : '—'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="cc-card" style={{ marginTop: 14 }}>
         <p className="cc-chart-title">Recomendaciones para este mes</p>
         <div className="cc-rec-list">
           {recommendations.length === 0
@@ -181,5 +206,4 @@ export default function Resumen() {
       </div>
     </>
   );
-
 }

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { COLOR_CHOICES } from '../lib/constants.js';
+import { COLOR_CHOICES, COLORS } from '../lib/constants.js';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, ALL_CATEGORIES, ICON_CHOICES, getCategory } from '../lib/categories.js';
 import { todayStr, daysInMonth, monthKeyFromDate, currentMonthKey, monthLabel, computeChargeDate, addMonths } from '../lib/dates.js';
 import { supabase } from '../supabaseClient.js';
@@ -13,7 +13,8 @@ import { uid } from '../lib/id.js';
 import { buildRecommendations, getStatus } from '../lib/insights.js';
 import { buildCardStatements, nextStatement, buildCommitments, activeInstallmentGroups } from '../lib/projections.js';
 import { monthSummary, targetDebt, simulatePlanChange } from '../lib/month.js';
-import { comparePlans, monthlyRateOf } from '../lib/amortization.js';
+import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
+import { buildCashFlow } from '../lib/cashflow.js';
 
 /*
  * Todo el estado de la app vive aquí: lo que se persiste en Supabase, lo que se
@@ -112,6 +113,7 @@ export function FinanceProvider({ children }) {
   const [balanceInputs, setBalanceInputs] = useState({});
   const [bucketInputs, setBucketInputs] = useState({});
   const [showBucketForm, setShowBucketForm] = useState(false);
+  const [editingBucketId, setEditingBucketId] = useState(null);
   const [bucketForm, setBucketForm] = useState({
     name: '', kind: 'meta', liquid: true, monthlyAmount: '', targetAmount: '', targetDate: '',
   });
@@ -826,21 +828,54 @@ export function FinanceProvider({ children }) {
 
   /* ---------- Buckets: metas y colchones ---------- */
 
+  const BUCKET_VACIO = {
+    name: '', kind: 'meta', liquid: true, monthlyAmount: '', targetAmount: '', targetDate: '',
+  };
+
+  /*
+   * Crear y editar por el mismo formulario. Los aportes no se tocan: cambiarle
+   * el nombre a un colchón no debería mover ni un peso de lo que ya guardaste.
+   */
   function handleAddBucket(e) {
     e.preventDefault();
     if (!bucketForm.name.trim()) return;
-    setBuckets((prev) => [...prev, {
-      id: uid(),
+    const kind = bucketForm.kind === 'colchon' ? 'colchon' : 'meta';
+    const datos = {
       name: bucketForm.name.trim(),
-      kind: bucketForm.kind === 'colchon' ? 'colchon' : 'meta',
+      kind,
       liquid: !!bucketForm.liquid,
       monthlyAmount: parseFloat(bucketForm.monthlyAmount) || 0,
       /* Un colchón no tiene objetivo: es margen, no una meta a la que llegar. */
-      targetAmount: bucketForm.kind === 'meta' ? (parseFloat(bucketForm.targetAmount) || null) : null,
-      targetDate: bucketForm.kind === 'meta' ? (bucketForm.targetDate || null) : null,
-      contributions: [],
-    }]);
-    setBucketForm({ name: '', kind: 'meta', liquid: true, monthlyAmount: '', targetAmount: '', targetDate: '' });
+      targetAmount: kind === 'meta' ? (parseFloat(bucketForm.targetAmount) || null) : null,
+      targetDate: kind === 'meta' ? (bucketForm.targetDate || null) : null,
+    };
+
+    if (editingBucketId) {
+      setBuckets((prev) => prev.map((b) => (b.id === editingBucketId ? { ...b, ...datos } : b)));
+      setEditingBucketId(null);
+    } else {
+      setBuckets((prev) => [...prev, { id: uid(), ...datos, contributions: [] }]);
+    }
+    setBucketForm(BUCKET_VACIO);
+    setShowBucketForm(false);
+  }
+
+  function handleEditBucket(b) {
+    setEditingBucketId(b.id);
+    setBucketForm({
+      name: b.name,
+      kind: b.kind === 'colchon' ? 'colchon' : 'meta',
+      liquid: b.liquid !== false,
+      monthlyAmount: b.monthlyAmount != null ? String(b.monthlyAmount) : '',
+      targetAmount: b.targetAmount != null ? String(b.targetAmount) : '',
+      targetDate: b.targetDate || '',
+    });
+    setShowBucketForm(true);
+  }
+
+  function handleCancelBucketForm() {
+    setEditingBucketId(null);
+    setBucketForm(BUCKET_VACIO);
     setShowBucketForm(false);
   }
 
@@ -927,9 +962,37 @@ export function FinanceProvider({ children }) {
       : Math.max(0, (Number(deuda.totalAmount) || 0)
         - (deuda.payments || []).reduce((a, p) => a + (Number(p.amount) || 0), 0));
 
+    /*
+     * Lo que ya pagaste, corrido desde el monto original del crédito. Sin esto
+     * la tabla es una simulación; con esto es tu plan de pago, con las cuotas
+     * hechas marcadas y la proyección siguiendo desde ahí.
+     */
+    const hechas = replayPayments({
+      principal: Number(deuda.totalAmount) || principal,
+      monthlyRate: monthlyRateOf(deuda),
+      payments: deuda.payments,
+    });
+
+    /*
+     * La historia se reconstruye desde el monto original; la proyección arranca
+     * del saldo de hoy. Si los dos no coinciden —porque el crédito traía saldo
+     * de antes de usar la app, o porque el banco cobró algo que no modelamos—
+     * la tabla mostraría un salto entre la última cuota pagada y la siguiente.
+     *
+     * El saldo de hoy es el dato más confiable, así que la última fila pagada
+     * se cierra ahí. La diferencia se absorbe en su capital, que es donde de
+     * verdad está: pagaste lo que pagaste, y el saldo quedó donde quedó.
+     */
+    const ultima = hechas[hechas.length - 1];
+    if (ultima && Number.isFinite(principal) && Math.abs(ultima.closing - principal) > 1) {
+      ultima.closing = principal;
+      ultima.principal = ultima.opening + ultima.interest - principal;
+    }
+
     return {
       debt: deuda,
       extra,
+      hechas,
       ...comparePlans({
         principal,
         monthlyRate: monthlyRateOf(deuda),
@@ -945,16 +1008,44 @@ export function FinanceProvider({ children }) {
     [snapshot, selectedMonth],
   );
 
+  /*
+   * A dónde va cada peso del plan. La suma da el ingreso completo, así que los
+   * porcentajes se leen sin tener que hacer la cuenta: cuánto de lo que entra
+   * ya tiene dueño antes de que llegue.
+   */
+  const planDistribution = useMemo(() => {
+    const p = monthReport.plan;
+    return [
+      { name: 'Gastos fijos',   value: p.fixedExpenses, color: COLORS.debt },
+      { name: 'Cuota de deuda', value: p.debtPayment,   color: '#8C6BB1' },
+      { name: 'Abono extra',    value: Math.max(0, p.availableForExtra), color: COLORS.income },
+      { name: 'Metas',          value: p.savings,       color: COLORS.savings },
+      { name: 'Colchones',      value: p.cushion,       color: '#3E7FB0' },
+      { name: 'Gasto variable', value: p.variable,      color: COLORS.expense },
+    ].filter((x) => x.value > 0);
+  }, [monthReport]);
+
+  /* El pulso del mes, movimiento a movimiento. Ver lib/cashflow.js. */
+  const cashFlow = useMemo(
+    () => buildCashFlow(snapshot(), getLastMonthKeys(3, selectedMonth)),
+    [snapshot, selectedMonth],
+  );
+
   const value = {
     activeTab,
+    cashFlow,
     debtOutlook,
+    planDistribution,
     simulatePlan: simulate,
     balanceInputs,
     bucketForm,
     bucketInputs,
     cardOutlook,
+    editingBucketId,
     handleAddBucket,
     handleBucketMovement,
+    handleCancelBucketForm,
+    handleEditBucket,
     handleDeleteBucket,
     handleToggleCollection,
     monthReport,

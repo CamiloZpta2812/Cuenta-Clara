@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  simulate, levelPayment, monthsRemaining, comparePlans, impactOfNewCommitment,
-} from './amortization.js';
+  simulate, levelPayment, monthsRemaining, comparePlans, impactOfNewCommitment, replayPayments } from './amortization.js';
 
 /*
  * El caso real: préstamo de libre inversión de Bancolombia.
@@ -164,4 +163,57 @@ test('un compromiso moderado sí es viable, solo más lento', () => {
   assert.equal(r.becomesUnpayable, false);
   assert.ok(r.after.feasible);
   assert.ok(r.extraMonths > 0 && r.extraMonths < 20, `atrasó ${r.mesesExtra} meses`);
+});
+
+/* --------------------------------------------------- lo que ya pagaste --- */
+
+test('reconstruye el interés y el capital de los abonos hechos', () => {
+  const filas = replayPayments({
+    principal: 14_000_000,
+    monthlyRate: 0.0167,
+    payments: [
+      { id: 'p1', amount: 1_133_000, date: '2026-10-15' },
+      { id: 'p2', amount: 1_133_000, date: '2026-11-15' },
+    ],
+  });
+
+  assert.equal(filas.length, 2);
+  assert.equal(Math.round(filas[0].interest), 233_800);
+  assert.equal(Math.round(filas[0].principal), 899_200);
+  assert.equal(Math.round(filas[0].closing), 13_100_800);
+  // El segundo mes se va menos plata en intereses: ese es todo el punto.
+  assert.ok(filas[1].interest < filas[0].interest);
+});
+
+test('el saldo que reporta el banco manda sobre el modelo', () => {
+  const filas = replayPayments({
+    principal: 14_000_000,
+    monthlyRate: 0.0167,
+    payments: [
+      // El banco cobró un seguro: quedan 20.000 más de lo que dice el modelo.
+      { id: 'p1', amount: 1_133_000, date: '2026-10-15', balanceAfter: 13_120_800 },
+      { id: 'p2', amount: 1_133_000, date: '2026-11-15' },
+    ],
+  });
+  assert.equal(filas[0].closing, 13_120_800);
+  assert.equal(filas[0].anchored, true);
+  // Y la diferencia no se arrastra: el mes siguiente parte del saldo real.
+  assert.equal(filas[1].opening, 13_120_800);
+  assert.equal(filas[1].anchored, false);
+});
+
+test('los abonos se ordenan por fecha aunque entren revueltos', () => {
+  const filas = replayPayments({
+    principal: 1_000_000, monthlyRate: 0.01,
+    payments: [
+      { id: 'b', amount: 100_000, date: '2026-11-01' },
+      { id: 'a', amount: 100_000, date: '2026-10-01' },
+    ],
+  });
+  assert.deepEqual(filas.map((f) => f.date), ['2026-10-01', '2026-11-01']);
+});
+
+test('sin abonos no hay historia', () => {
+  assert.deepEqual(replayPayments({ principal: 1_000_000, monthlyRate: 0.01, payments: [] }), []);
+  assert.deepEqual(replayPayments({ principal: 1_000_000, monthlyRate: 0.01 }), []);
 });
