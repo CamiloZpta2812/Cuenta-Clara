@@ -7,8 +7,8 @@
 -- NO BORRA NADA.
 --
 -- Qué pasó el 8 de septiembre: entraron los 14.000.000 del libre inversión y
--- con ellos quedó en cero la tarjeta de crédito. Hoy, 9 de septiembre, la
--- cuenta está en cero.
+-- con ellos quedó en cero la tarjeta de crédito. Hoy, 9 de septiembre, quedan
+-- 357.000 en la cuenta.
 --
 -- Ni el desembolso ni el pago de la tarjeta entran como movimientos, a
 -- propósito:
@@ -25,7 +25,7 @@
 --
 -- Las dos cosas sí movieron la cuenta, y el ancla del saldo es exactamente la
 -- herramienta para eso: en vez de reconstruir la historia, dice "el 8 de
--- septiembre cerré en cero" y todo lo anterior queda absorbido adentro.
+-- septiembre cerré con 357.000" y todo lo anterior queda absorbido adentro.
 -- =============================================================================
 
 do $$
@@ -46,10 +46,11 @@ begin
   --
   -- Se ancla al 8 y no al 9 a propósito: el ancla es el saldo con el que CERRÓ
   -- ese día, así que lo que registres hoy sí baja la línea. Anclarlo al 9
-  -- volvería invisible cualquier gasto de hoy que anotes más tarde.
+  -- volvería invisible cualquier gasto de hoy que anotes más tarde. Como hoy
+  -- todavía no se ha movido nada, los 357.000 valen para las dos fechas.
   -- ===========================================================================
   insert into public.user_settings (user_id, balance_anchor_date, balance_anchor_amount)
-  values (uid, date '2026-09-08', 0)
+  values (uid, date '2026-09-08', 357000)
   on conflict (user_id) do update
     set balance_anchor_date   = excluded.balance_anchor_date,
         balance_anchor_amount = excluded.balance_anchor_amount,
@@ -85,7 +86,7 @@ begin
   --
   -- La fecha es aproximada —el 8— porque lo que importa es el mes: es contra
   -- el mes que se juzga el plan. Y al caer sobre el ancla, ninguno de estos
-  -- pagos vuelve a descontarse del saldo: ya están dentro del cero.
+  -- pagos vuelve a descontarse del saldo: ya están dentro de los 357.000.
   -- ===========================================================================
   insert into public.transactions
     (user_id, id, type, amount, category, date, month, note,
@@ -107,7 +108,19 @@ begin
    */
 
   -- ===========================================================================
-  -- 4. El plan de septiembre, sin la cuota de la deuda
+  -- 4. La cooperativa de septiembre, ya pagada
+  --
+  -- Un aporte guarda TU plata, no la del pote. La cooperativa no la comparte
+  -- nadie, así que las dos cifras coinciden; en el fondo con Sofi no, y por
+  -- eso importa: cuando pongas tus 150.000 del 15, se registran 150.000.
+  -- ===========================================================================
+  insert into public.bucket_contributions (user_id, id, bucket_id, amount, date, month)
+  values (uid, 'apt-sep-cooperativa', 'bkt-cooperativa', 76000, date '2026-09-08', '2026-09')
+  on conflict (user_id, id) do update
+    set amount = excluded.amount, date = excluded.date, month = excluded.month;
+
+  -- ===========================================================================
+  -- 5. El plan de septiembre, sin la cuota de la deuda
   --
   -- La cuota de 446.413 estaba restando en septiembre y no debería: el crédito
   -- se desembolsó el 8 y la primera cuota es de octubre. Con ella adentro, el
@@ -123,15 +136,21 @@ begin
      set debt_payment = 0, updated_at = now()
    where user_id = uid and month = '2026-09';
 
-  raise notice 'Listo. Saldo anclado en 0 al 8 de septiembre, deuda desde esa fecha, cuatro fijos enlazados.';
+  raise notice 'Listo. Saldo anclado en 357.000 al 8 de septiembre, deuda desde esa fecha, cuatro fijos enlazados y la cooperativa marcada.';
 end $$;
 
 
 -- =============================================================================
--- Informe: qué tiene que cubrir la quincena del 15
+-- Informe: qué falta por cubrir en septiembre
 --
 -- Todo sale de las tablas, no de números escritos a mano: si algún monto
 -- cambió desde que se escribió esto, el informe lo refleja en vez de mentir.
+--
+-- Es la foto del MES, no de una quincena. El fondo con Sofi aparece con sus
+-- 300.000 completos aunque se paguen en dos: la app no necesita saber en qué
+-- quincena cae cada mitad, solo que al cerrar el mes estén los 300.000. Cuando
+-- pongas la primera mitad, esta lista pasa sola a mostrar los 150.000 que
+-- quedan.
 -- =============================================================================
 with uid as (select current_setting('aldia.uid', true)::uuid as id),
 
@@ -149,33 +168,35 @@ fijos_pendientes as (
                         and t.month = '2026-09')
 ),
 
--- Tu parte de lo que hay que apartar. Las reservas quedan fuera: la gasolina
--- no se aparta, se va gastando, así que no es plata que haya que mover el 15.
+-- Lo que FALTA de cada bucket, no todo o nada: el fondo con Sofi se paga en
+-- dos quincenas, así que después del primer aporte tienen que seguir
+-- apareciendo los 150.000 que quedan. Excluirlo entero al primer depósito
+-- escondería justo la mitad que falta.
 --
--- OJO con la cooperativa: aparece acá porque es una meta que mueve plata, pero
--- si te la descuentan de la nómina ya viene restada de los 1.700.000 y estaría
--- contada dos veces. Si es así, dime y la marco como descuento de nómina.
+-- Las reservas quedan fuera: la gasolina no se aparta, se va gastando, así que
+-- no es plata que haya que mover el 15.
 buckets_pendientes as (
   select b.name,
          b.monthly_amount
          - coalesce((select sum(s.amount) from public.bucket_shares s
-                      where s.user_id = b.user_id and s.bucket_id = b.id), 0) as tu_parte
+                      where s.user_id = b.user_id and s.bucket_id = b.id), 0)
+         - coalesce((select sum(c.amount) from public.bucket_contributions c
+                      where c.user_id = b.user_id and c.bucket_id = b.id
+                        and to_char(c.date, 'YYYY-MM') = '2026-09'), 0) as tu_parte
     from public.buckets b
    where b.user_id = (select id from uid)
      and b.moves_cash
-     and not exists (select 1 from public.bucket_contributions c
-                      where c.user_id = b.user_id and c.bucket_id = b.id
-                        and to_char(c.date, 'YYYY-MM') = '2026-09')
 )
 
 select concepto, monto from (
-  select 1 as n, 'QUINCENA DEL 15 (estimada)' as concepto, 1700000::numeric as monto
+  select 0 as n, 'SALDO HOY' as concepto, 357000::numeric as monto
+  union all select 1, 'QUINCENA DEL 15 (estimada)', 1700000
   union all select 2, '- ' || name, -tu_parte from fijos_pendientes
-  union all select 3, '- ' || name, -tu_parte from buckets_pendientes
+  union all select 3, '- ' || name, -tu_parte from buckets_pendientes where tu_parte > 0
   union all select 4, '- Deudas pequeñas (van como movimientos)', -750000
-  union all select 5, 'TE QUEDA PARA EL RESTO DEL MES',
-    1700000
+  union all select 5, 'TE QUEDA PARA VIVIR HASTA EL 30',
+    357000 + 1700000
     - coalesce((select sum(tu_parte) from fijos_pendientes), 0)
-    - coalesce((select sum(tu_parte) from buckets_pendientes), 0)
+    - coalesce((select sum(tu_parte) from buckets_pendientes where tu_parte > 0), 0)
     - 750000
 ) x order by n, concepto;
