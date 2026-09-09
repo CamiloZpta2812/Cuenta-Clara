@@ -10,7 +10,7 @@ export default function Sidebar({ activeTab, onChangeTab }) {
   const items = [
     { id: 'resumen', label: 'Resumen', Icon: LayoutDashboard },
     { id: 'mes', label: 'El mes', Icon: CalendarRange },
-    { id: 'quincenas', label: 'Quincenas', Icon: CalendarClock },
+    { id: 'calendario', label: 'Calendario', Icon: CalendarClock },
     { id: 'gastosfijos', label: 'Gastos fijos', Icon: Repeat },
     { id: 'cobros', label: 'Cobros', Icon: HandCoins },
     { id: 'buckets', label: 'Ahorro y colchones', Icon: Shield },

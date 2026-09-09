@@ -10,7 +10,7 @@ import FormBucket from './components/forms/FormBucket';
 import FormDeuda from './components/forms/FormDeuda';
 import Resumen from './views/Resumen';
 import Mes from './views/Mes';
-import Quincenas from './views/Quincenas';
+import Calendario from './views/Calendario';
 import Cobros from './views/Cobros';
 import Tarjetas from './views/Tarjetas';
 import Buckets from './views/Buckets';
@@ -22,7 +22,7 @@ import PrintReport from './views/PrintReport';
 
 const TABS = {
   mes: Mes,
-  quincenas: Quincenas,
+  calendario: Calendario,
   cobros: Cobros,
   tarjeta: Tarjetas,
   buckets: Buckets,

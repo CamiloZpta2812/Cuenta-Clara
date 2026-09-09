@@ -4,7 +4,8 @@ import { STYLES } from '../styles.js';
 import { FinanceContext } from '../state/financeStore';
 import { buildValue } from './fixture.js';
 import Mes from '../views/Mes';
-import Quincenas from '../views/Quincenas';
+import Calendario from '../views/Calendario';
+import Configuracion from '../views/Configuracion';
 import Cobros from '../views/Cobros';
 import Buckets from '../views/Buckets';
 import Deuda from '../views/Deuda';
@@ -30,7 +31,7 @@ function VentanaDeuda() {
 function Boton() { return <BotonAgregar />; }
 
 const PANTALLAS = {
-  Mes, Quincenas, Cobros, Buckets, Deuda, Resumen, GastosFijos, Movimientos,
+  Mes, Calendario, Configuracion, Cobros, Buckets, Deuda, Resumen, GastosFijos, Movimientos,
   VentanaMovimiento, VentanaDeuda, Boton,
 };
 

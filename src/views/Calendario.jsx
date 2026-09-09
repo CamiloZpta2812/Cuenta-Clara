@@ -8,7 +8,7 @@ import EmptyState from '../components/EmptyState';
 import { useFinance } from '../state/financeStore';
 
 /*
- * Quincenas: cómo cae el mes entre un sueldo y el siguiente.
+ * Calendario: cómo cae el mes entre un sueldo y el siguiente.
  *
  * El resto de la app juzga el mes como una unidad. Eso sirve para saber si
  * cierra y no sirve para vivirlo: el mes puede cuadrar perfecto y dejarte sin
@@ -101,7 +101,7 @@ function Tramo({ p }) {
   );
 }
 
-export default function Quincenas() {
+export default function Calendario() {
   const {
     quincenas, availableMonths, selectedMonth, setSelectedMonth,
   } = useFinance();
@@ -110,7 +110,7 @@ export default function Quincenas() {
 
   return (
     <>
-      <div className="cc-page-title">Quincenas</div>
+      <div className="cc-page-title">Calendario</div>
       <p className="cc-page-sub">
         Cómo cae el mes entre un sueldo y el siguiente. Una quincena no es del 1 al 15:
         es lo que tiene que aguantar la plata desde que te pagan hasta que te vuelven a pagar.
@@ -129,7 +129,7 @@ export default function Quincenas() {
         <EmptyState
           Icon={CalendarClock}
           title="Falta decir qué día te pagan"
-          text="En Configuración, ponle el día a cada fuente de ingreso y marca cuál abre quincena. Sin eso no hay cómo partir el mes."
+          text="En Configuración → Ingresos, ponle el día a cada fuente y marca cuál abre quincena. Sin eso no hay cómo partir el mes."
         />
       ) : (
         <>
