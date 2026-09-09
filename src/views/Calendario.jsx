@@ -3,7 +3,7 @@ import {
 } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
 import { monthLabel } from '../lib/dates.js';
-import { fmtCOP } from '../lib/money.js';
+import { fmtCOP, fmtShort } from '../lib/money.js';
 import EmptyState from '../components/EmptyState';
 import { useFinance } from '../state/financeStore';
 
@@ -129,7 +129,8 @@ function Rejilla({ semanas, tramos }) {
     <div className="cc-card" style={{ marginTop: 14 }}>
       <p className="cc-chart-title">El mes de un vistazo</p>
       <p className="cc-chart-sub">
-        Cada punto es un movimiento. El color de fondo dice de qué quincena es el día.
+        El color de fondo dice de qué quincena es cada día. La cifra de la esquina es
+        lo que se mueve ese día.
       </p>
 
       <div className="cc-cal">
@@ -156,8 +157,35 @@ function Rejilla({ semanas, tramos }) {
               /* El título nativo da el detalle sin gastar espacio en la celda. */
               title={d.items.length ? detalleDelDia(d.items, total) : undefined}
             >
-              <span className="cc-cal-num">{d.day}</span>
-              {d.isToday && <span className="cc-cal-hoy">hoy</span>}
+              <span className="cc-cal-fila1">
+                <span className="cc-cal-num">
+                  {d.day}
+                  {d.isToday && <b className="cc-cal-hoy">hoy</b>}
+                </span>
+                {total !== 0 && (
+                  <span
+                    className="cc-cal-total cc-mono"
+                    style={{ color: total > 0 ? COLORS.income : COLORS.ink }}
+                  >
+                    {fmtShort(total)}
+                  </span>
+                )}
+              </span>
+
+              {/*
+                * En pantalla ancha caben los nombres, y un nombre dice lo que
+                * un punto no puede: QUÉ te cobran ese día. Los puntos se
+                * quedan solo para el celular, donde la celda no da para texto.
+                */}
+              <span className="cc-cal-chips">
+                {[...entra, ...sale].slice(0, 3).map((x) => (
+                  <span key={x.id} className={`cc-cal-chip ${x.kind}`}>{x.name}</span>
+                ))}
+                {d.items.length > 3 && (
+                  <span className="cc-cal-chip mas">{`+${d.items.length - 3} más`}</span>
+                )}
+              </span>
+
               <span className="cc-cal-puntos">
                 {entra.map((x) => <i key={x.id} className="cc-cal-punto entra" />)}
                 {sale.map((x) => <i key={x.id} className={`cc-cal-punto ${x.kind}`} />)}

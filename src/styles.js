@@ -131,25 +131,51 @@ export const STYLES = `
 .cc-quincena-vida { color: var(--ink-soft); font-style: italic; }
 
 /* El mes en cuadrícula. La banda de fondo dice de qué quincena es cada día:
-   es lo que hace ver que el sueldo del 30 paga hasta el 15. */
+   es lo que hace ver que el sueldo del 30 paga hasta el 15.
+
+   Sin aspect-ratio a propósito. Con ella, en escritorio las celdas se volvían
+   cuadrados enormes para tres puntitos: el ancho manda sobre el alto, y una
+   rejilla de 7 columnas en 1100px daba celdas de 150px de alto vacías. Ahora
+   el alto lo pone el contenido, con un mínimo. */
 .cc-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px; }
 .cc-cal-cabecera { text-align: center; font-size: 11px; font-weight: 600;
   color: var(--ink-soft); padding-bottom: 2px; }
-.cc-cal-hueco { aspect-ratio: 1; }
-.cc-cal-dia { aspect-ratio: 1; border-radius: 8px; padding: 4px; position: relative;
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  background: var(--surface-2, #F1EEE7); border: 1px solid transparent; }
+.cc-cal-hueco { min-height: 74px; }
+.cc-cal-dia { min-height: 74px; border-radius: 8px; padding: 5px 6px; overflow: hidden;
+  display: flex; flex-direction: column; gap: 3px;
+  background: #EDE7DC; border: 1px solid transparent; }
 /* Dos tonos alternos, no un color por quincena: lo que importa es dónde está
    el corte, no cuál tramo es cuál. */
 .cc-cal-dia.q0 { background: #EDE7DC; }
 .cc-cal-dia.q1 { background: #E3EAEF; }
 /* El arranque de quincena lleva el borde izquierdo: ahí cayó el sueldo. */
-.cc-cal-dia.arranque { border-left: 3px solid var(--income, #2F7D5C); }
-.cc-cal-dia.hoy { border-color: var(--accent, #B0524B); box-shadow: 0 0 0 2px var(--accent, #B0524B); }
-.cc-cal-num { font-size: 12px; font-weight: 600; line-height: 1.1; }
-.cc-cal-hoy { font-size: 8.5px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .05em; color: var(--accent, #B0524B); line-height: 1; }
-.cc-cal-puntos { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; }
+.cc-cal-dia.arranque { border-left: 3px solid #2F7D5C; padding-left: 4px; }
+.cc-cal-dia.hoy { border-color: #B0524B; box-shadow: 0 0 0 2px #B0524B; }
+
+.cc-cal-fila1 { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; }
+.cc-cal-num { font-size: 12px; font-weight: 700; line-height: 1.1;
+  display: inline-flex; align-items: baseline; gap: 4px; }
+.cc-cal-dia.hoy .cc-cal-num { color: #B0524B; }
+/* El anillo dice cuál es hoy si ya lo estás mirando; la palabra lo dice
+   cuando barres el mes con la vista, que es como se lee un calendario. */
+.cc-cal-hoy { font-size: 8.5px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .06em; color: #B0524B; }
+.cc-cal-total { font-size: 10.5px; font-weight: 600; white-space: nowrap; }
+
+/* Los nombres. Cada uno en su línea, con la barra de color a la izquierda:
+   el color dice de qué tipo es sin gastar una leyenda por celda. */
+.cc-cal-chips { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cc-cal-chip { font-size: 10px; line-height: 1.35; padding-left: 5px;
+  border-left: 3px solid var(--ink-soft); border-radius: 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #3A3A38; }
+.cc-cal-chip.ingreso { border-left-color: #2F7D5C; }
+.cc-cal-chip.fijo { border-left-color: #6B5199; }
+.cc-cal-chip.deuda { border-left-color: #B0524B; }
+.cc-cal-chip.bucket { border-left-color: #3E7FB0; }
+.cc-cal-chip.mas { border-left-color: transparent; color: var(--ink-soft); font-style: italic; }
+
+/* Los puntos son el plan B del celular, donde no cabe texto. */
+.cc-cal-puntos { display: none; flex-wrap: wrap; gap: 2px; }
 .cc-cal-punto { width: 5px; height: 5px; border-radius: 50%; display: inline-block;
   background: var(--ink-soft); }
 .cc-cal-punto.entra { background: #2F7D5C; }
@@ -159,11 +185,19 @@ export const STYLES = `
 .cc-cal-leyenda { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px;
   font-size: 11.5px; color: var(--ink-soft); }
 .cc-cal-leyenda span { display: inline-flex; align-items: center; gap: 5px; }
+/* En la leyenda el punto siempre se ve, aunque en las celdas esté escondido. */
+.cc-cal-leyenda .cc-cal-punto { display: inline-block; }
 
-@media (max-width: 480px) {
+/* En celular no cabe un nombre: se cambian los nombres por puntos y se deja
+   la cifra del día, que es lo único que sigue siendo legible a ese tamaño. */
+@media (max-width: 700px) {
   .cc-cal { gap: 3px; }
-  .cc-cal-dia { padding: 2px; border-radius: 6px; }
-  .cc-cal-num { font-size: 11px; }
+  .cc-cal-dia, .cc-cal-hueco { min-height: 46px; }
+  .cc-cal-dia { padding: 3px; border-radius: 6px; align-items: center; }
+  .cc-cal-fila1 { flex-direction: column; align-items: center; gap: 0; }
+  .cc-cal-total { font-size: 9px; }
+  .cc-cal-chips { display: none; }
+  .cc-cal-puntos { display: flex; justify-content: center; }
   .cc-cal-punto { width: 4px; height: 4px; }
 }
 
