@@ -1,6 +1,6 @@
 import { monthSummary, targetDebt, simulatePlanChange } from '../lib/month.js';
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
-import { buildCashFlow } from '../lib/cashflow.js';
+import { buildCashFlow, currentBalance } from '../lib/cashflow.js';
 import { upcomingCharges } from '../lib/upcoming.js';
 import { buildRecommendations, getStatus } from '../lib/insights.js';
 import { COLORS } from '../lib/constants.js';
@@ -84,6 +84,8 @@ export const estado = {
       // Cuota + abono extra, con el saldo que quedó según el modelo.
       payments: [{ id: 'pd-1', amount: 1_133_000, date: '2026-09-10' }] },
   ],
+  /* El día del desembolso: la cuenta quedó en cero y de ahí arranca el saldo. */
+  balanceAnchor: { date: '2026-09-08', amount: 0 },
   monthlyPlans: [
     { month: MES, expectedIncome: 3_600_000, fixedExpenses: 746_000, debtPayment: 446_413,
       savings: 426_000, variableEstimate: 830_000, cushion: 465_000, locked: false },
@@ -143,6 +145,9 @@ export function buildValue(overrides = {}) {
     simulatePlan: (cambios) => simulatePlanChange(estado, cambios, MES, overrides.selectedDebtId),
     selectedDebtId: overrides.selectedDebtId || null,
     cashFlow: buildCashFlow(estado, ['2026-07', '2026-08', '2026-09']),
+    saldoReal: currentBalance(estado, '2026-09-30'),
+    balanceAnchor: estado.balanceAnchor,
+    handleAnchorBalance: () => {},
     planDistribution: (() => {
       const p = monthSummary(estado, MES).plan;
       return [

@@ -317,6 +317,7 @@ test('normalizeState del estado v2 es idempotente', () => {
  */
 test('el estado canónico tiene exactamente estas claves', () => {
   assert.deepEqual(Object.keys(rowsToState({})).sort(), [
+    'balanceAnchor',
     'buckets',
     'categoryLabels',
     'collections',
@@ -350,4 +351,18 @@ test('una reserva se distingue de un colchón de verdad', () => {
   assert.equal(rows.buckets.find((b) => b.id === 'b3').moves_cash, true);
   // Un bucket viejo, sin la columna, se asume que sí mueve la plata.
   assert.equal(rowsToState({ buckets: [{ id: 'x', name: 'Y', kind: 'meta' }] }).buckets[0].movesCash, true);
+});
+
+test('el ancla del saldo sobrevive la ida y vuelta', () => {
+  const rows = stateToRows({ ...v2, balanceAnchor: { date: '2026-09-09', amount: 0 } });
+  assert.equal(rows.user_settings[0].balance_anchor_date, '2026-09-09');
+  assert.equal(rows.user_settings[0].balance_anchor_amount, 0, 'cero es un dato, no un vacío');
+  assert.deepEqual(rowsToState(rows).balanceAnchor, { date: '2026-09-09', amount: 0 });
+});
+
+test('sin ancla las dos columnas van nulas, nunca una sola', () => {
+  const fila = stateToRows(v2).user_settings[0];
+  assert.equal(fila.balance_anchor_date, null);
+  assert.equal(fila.balance_anchor_amount, null, 'un monto sin fecha no diría de qué día es');
+  assert.equal(rowsToState(stateToRows(v2)).balanceAnchor, null);
 });

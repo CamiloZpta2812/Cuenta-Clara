@@ -100,6 +100,18 @@ export const STYLES = `
 .cc-charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 22px 0; }
 .cc-charts-grid.cc-full { grid-template-columns: 1fr; }
 .cc-chart-title { font-size: 14px; font-weight: 600; margin: 0 0 4px 0; }
+
+/* El saldo en cuenta, encabezando la tarjeta del pulso. Es el número que se
+   busca al abrir la app, así que pesa más que el título de la gráfica. */
+.cc-saldo { display: flex; flex-direction: column; gap: 4px; }
+.cc-saldo-label { font-size: 12px; font-weight: 600; color: var(--ink-soft);
+  text-transform: uppercase; letter-spacing: .04em; }
+.cc-saldo-fila { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cc-saldo-monto { font-size: 30px; font-weight: 700; line-height: 1.15; }
+/* Sin ancho el input se estira y empuja los botones a otra fila. */
+.cc-saldo-fila .cc-input { max-width: 190px; }
+
+@media (max-width: 560px) { .cc-saldo-monto { font-size: 25px; } }
 .cc-chart-sub { font-size: 12px; color: var(--ink-soft); margin: 0 0 10px 0; }
 
 .cc-rec-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }

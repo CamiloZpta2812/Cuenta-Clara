@@ -14,7 +14,7 @@ import { buildRecommendations, getStatus } from '../lib/insights.js';
 import { buildCardStatements, nextStatement, buildCommitments, activeInstallmentGroups } from '../lib/projections.js';
 import { monthSummary, targetDebt, simulatePlanChange, myBucketShare } from '../lib/month.js';
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
-import { buildCashFlow } from '../lib/cashflow.js';
+import { buildCashFlow, currentBalance } from '../lib/cashflow.js';
 import { upcomingCharges } from '../lib/upcoming.js';
 
 /*
@@ -68,6 +68,12 @@ export function FinanceProvider({ children }) {
   const [buckets, setBuckets] = useState([]);
   const [monthlyPlans, setMonthlyPlans] = useState([]);
   const [setupCompletedAt, setSetupCompletedAt] = useState(null);
+
+  /*
+   * Desde cuándo la app sabe cuánto tienes: { date, amount }, o null si nadie
+   * lo ha dicho todavía. Ver lib/cashflow.js.
+   */
+  const [balanceAnchor, setBalanceAnchor] = useState(null);
 
   /*
    * Estos setters dejan userConfig sincronizado ANTES de pedir el re-render,
@@ -141,9 +147,11 @@ export function FinanceProvider({ children }) {
     transactions, debts, creditCards, fixedExpenses,
     customCategories, categoryLabels,
     people, incomeSources, collections, buckets, monthlyPlans, setupCompletedAt,
+    balanceAnchor,
   }), [transactions, debts, creditCards, fixedExpenses,
        customCategories, categoryLabels,
-       people, incomeSources, collections, buckets, monthlyPlans, setupCompletedAt]);
+       people, incomeSources, collections, buckets, monthlyPlans, setupCompletedAt,
+       balanceAnchor]);
 
   /*
    * persistedRef guarda la última foto que sabemos que está en la base. El
@@ -175,6 +183,7 @@ export function FinanceProvider({ children }) {
         setBuckets((state.buckets || []).map((b) => ({ ...b, contributions: b.contributions || [] })));
         setMonthlyPlans(state.monthlyPlans || []);
         setSetupCompletedAt(state.setupCompletedAt || null);
+        setBalanceAnchor(state.balanceAnchor || null);
         setSelectedMonth(monthKeyFromDate(todayStr()));
       }
 
@@ -1046,9 +1055,30 @@ export function FinanceProvider({ children }) {
     [snapshot, selectedMonth],
   );
 
+  /*
+   * Lo que hay en la cuenta hoy, o null mientras nadie haya anclado el saldo.
+   * Null y cero son cosas distintas y las pantallas tienen que poder
+   * distinguirlas: una dice "todavía no sé", la otra dice "no tienes nada".
+   */
+  const saldoReal = useMemo(() => currentBalance(snapshot()), [snapshot]);
+
+  /*
+   * Anclar es decir "hoy cerré con tanto". No crea un movimiento: los
+   * movimientos son cosas que pasaron, y esto es una medición del resultado.
+   * Escribir el saldo otra vez vuelve a anclar, que es como se corrige.
+   */
+  const handleAnchorBalance = useCallback((monto, fecha) => {
+    const n = Number(monto);
+    if (monto === '' || monto === null || Number.isNaN(n)) { setBalanceAnchor(null); return; }
+    setBalanceAnchor({ date: (fecha || todayStr()).slice(0, 10), amount: n });
+  }, []);
+
   const value = {
     activeTab,
     cashFlow,
+    saldoReal,
+    balanceAnchor,
+    handleAnchorBalance,
     debtOutlook,
     planDistribution,
     selectedDebtId,

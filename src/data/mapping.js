@@ -225,10 +225,19 @@ export function customCategoryToRow(c) {
   };
 }
 
+/*
+ * El ancla del saldo viaja en dos columnas y no en un jsonb porque es un dato
+ * que se consulta —"¿desde cuándo sé cuánto tengo?"— y no una bolsa de
+ * preferencias. Sin fecha no hay ancla, así que las dos se guardan o ninguna:
+ * un monto suelto no diría de qué día es.
+ */
 export function settingsToRow(state) {
+  const ancla = state.balanceAnchor;
   return {
     category_labels: state.categoryLabels || {},
     setup_completed_at: state.setupCompletedAt || null,
+    balance_anchor_date: ancla && ancla.date ? date(ancla.date) : null,
+    balance_anchor_amount: ancla && ancla.date ? num(ancla.amount) || 0 : null,
   };
 }
 
@@ -418,6 +427,9 @@ export function rowsToState(rows) {
     })),
     categoryLabels: settings.category_labels || {},
     setupCompletedAt: settings.setup_completed_at || null,
+    balanceAnchor: settings.balance_anchor_date
+      ? { date: date(settings.balance_anchor_date), amount: num(settings.balance_anchor_amount) || 0 }
+      : null,
   };
 }
 
