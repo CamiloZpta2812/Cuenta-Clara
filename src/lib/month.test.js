@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   myShare, othersShare, monthCollections, monthPlan, monthActual,
   monthCashOut, monthSummary, simulatePlanChange, targetDebt,
+  firstInstallmentMonth, debtDueIn,
 } from './month.js';
 
 /*
@@ -580,4 +581,55 @@ test('sin reparto, todo el bucket es tuyo', () => {
                 movesCash: true, shares: [], contributions: [] }],
   };
   assert.equal(monthPlan(solo, MES).cushion, 100_000);
+});
+
+/* ------------------------------------------------ cuándo empieza a cobrar --- */
+
+/*
+ * El crédito de Camilo se desembolsó el 8 de septiembre y la primera cuota es
+ * la de octubre. El plan de septiembre le restaba igual los 446.413: un mes
+ * que el banco nunca cobró.
+ */
+const desembolsadoEnSeptiembre = {
+  ...estado,
+  debts: estado.debts.map((d) => ({ ...d, startDate: '2026-09-08' })),
+  /* Los dos meses con el mismo estimado, para que la única diferencia sea la cuota. */
+  monthlyPlans: [
+    { month: '2026-09', variableEstimate: 830_000 },
+    { month: '2026-10', variableEstimate: 830_000 },
+  ],
+};
+
+test('la primera cuota es la del mes siguiente al desembolso', () => {
+  assert.equal(firstInstallmentMonth({ startDate: '2026-09-08' }), '2026-10');
+  assert.equal(firstInstallmentMonth({ startDate: '2026-12-20' }), '2027-01', 'y cruza el año');
+});
+
+test('el mes del desembolso no lleva cuota; el siguiente sí', () => {
+  assert.equal(monthPlan(desembolsadoEnSeptiembre, '2026-09').debtPayment, 0);
+  assert.equal(monthPlan(desembolsadoEnSeptiembre, '2026-10').debtPayment, 446_413);
+});
+
+test('no cobrar la cuota que no existe deja más disponible, no menos', () => {
+  const sept = monthPlan(desembolsadoEnSeptiembre, '2026-09');
+  const oct = monthPlan(desembolsadoEnSeptiembre, '2026-10');
+  assert.equal(sept.availableForExtra - oct.availableForExtra, 446_413);
+});
+
+test('una deuda sin fecha de desembolso se sigue cobrando', () => {
+  // Es la lectura segura: una deuda vieja sin fecha registrada sí tiene cuota.
+  assert.equal(firstInstallmentMonth({ id: 'x' }), null);
+  assert.equal(monthPlan(estado, '2026-09').debtPayment, 446_413);
+});
+
+test('una deuda ya pagada deja de restar del plan', () => {
+  const saldada = { ...estado, debts: estado.debts.map((d) => ({ ...d, currentBalance: 0 })) };
+  assert.equal(debtDueIn({ currentBalance: 0, startDate: '2020-01-01' }, '2026-09'), false);
+  assert.equal(monthPlan(saldada, '2026-09').debtPayment, 0);
+});
+
+test('un saldo sin reportar no se lee como deuda pagada', () => {
+  // currentBalance null es "el banco no me lo ha dicho", no "ya no debo nada".
+  assert.equal(debtDueIn({ currentBalance: null, fixedPayment: 100 }, '2026-09'), true);
+  assert.equal(debtDueIn({ fixedPayment: 100 }, '2026-09'), true);
 });

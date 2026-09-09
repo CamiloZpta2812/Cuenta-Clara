@@ -22,7 +22,7 @@
  * Todo es puro: recibe el estado, devuelve números. Ver mes.test.js.
  */
 
-import { monthKeyFromDate } from './dates.js';
+import { monthKeyFromDate, addMonths } from './dates.js';
 import { simulate, monthlyRateOf } from './amortization.js';
 
 const num = (v) => Number(v) || 0;
@@ -83,6 +83,37 @@ export function monthCollections(fixedExpenses, collections, month) {
   return filas;
 }
 
+/*
+ * El mes de la primera cuota de una deuda: el siguiente al del desembolso.
+ *
+ * Sin fecha de desembolso no hay forma de saberlo, y se devuelve null — que
+ * las que llaman leen como "lleva cobrándose desde siempre". Es la lectura
+ * segura: una deuda vieja sin fecha registrada sí tiene cuota este mes.
+ */
+export function firstInstallmentMonth(debt) {
+  if (!debt || !debt.startDate) return null;
+  return addMonths(monthKeyFromDate(debt.startDate), 1);
+}
+
+/*
+ * Si a esta deuda le toca cuota en `month`.
+ *
+ * Dos razones para que no: que el crédito se haya desembolsado este mes —la
+ * primera cuota es la del mes entrante— o que ya esté pago.
+ *
+ * Sin esto, un crédito desembolsado el 8 de septiembre le restaba su cuota al
+ * plan de septiembre: un mes que el banco no cobró. El plan se cobraba a sí
+ * mismo una cuota inexistente y el disponible salía 446.413 más pobre de lo
+ * que era.
+ */
+export function debtDueIn(debt, month) {
+  if (!debt) return false;
+  if (debt.currentBalance != null && num(debt.currentBalance) <= 0) return false;
+  if (!month) return true;
+  const primera = firstInstallmentMonth(debt);
+  return !primera || month >= primera;
+}
+
 /* ------------------------------------------------------------- planeado -- */
 
 /*
@@ -118,7 +149,7 @@ export function monthPlan(estado, month) {
 
   const income = sum(fuentes, (f) => f.expected);
   const fixedExpenses = sum(fijos, myShare);
-  const debtPayment = sum(debts, (d) => d.fixedPayment);
+  const debtPayment = sum(debts.filter((d) => debtDueIn(d, month)), (d) => d.fixedPayment);
   /*
    * Solo tu parte, igual que en los gastos fijos: de un fondo común de 600.000
    * entre dos, lo que sale de tu cuenta son 300.000.

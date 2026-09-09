@@ -79,7 +79,7 @@ export const estado = {
   debts: [
     { id: 'debt-li', name: 'Libre inversión Bancolombia', totalAmount: 14_000_000,
       interestRate: 1.67, monthlyPayment: 446_413, fixedPayment: 446_413,
-      payoffMode: 'reducir-plazo', currentBalance: 13_100_800, startDate: '2026-09-01',
+      payoffMode: 'reducir-plazo', currentBalance: 13_100_800, startDate: '2026-09-08',
       currency: 'COP',
       // Cuota + abono extra, con el saldo que quedó según el modelo.
       payments: [{ id: 'pd-1', amount: 1_133_000, date: '2026-09-10' }] },

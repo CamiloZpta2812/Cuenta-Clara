@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
 import { addMonths, currentMonthKey, monthKeyFromDate, monthLabel } from '../lib/dates.js';
+import { firstInstallmentMonth } from '../lib/month.js';
 import { fmtCOP } from '../lib/money.js';
 import StatCard from '../components/StatCard';
 import EmptyState from '../components/EmptyState';
@@ -101,10 +102,11 @@ export default function Deuda() {
     .sort()
     .pop();
 
-  const desembolso = debt.startDate ? monthKeyFromDate(debt.startDate) : null;
   const candidatos = [mesActual];
   if (ultimoAbono) candidatos.push(addMonths(ultimoAbono, 1));
-  if (desembolso) candidatos.push(addMonths(desembolso, 1));
+  /* La misma regla que usa el plan del mes, para que no puedan discrepar. */
+  const primeraCuota = firstInstallmentMonth(debt);
+  if (primeraCuota) candidatos.push(primeraCuota);
   const primerMes = candidatos.sort().pop();
 
   const yaPagoEsteMes = ultimoAbono === mesActual;
