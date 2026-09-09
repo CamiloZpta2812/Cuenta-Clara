@@ -63,19 +63,29 @@ export function upcomingCharges(estado, dias = 7, desde = todayStr()) {
       const pagado = pagados.has(f.id);
       const cobro = nextCharge(f, desde, pagado);
       if (!cobro) return null;
-      /* Lo pago ya y con fecha futura no es algo que anticipar. */
-      if (pagado && !cobro.vencido && cobro.date > iso(limite)) return null;
       if (cobro.date > iso(limite)) return null;
+
+      /*
+       * Un gasto pagado se esconde solo si el cobro que salió cae en el mes
+       * que sabemos pago. Antes se escondía CUALQUIER cobro de un gasto
+       * pagado, y eso dejaba ciega la última semana de todos los meses: el 28
+       * de septiembre, con el arriendo de septiembre ya pagado, el del 1 de
+       * octubre —que sí entra en la ventana— no aparecía. Justo la semana en
+       * que uno quiere saber qué se le viene.
+       *
+       * Lo que ya se sabe pago es el mes de referencia, y nada más: de octubre
+       * todavía no hay nada registrado, así que su cobro se anuncia.
+       */
+      if (pagado && monthKeyFromDate(cobro.date) === mes) return null;
+
       return {
         id: f.id,
         name: f.name,
         amount: myShare(f),
         date: cobro.date,
         vencido: cobro.vencido,
-        pagado,
       };
     })
     .filter(Boolean)
-    .filter((c) => !c.pagado)
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
