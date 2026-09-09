@@ -141,9 +141,17 @@ export const STYLES = `
 .cc-cal-cabecera { text-align: center; font-size: 11px; font-weight: 600;
   color: var(--ink-soft); padding-bottom: 2px; }
 .cc-cal-hueco { min-height: 74px; }
+/* Es un <button>, así que hay que deshacer lo que el navegador le pone.
+   Botón y no div porque se abre: llega el teclado y lo anuncia el lector. */
 .cc-cal-dia { min-height: 74px; border-radius: 8px; padding: 5px 6px; overflow: hidden;
-  display: flex; flex-direction: column; gap: 3px;
+  display: flex; flex-direction: column; gap: 3px; text-align: left;
+  font: inherit; color: inherit; cursor: pointer; appearance: none;
   background: #EDE7DC; border: 1px solid transparent; }
+.cc-cal-dia:hover { filter: brightness(0.97); }
+.cc-cal-dia:focus-visible { outline: 2px solid #B0524B; outline-offset: 1px; }
+/* El neto del día, cerrando la lista de la ventana. */
+.cc-cal-neto { font-weight: 600; margin-top: 4px; border-top: 1px solid var(--line);
+  padding-top: 6px; }
 /* Dos tonos alternos, no un color por quincena: lo que importa es dónde está
    el corte, no cuál tramo es cuál. */
 .cc-cal-dia.q0 { background: #EDE7DC; }
@@ -330,7 +338,24 @@ export const STYLES = `
 .cc-plan-concept { display: flex; align-items: center; gap: 8px; min-width: 0; }
 @media (max-width: 620px) {
   .cc-plan-row { grid-template-columns: 1fr 84px 96px; }
-  .cc-plan-row > :nth-child(2), .cc-plan-head > :nth-child(2) { display: none; }
+  /*
+   * Esconder la segunda columna vale SOLO en las filas de cuatro —la cascada
+   * del plan y la tabla de amortización—, que es para las que se escribió esto.
+   *
+   * Sin el filtro la regla se aplicaba a cualquier cosa con la clase, y la
+   * clase se reusa con dos y tres columnas en media app. Ahí la segunda
+   * columna no es "lo planeado": es el MONTO. En el celular, "Esta semana te
+   * cobran" mostraba el nombre y la fecha y se callaba cuánto; El mes decía
+   * "Gastaste este mes" sin la cifra.
+   *
+   * El nth-last-child(n+3) pide que queden al menos dos hermanos después, así
+   * que una fila de dos o tres columnas no entra.
+   *
+   * (Sin comillas invertidas alrededor del selector: este archivo es un
+   * template literal de JS y una comilla invertida lo corta en seco.)
+   */
+  .cc-plan-row > :nth-child(2):nth-last-child(n+3),
+  .cc-plan-head > :nth-child(2):nth-last-child(n+3) { display: none; }
 }
 
 /*
