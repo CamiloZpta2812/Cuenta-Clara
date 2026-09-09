@@ -74,3 +74,37 @@ test('sin día de cobro no hay próximo cobro', () => {
 test('un estado vacío no revienta', () => {
   assert.deepEqual(upcomingCharges({}, 7, HOY), []);
 });
+
+test('la última semana del mes anuncia lo del mes entrante', () => {
+  /*
+   * El caso que dejaba ciega la última semana de todos los meses. El 28, con
+   * el arriendo de este mes ya pagado, el del 1 se escondía por venir de un
+   * gasto "pagado" — cuando es justo la semana en que uno quiere saberlo.
+   */
+  const conArriendoPago = {
+    ...estado,
+    transactions: [{ id: 't1', type: 'gasto', amount: 300_000, date: '2026-09-05', fixedExpenseId: 'arriendo' }],
+  };
+  const c = upcomingCharges(conArriendoPago, 8, '2026-09-28');
+  const arriendo = c.find((x) => x.id === 'arriendo');
+  assert.equal(arriendo.date, '2026-10-05', 'el del mes entrante');
+  assert.equal(arriendo.vencido, false);
+});
+
+test('pagar por adelantado no hace que te lo anuncien igual', () => {
+  // Si el celular es el 25 y lo pagaste el 10, el 25 no se anuncia.
+  const pagadoAntes = {
+    ...estado,
+    transactions: [{ id: 't1', type: 'gasto', amount: 53_900, date: '2026-09-10', fixedExpenseId: 'celular' }],
+  };
+  assert.ok(!upcomingCharges(pagadoAntes, 30, '2026-09-20').some((c) => c.id === 'celular'));
+});
+
+test('el mes entrante se anuncia aunque el de este mes se haya pagado tarde', () => {
+  const pagadoTarde = {
+    ...estado,
+    transactions: [{ id: 't1', type: 'gasto', amount: 103_400, date: '2026-09-27', fixedExpenseId: 'gym' }],
+  };
+  const gym = upcomingCharges(pagadoTarde, 15, '2026-09-29').find((c) => c.id === 'gym');
+  assert.equal(gym.date, '2026-10-10');
+});
