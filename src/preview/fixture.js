@@ -1,6 +1,7 @@
 import { monthSummary, targetDebt, simulatePlanChange } from '../lib/month.js';
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
 import { buildCashFlow, currentBalance } from '../lib/cashflow.js';
+import { buildQuincenas } from '../lib/quincenas.js';
 import { upcomingCharges } from '../lib/upcoming.js';
 import { buildRecommendations, getStatus } from '../lib/insights.js';
 import { COLORS } from '../lib/constants.js';
@@ -29,9 +30,15 @@ export const estado = {
     { id: 'p-alex',   name: 'Alex' },
     { id: 'p-sofi',   name: 'Sofi' },
   ],
+  /*
+   * El sueldo va partido en dos fuentes, una por quincena. `expected` es
+   * mensual, así que una sola fila no podria decir "1.700.000 el 15 y
+   * 1.700.000 el 30" — y sin eso no hay calendario de quincenas.
+   */
   incomeSources: [
-    { id: 'inc-salario', name: 'Salario', expected: 3_400_000, variable: true, active: true },
-    { id: 'inc-club',    name: 'Club Aletas', expected: 200_000, variable: true, active: true },
+    { id: 'inc-q1', name: 'Salario 1ª quincena', expected: 1_700_000, variable: true, active: true, day: 15, startsPeriod: true },
+    { id: 'inc-q2', name: 'Salario 2ª quincena', expected: 1_700_000, variable: true, active: true, day: 30, startsPeriod: true },
+    { id: 'inc-club', name: 'Club Aletas', expected: 200_000, variable: true, active: true, day: 5 },
   ],
   fixedExpenses: [
     { id: 'fix-hbo', name: 'HBO Max', category: 'entretenimiento', amount: 8_300,
@@ -58,28 +65,28 @@ export const estado = {
     { id: 'co-1', month: MES, shareId: 'shr-sp-yeison', collectedAt: '2026-09-03' },
   ],
   buckets: [
-    { id: 'bkt-ahorro-1', name: 'Ahorro personal 1', kind: 'meta', liquid: true, monthlyAmount: 50_000,
+    { id: 'bkt-ahorro-1', depositDay: 15, name: 'Ahorro personal 1', kind: 'meta', liquid: true, monthlyAmount: 50_000,
       contributions: [{ id: 'ap-1', amount: 50_000, date: '2026-09-05' }] },
     // Fondo común con Sofi: 600.000 al mes entre dos, cada uno mete lo suyo.
-    { id: 'bkt-fondo', name: 'Fondo Sofi', kind: 'meta', liquid: true, monthlyAmount: 600_000,
+    { id: 'bkt-fondo', depositDay: 15, name: 'Fondo Sofi', kind: 'meta', liquid: true, monthlyAmount: 600_000,
       targetAmount: 12_000_000, targetDate: '2027-12-31', movesCash: true,
       shares: [{ id: 'sh-fondo', personId: 'p-sofi', amount: 300_000 }],
       contributions: [{ id: 'ap-3', amount: 3_600_000, date: '2026-06-05' }] },
-    { id: 'bkt-coop',     name: 'Cooperativa', kind: 'meta', liquid: false, monthlyAmount: 76_000, contributions: [] },
-    { id: 'bkt-gatos',    name: 'Colchón gatos', kind: 'colchon', liquid: true, monthlyAmount: 130_000,
+    { id: 'bkt-coop', depositDay: 15,     name: 'Cooperativa', kind: 'meta', liquid: false, monthlyAmount: 76_000, contributions: [] },
+    { id: 'bkt-gatos', depositDay: 15,    name: 'Colchón gatos', kind: 'colchon', liquid: true, monthlyAmount: 130_000,
       movesCash: true, shares: [{ id: 'sh-gatos', personId: 'p-sofi', amount: 65_000 }],
       contributions: [{ id: 'ap-2', amount: 130_000, date: '2026-09-05' }] },
     // Reserva: no mueve plata, se llena con las tanqueadas.
     { id: 'bkt-gasolina', name: 'Gasolina', kind: 'colchon', liquid: true, monthlyAmount: 160_000,
       movesCash: false, shares: [], contributions: [] },
-    { id: 'bkt-moto',     name: 'Colchón moto', kind: 'colchon', liquid: true, monthlyAmount: 100_000,
+    { id: 'bkt-moto', depositDay: 15,     name: 'Colchón moto', kind: 'colchon', liquid: true, monthlyAmount: 100_000,
       contributions: [{ id: 'ap-4', amount: 300_000, date: '2026-07-05' }, { id: 'ap-5', amount: -180_000, date: '2026-08-14' }] },
-    { id: 'bkt-seg',      name: 'Colchón de seguridad', kind: 'colchon', liquid: true, monthlyAmount: 300_000, contributions: [] },
+    { id: 'bkt-seg', depositDay: 15,      name: 'Colchón de seguridad', kind: 'colchon', liquid: true, monthlyAmount: 300_000, contributions: [] },
   ],
   debts: [
     { id: 'debt-li', name: 'Libre inversión Bancolombia', totalAmount: 14_000_000,
       interestRate: 1.67, monthlyPayment: 446_413, fixedPayment: 446_413,
-      payoffMode: 'reducir-plazo', currentBalance: 13_100_800, startDate: '2026-09-08',
+      payoffMode: 'reducir-plazo', currentBalance: 13_100_800, startDate: '2026-09-08', dueDay: 8,
       currency: 'COP',
       // Cuota + abono extra, con el saldo que quedó según el modelo.
       payments: [{ id: 'pd-1', amount: 1_133_000, date: '2026-09-10' }] },
@@ -151,6 +158,7 @@ export function buildValue(overrides = {}) {
     cashFlow: buildCashFlow(estado, ['2026-07', '2026-08', '2026-09']),
     saldoReal: currentBalance(estado, '2026-09-30'),
     bucketAdjustments: estado.bucketAdjustments,
+    quincenas: buildQuincenas(estado, MES),
     handleAdjustBucketMonth: () => {},
     balanceAnchor: estado.balanceAnchor,
     handleAnchorBalance: () => {},

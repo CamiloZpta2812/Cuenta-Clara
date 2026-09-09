@@ -15,6 +15,7 @@ import { buildCardStatements, nextStatement, buildCommitments, activeInstallment
 import { monthSummary, targetDebt, simulatePlanChange, myBucketShare } from '../lib/month.js';
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
 import { buildCashFlow, currentBalance } from '../lib/cashflow.js';
+import { buildQuincenas } from '../lib/quincenas.js';
 import { upcomingCharges } from '../lib/upcoming.js';
 
 /*
@@ -1108,6 +1109,12 @@ export function FinanceProvider({ children }) {
    */
   const saldoReal = useMemo(() => currentBalance(snapshot()), [snapshot]);
 
+  /* El mes partido de sueldo a sueldo. Ver lib/quincenas.js. */
+  const quincenas = useMemo(
+    () => buildQuincenas(snapshot(), selectedMonth),
+    [snapshot, selectedMonth],
+  );
+
   /*
    * Anclar es decir "hoy cerré con tanto". No crea un movimiento: los
    * movimientos son cosas que pasaron, y esto es una medición del resultado.
@@ -1123,6 +1130,7 @@ export function FinanceProvider({ children }) {
     activeTab,
     cashFlow,
     saldoReal,
+    quincenas,
     balanceAnchor,
     handleAnchorBalance,
     debtOutlook,

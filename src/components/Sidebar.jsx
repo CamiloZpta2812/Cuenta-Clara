@@ -1,4 +1,4 @@
-import { LayoutDashboard, ArrowLeftRight, CreditCard, Settings, Repeat, CalendarRange, HandCoins, Shield, Landmark } from 'lucide-react';
+import { LayoutDashboard, ArrowLeftRight, CreditCard, Settings, Repeat, CalendarRange, CalendarClock, HandCoins, Shield, Landmark } from 'lucide-react';
 import Logo from './Logo';
 
 export default function Sidebar({ activeTab, onChangeTab }) {
@@ -10,6 +10,7 @@ export default function Sidebar({ activeTab, onChangeTab }) {
   const items = [
     { id: 'resumen', label: 'Resumen', Icon: LayoutDashboard },
     { id: 'mes', label: 'El mes', Icon: CalendarRange },
+    { id: 'quincenas', label: 'Quincenas', Icon: CalendarClock },
     { id: 'gastosfijos', label: 'Gastos fijos', Icon: Repeat },
     { id: 'cobros', label: 'Cobros', Icon: HandCoins },
     { id: 'buckets', label: 'Ahorro y colchones', Icon: Shield },

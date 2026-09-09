@@ -380,3 +380,27 @@ test('un ajuste del mes vuelve tal cual, con su mes y su bucket', () => {
     { id: 'aj1', month: '2026-09', bucketId: 'b1', amount: 150_000 },
   ]);
 });
+
+test('los días del calendario sobreviven la ida y vuelta', () => {
+  const rows = stateToRows({
+    ...v2,
+    incomeSources: [{ id: 'q1', name: 'Quincena 1', expected: 1_700_000, day: 15, startsPeriod: true }],
+    buckets: v2.buckets.map((b) => (b.id === 'b1' ? { ...b, depositDay: 15 } : b)),
+  });
+  assert.equal(rows.income_sources[0].day, 15);
+  assert.equal(rows.income_sources[0].starts_period, true);
+  assert.equal(rows.buckets.find((b) => b.id === 'b1').deposit_day, 15);
+
+  const back = rowsToState(rows);
+  assert.equal(back.incomeSources[0].day, 15);
+  assert.equal(back.incomeSources[0].startsPeriod, true);
+  assert.equal(back.buckets.find((b) => b.id === 'b1').depositDay, 15);
+});
+
+test('sin día, las columnas van nulas y no en cero', () => {
+  // Cero no es un día del mes: sería un dato falso donde falta uno.
+  const rows = stateToRows(v2);
+  assert.equal(rows.income_sources[0].day, null);
+  assert.equal(rows.buckets[0].deposit_day, null);
+  assert.equal(rowsToState(rows).incomeSources[0].day, null);
+});

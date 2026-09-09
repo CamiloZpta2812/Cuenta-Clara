@@ -171,6 +171,9 @@ export function incomeSourceToRow(i) {
     expected: num(i.expected) || 0,
     variable: bool(i.variable),
     active: i.active === undefined ? true : bool(i.active),
+    /* Qué día cae, y si ese día abre una quincena. Ver lib/quincenas.js. */
+    day: int(i.day),
+    starts_period: bool(i.startsPeriod),
   };
 }
 
@@ -211,6 +214,8 @@ export function bucketToRow(b) {
     /* false = está ahí pero no lo puedes tocar (aporte a cooperativa). */
     liquid: b.liquid === undefined ? true : bool(b.liquid),
     monthly_amount: num(b.monthlyAmount) || 0,
+    /* Qué día apartas. Es la palanca con la que se equilibra un mes torcido. */
+    deposit_day: int(b.depositDay),
     target_amount: num(b.targetAmount),
     target_date: date(b.targetDate),
   };
@@ -393,6 +398,7 @@ export function rowsToState(rows) {
     incomeSources: (rows.income_sources || []).map((i) => ({
       id: i.id, name: i.name, expected: num(i.expected) || 0,
       variable: bool(i.variable), active: i.active === undefined ? true : bool(i.active),
+      day: int(i.day), startsPeriod: bool(i.starts_period),
     })),
     fixedExpenses: (rows.fixed_expenses || []).map((f) => ({
       id: f.id, name: f.name, category: f.category, amount: num(f.amount),
@@ -426,6 +432,7 @@ export function rowsToState(rows) {
       kind: b.kind === 'colchon' ? 'colchon' : 'meta',
       liquid: b.liquid === undefined ? true : bool(b.liquid),
       monthlyAmount: num(b.monthly_amount) || 0,
+      depositDay: int(b.deposit_day),
       movesCash: b.moves_cash === undefined ? true : bool(b.moves_cash),
       targetAmount: num(b.target_amount), targetDate: date(b.target_date),
       shares: sharesByBucket[b.id] || [],

@@ -112,6 +112,23 @@ export const STYLES = `
 .cc-saldo-fila .cc-input { max-width: 190px; }
 
 @media (max-width: 560px) { .cc-saldo-monto { font-size: 25px; } }
+
+/* Quincenas. Los tramos van lado a lado porque la pregunta es comparativa:
+   cuál está más apretada. Apilados habría que recordar el número del de
+   arriba mientras se lee el de abajo. */
+.cc-quincenas-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.cc-quincena-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+ /* Sin capitalize: en español los meses van en minúscula, y "capitalize"
+    pone mayúscula en cada palabra — "30 De Ago" en vez de "30 de ago". */
+.cc-quincena-rango { font-size: 13px; font-weight: 600; }
+.cc-quincena-num { font-size: 23px; font-weight: 700; line-height: 1.2; margin-top: 6px; }
+.cc-quincena-lineas { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px;
+  display: flex; flex-direction: column; gap: 5px; }
+/* El día en columna fija: leídas en vertical, las fechas se comparan solas. */
+.cc-quincena-linea { display: grid; grid-template-columns: 52px 1fr auto; gap: 8px;
+  align-items: baseline; font-size: 12.5px; }
+.cc-quincena-dia { color: var(--ink-soft); font-size: 11px; }
+.cc-quincena-vida { color: var(--ink-soft); font-style: italic; }
 .cc-chart-sub { font-size: 12px; color: var(--ink-soft); margin: 0 0 10px 0; }
 
 .cc-rec-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
