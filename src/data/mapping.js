@@ -38,6 +38,7 @@ export const TABLES = [
   'buckets',
   'bucket_shares',
   'bucket_contributions',
+  'bucket_adjustments',
   'monthly_plans',
   'transactions',
 ];
@@ -173,6 +174,20 @@ export function incomeSourceToRow(i) {
   };
 }
 
+/*
+ * "Este mes este bucket va por tanto". Ver schema-v5-ajustes-del-mes.sql: el
+ * monto es TU parte para ese mes, no la del pote, porque es la cifra contra la
+ * que se juzga el mes.
+ */
+export function bucketAdjustmentToRow(a) {
+  return {
+    id: a.id,
+    month: a.month,
+    bucket_id: a.bucketId,
+    amount: num(a.amount) || 0,
+  };
+}
+
 export function collectionToRow(c) {
   return {
     id: c.id,
@@ -294,6 +309,7 @@ export function stateToRows(state) {
     income_sources: (state.incomeSources || []).map(incomeSourceToRow),
     fixed_expenses: (state.fixedExpenses || []).map(fixedExpenseToRow),
     fixed_expense_shares: shares,
+    bucket_adjustments: (state.bucketAdjustments || []).map(bucketAdjustmentToRow),
     collections: (state.collections || []).map(collectionToRow),
     debts: (state.debts || []).map(debtToRow),
     debt_payments: debtPayments,
@@ -391,6 +407,9 @@ export function rowsToState(rows) {
      */
     collections: (rows.collections || []).map((c) => ({
       id: c.id, month: c.month, shareId: c.share_id, collectedAt: date(c.collected_at),
+    })),
+    bucketAdjustments: (rows.bucket_adjustments || []).map((a) => ({
+      id: a.id, month: a.month, bucketId: a.bucket_id, amount: num(a.amount) || 0,
     })),
     debts: (rows.debts || []).map((d) => ({
       id: d.id, name: d.name, totalAmount: num(d.total_amount),

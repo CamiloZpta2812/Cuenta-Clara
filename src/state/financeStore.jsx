@@ -66,6 +66,8 @@ export function FinanceProvider({ children }) {
   const [incomeSources, setIncomeSources] = useState([]);
   const [collections, setCollections] = useState([]);
   const [buckets, setBuckets] = useState([]);
+  /* "Este mes este bucket va por tanto". Ver lib/month.js. */
+  const [bucketAdjustments, setBucketAdjustments] = useState([]);
   const [monthlyPlans, setMonthlyPlans] = useState([]);
   const [setupCompletedAt, setSetupCompletedAt] = useState(null);
 
@@ -147,11 +149,11 @@ export function FinanceProvider({ children }) {
     transactions, debts, creditCards, fixedExpenses,
     customCategories, categoryLabels,
     people, incomeSources, collections, buckets, monthlyPlans, setupCompletedAt,
-    balanceAnchor,
+    balanceAnchor, bucketAdjustments,
   }), [transactions, debts, creditCards, fixedExpenses,
        customCategories, categoryLabels,
        people, incomeSources, collections, buckets, monthlyPlans, setupCompletedAt,
-       balanceAnchor]);
+       balanceAnchor, bucketAdjustments]);
 
   /*
    * persistedRef guarda la última foto que sabemos que está en la base. El
@@ -184,6 +186,7 @@ export function FinanceProvider({ children }) {
         setMonthlyPlans(state.monthlyPlans || []);
         setSetupCompletedAt(state.setupCompletedAt || null);
         setBalanceAnchor(state.balanceAnchor || null);
+        setBucketAdjustments(state.bucketAdjustments || []);
         setSelectedMonth(monthKeyFromDate(todayStr()));
       }
 
@@ -928,6 +931,37 @@ export function FinanceProvider({ children }) {
   }
 
   /*
+   * Ajustar un bucket solo para el mes que se está mirando.
+   *
+   * Un monto vacío quita el ajuste en vez de guardar un cero: son cosas
+   * distintas. Cero es "este mes no le meto nada" —una decisión— y quitar el
+   * ajuste es "vuelve a lo de siempre". Guardar el vacío como cero convertiría
+   * un arrepentimiento en un mes saltado.
+   */
+  function handleAdjustBucketMonth(bucketId, monto, month) {
+    /*
+     * El mes lo pone quien llama. Buckets no tiene selector de mes —siempre
+     * habla del mes en curso— y tomar `selectedMonth`, que se mueve desde
+     * Resumen, guardaría el ajuste en un mes que la pantalla no está mostrando.
+     */
+    const mes = month || currentMonthKey();
+    const previo = bucketAdjustments.find(
+      (a) => a.month === mes && a.bucketId === bucketId,
+    );
+    if (monto === '' || monto === null || monto === undefined) {
+      if (previo) setBucketAdjustments((prev) => prev.filter((a) => a.id !== previo.id));
+      return;
+    }
+    const n = Number(monto);
+    if (Number.isNaN(n)) return;
+    if (previo) {
+      setBucketAdjustments((prev) => prev.map((a) => (a.id === previo.id ? { ...a, amount: n } : a)));
+    } else {
+      setBucketAdjustments((prev) => [...prev, { id: uid(), month: mes, bucketId, amount: n }]);
+    }
+  }
+
+  /*
    * Marcar (o desmarcar) un cobro.
    *
    * Solo se guarda lo YA cobrado: lo pendiente se deduce del reparto. Por eso
@@ -1107,6 +1141,8 @@ export function FinanceProvider({ children }) {
     handleAddBucket,
     handleCancelDebtForm,
     handleBucketMovement,
+    handleAdjustBucketMonth,
+    bucketAdjustments,
     handleCancelBucketForm,
     handleEditBucket,
     handleDeleteBucket,

@@ -664,3 +664,70 @@ test('un saldo sin reportar no se lee como deuda pagada', () => {
   assert.equal(debtDueIn({ currentBalance: null, fixedPayment: 100 }, '2026-09'), true);
   assert.equal(debtDueIn({ fixedPayment: 100 }, '2026-09'), true);
 });
+
+/* --------------------------------------------- ajustes de un solo mes --- */
+
+/* "Este mes el colchón de seguridad va por 150.000 y no por 300.000." */
+const conAjuste = {
+  ...compartido,
+  buckets: [...compartido.buckets,
+    { id: 'seguridad', name: 'Colchón de seguridad', kind: 'colchon', liquid: true,
+      monthlyAmount: 300_000, movesCash: true, shares: [], contributions: [] }],
+  bucketAdjustments: [{ id: 'aj1', month: MES, bucketId: 'seguridad', amount: 150_000 }],
+  monthlyPlans: [
+    { month: MES, variableEstimate: 830_000 },
+    { month: '2026-10', variableEstimate: 830_000 },
+  ],
+};
+
+test('el ajuste del mes le gana al monto de siempre', () => {
+  assert.equal(monthPlan(conAjuste, MES).cushion, 65_000 + 160_000 + 150_000);
+});
+
+test('el mes siguiente vuelve solo al monto normal', () => {
+  // El ajuste no tocó el bucket, así que no hay nada que devolver a su sitio.
+  assert.equal(monthPlan(conAjuste, '2026-10').cushion, 65_000 + 160_000 + 300_000);
+});
+
+test('bajarle al colchón un mes deja ese mismo dinero libre, no lo desaparece', () => {
+  const sinAjuste = { ...conAjuste, bucketAdjustments: [] };
+  assert.equal(
+    monthPlan(conAjuste, MES).availableForExtra - monthPlan(sinAjuste, MES).availableForExtra,
+    150_000,
+  );
+});
+
+test('un ajuste también sirve para poner de MÁS', () => {
+  const deMas = {
+    ...conAjuste,
+    bucketAdjustments: [{ id: 'aj2', month: MES, bucketId: 'seguridad', amount: 500_000 }],
+  };
+  assert.equal(monthPlan(deMas, MES).cushion, 65_000 + 160_000 + 500_000);
+});
+
+test('un ajuste en cero es saltarse el mes, no la falta de ajuste', () => {
+  const enCero = {
+    ...conAjuste,
+    bucketAdjustments: [{ id: 'aj3', month: MES, bucketId: 'seguridad', amount: 0 }],
+  };
+  assert.equal(monthPlan(enCero, MES).cushion, 65_000 + 160_000);
+});
+
+test('un ajuste sobre una meta ajusta el ahorro, no el colchón', () => {
+  const enElFondo = {
+    ...conAjuste,
+    bucketAdjustments: [{ id: 'aj4', month: MES, bucketId: 'fondo', amount: 150_000 }],
+  };
+  const p = monthPlan(enElFondo, MES);
+  assert.equal(p.savings, 150_000, 'la mitad del fondo con Sofi, ajustada');
+  assert.equal(p.cushion, 65_000 + 160_000 + 300_000, 'el colchón queda intacto');
+});
+
+test('el ajuste de otro mes no se cuela en este', () => {
+  const deOctubre = {
+    ...conAjuste,
+    bucketAdjustments: [{ id: 'aj5', month: '2026-10', bucketId: 'seguridad', amount: 0 }],
+  };
+  assert.equal(monthPlan(deOctubre, MES).cushion, 65_000 + 160_000 + 300_000);
+  assert.equal(monthPlan(deOctubre, '2026-10').cushion, 65_000 + 160_000);
+});

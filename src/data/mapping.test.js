@@ -318,6 +318,7 @@ test('normalizeState del estado v2 es idempotente', () => {
 test('el estado canónico tiene exactamente estas claves', () => {
   assert.deepEqual(Object.keys(rowsToState({})).sort(), [
     'balanceAnchor',
+    'bucketAdjustments',
     'buckets',
     'categoryLabels',
     'collections',
@@ -365,4 +366,17 @@ test('sin ancla las dos columnas van nulas, nunca una sola', () => {
   assert.equal(fila.balance_anchor_date, null);
   assert.equal(fila.balance_anchor_amount, null, 'un monto sin fecha no diría de qué día es');
   assert.equal(rowsToState(stateToRows(v2)).balanceAnchor, null);
+});
+
+test('un ajuste del mes vuelve tal cual, con su mes y su bucket', () => {
+  const rows = stateToRows({
+    ...v2,
+    bucketAdjustments: [{ id: 'aj1', month: '2026-09', bucketId: 'b1', amount: 150_000 }],
+  });
+  assert.deepEqual(rows.bucket_adjustments, [
+    { id: 'aj1', month: '2026-09', bucket_id: 'b1', amount: 150_000 },
+  ]);
+  assert.deepEqual(rowsToState(rows).bucketAdjustments, [
+    { id: 'aj1', month: '2026-09', bucketId: 'b1', amount: 150_000 },
+  ]);
 });

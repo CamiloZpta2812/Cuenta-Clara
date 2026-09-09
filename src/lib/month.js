@@ -52,6 +52,23 @@ export function myBucketShare(bucket) {
   return num(bucket.monthlyAmount) - sum(bucket.shares, (r) => r.amount);
 }
 
+/*
+ * Lo que TE toca poner en un bucket en un mes concreto.
+ *
+ * Casi siempre es tu parte de siempre. Pero un mes se puede ajustar —"este mes
+ * el colchón de seguridad va por 150.000 y no por 300.000"— y entonces manda
+ * el ajuste.
+ *
+ * Sin esto, bajarle a un colchón un mes obligaba a cambiar su monto mensual, y
+ * el recorte se quedaba puesto en octubre y en todos los que siguen. Un mes
+ * apretado se volvía un recorte permanente por olvido.
+ */
+export function plannedBucketShare(estado, bucket, month) {
+  const ajuste = (estado.bucketAdjustments || [])
+    .find((a) => a.month === month && a.bucketId === bucket.id);
+  return ajuste ? num(ajuste.amount) : myBucketShare(bucket);
+}
+
 /* Lo que te deben en total por un gasto fijo compartido. */
 export function othersShare(gastoFijo) {
   return sum(gastoFijo.shares, (r) => r.amount);
@@ -154,9 +171,10 @@ export function monthPlan(estado, month) {
    * Solo tu parte, igual que en los gastos fijos: de un fondo común de 600.000
    * entre dos, lo que sale de tu cuenta son 300.000.
    */
-  const savings = sum(metas, myBucketShare);
+  const porMes = (b) => plannedBucketShare(estado, b, month);
+  const savings = sum(metas, porMes);
   const variable = num(guardado && guardado.variableEstimate);
-  const cushion = sum(colchones, myBucketShare);
+  const cushion = sum(colchones, porMes);
 
   const grossSurplus = income - fixedExpenses - debtPayment - savings - variable;
 
