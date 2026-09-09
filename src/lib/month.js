@@ -141,6 +141,27 @@ export function storedPlan(estado, month) {
   return (estado.monthlyPlans || []).find((p) => p.month === month) || null;
 }
 
+/*
+ * El estimado de gasto variable que rige en un mes sin plan propio.
+ *
+ * Nadie crea la fila del mes nuevo: la de septiembre la puso la siembra y la
+ * de octubre no existe. Sin esto, `variableEstimate` de octubre era 0, y el
+ * plan decía que había 830.000 más disponibles para abonarle a la deuda de los
+ * que hay. El 1 de octubre la app iba a abrir con un número inventado, más
+ * alto que el de septiembre a pesar de que octubre trae la primera cuota.
+ *
+ * Se hereda del último mes planeado hasta esa fecha, no del último que exista:
+ * lo que gastas no se reinicia cada 1, pero un mes de julio tampoco debería
+ * juzgarse con un estimado que solo se fijó en septiembre.
+ */
+function inheritedVariable(estado, month) {
+  const previos = (estado.monthlyPlans || [])
+    .filter((p) => p.month && (!month || p.month <= month))
+    .sort((a, b) => (a.month < b.month ? -1 : a.month > b.month ? 1 : 0));
+  const ultimo = previos[previos.length - 1];
+  return ultimo ? num(ultimo.variableEstimate) : 0;
+}
+
 export function monthPlan(estado, month) {
   const guardado = storedPlan(estado, month);
 
@@ -173,7 +194,9 @@ export function monthPlan(estado, month) {
    */
   const porMes = (b) => plannedBucketShare(estado, b, month);
   const savings = sum(metas, porMes);
-  const variable = num(guardado && guardado.variableEstimate);
+  const variable = guardado
+    ? num(guardado.variableEstimate)
+    : inheritedVariable(estado, month);
   const cushion = sum(colchones, porMes);
 
   const grossSurplus = income - fixedExpenses - debtPayment - savings - variable;

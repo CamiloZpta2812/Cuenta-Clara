@@ -340,10 +340,16 @@ test('un mes cerrado se juzga contra el plan que tenía, no contra el de hoy', (
   assert.equal(sept.fixedExpenses, 695_000);
 });
 
-test('sin plan guardado, el gasto variable estimado es cero', () => {
+test('sin plan guardado, el estimado se hereda del último mes planeado', () => {
+  /*
+   * Esto antes daba cero, con el argumento de no heredar números de otro mes.
+   * Sonaba prudente y era peor: cero también es un número inventado, y encima
+   * es el que infla el disponible. Como nadie crea la fila del mes nuevo,
+   * TODOS los meses futuros salían con 830.000 de más para abonar a la deuda.
+   */
   const p = monthPlan(estado, '2026-12');
-  assert.equal(p.variable, 0, 'no se hereda el estimado de otro mes');
-  assert.equal(p.fixedExpenses, 695_000, 'lo demás sí se calcula igual');
+  assert.equal(p.variable, 830_000);
+  assert.equal(p.fixedExpenses, 695_000, 'lo demás se calcula igual');
 });
 
 
@@ -730,4 +736,54 @@ test('el ajuste de otro mes no se cuela en este', () => {
   };
   assert.equal(monthPlan(deOctubre, MES).cushion, 65_000 + 160_000 + 300_000);
   assert.equal(monthPlan(deOctubre, '2026-10').cushion, 65_000 + 160_000);
+});
+
+/* --------------------------------- el estimado de un mes sin plan --- */
+
+test('un mes sin plan hereda el estimado del último planeado', () => {
+  /*
+   * Nadie crea la fila del mes nuevo. Sin herencia, octubre arrancaba con
+   * variable = 0 y decía que había 830.000 más para abonar de los que hay —
+   * más disponible que septiembre, a pesar de traer la primera cuota.
+   */
+  assert.equal(monthPlan(estado, '2026-10').variable, 830_000);
+  assert.equal(monthPlan(estado, '2027-03').variable, 830_000, 'y sigue rigiendo');
+});
+
+test('el mes con plan propio manda sobre lo heredado', () => {
+  const conOctubre = {
+    ...estado,
+    monthlyPlans: [
+      { month: '2026-09', variableEstimate: 830_000 },
+      { month: '2026-10', variableEstimate: 600_000 },
+    ],
+  };
+  assert.equal(monthPlan(conOctubre, '2026-10').variable, 600_000);
+});
+
+test('un cero puesto a mano es un cero, no un mes sin plan', () => {
+  const enCero = {
+    ...estado,
+    monthlyPlans: [
+      { month: '2026-09', variableEstimate: 830_000 },
+      { month: '2026-10', variableEstimate: 0 },
+    ],
+  };
+  assert.equal(monthPlan(enCero, '2026-10').variable, 0);
+});
+
+test('un mes anterior a todo plan no hereda hacia atrás', () => {
+  // Julio no debería juzgarse con un estimado que solo se fijó en septiembre.
+  assert.equal(monthPlan(estado, '2026-07').variable, 0);
+});
+
+test('octubre trae la cuota, así que deja MENOS libre que septiembre', () => {
+  const conDesembolso = {
+    ...estado,
+    debts: estado.debts.map((d) => ({ ...d, startDate: '2026-09-08' })),
+  };
+  const sept = monthPlan(conDesembolso, '2026-09');
+  const oct = monthPlan(conDesembolso, '2026-10');
+  assert.equal(sept.variable, oct.variable, 'el mismo estimado en los dos');
+  assert.equal(sept.availableForExtra - oct.availableForExtra, 446_413);
 });
