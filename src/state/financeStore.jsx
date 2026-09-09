@@ -16,6 +16,7 @@ import { monthSummary, targetDebt, simulatePlanChange, myBucketShare } from '../
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
 import { buildCashFlow, currentBalance } from '../lib/cashflow.js';
 import { buildQuincenas, monthGrid } from '../lib/quincenas.js';
+import { accionDeNavegacion, tabDeRuta, TAB_INICIAL } from '../lib/rutas.js';
 import { upcomingCharges } from '../lib/upcoming.js';
 
 /*
@@ -44,8 +45,14 @@ export function FinanceProvider({ children }) {
   const [pendingChanges, setPendingChanges] = useState(false);
   const [exporting, setExporting] = useState('');   // '' | 'trabajando' | mensaje de error
   /* Arranca en El mes: es la pregunta que la app existe para responder. */
-  /* Resumen de entrada: es la foto, y desde ahí se baja al detalle. */
-  const [activeTab, setActiveTab] = useState('resumen');
+  /*
+   * La pestaña sale de la dirección, y si la dirección no dice nada, de
+   * Resumen: es la foto, y desde ahí se baja al detalle.
+   */
+  const [activeTab, setActiveTab] = useState(
+    () => (typeof window === 'undefined' ? TAB_INICIAL
+      : tabDeRuta(window.location.pathname) || TAB_INICIAL),
+  );
   const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
@@ -971,6 +978,28 @@ export function FinanceProvider({ children }) {
       : b)));
     setBucketInputs((prev) => ({ ...prev, [bucketId]: '' }));
   }
+
+
+  /* ---------- La dirección y la pestaña, sincronizadas ---------- */
+
+  /*
+   * Dos efectos que se persiguen y no se muerden: el primero mueve la
+   * dirección cuando cambia la pestaña, el segundo mueve la pestaña cuando el
+   * usuario le da atrás. Lo que evita el círculo está en accionDeNavegacion,
+   * en lib/rutas.js, que devuelve null cuando ya coinciden.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const accion = accionDeNavegacion(window.location.pathname, activeTab);
+    if (accion) window.history[accion.metodo]({}, '', accion.ruta);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const alVolver = () => setActiveTab(tabDeRuta(window.location.pathname) || TAB_INICIAL);
+    window.addEventListener('popstate', alVolver);
+    return () => window.removeEventListener('popstate', alVolver);
+  }, []);
 
   /* ---------- Fuentes de ingreso ---------- */
 

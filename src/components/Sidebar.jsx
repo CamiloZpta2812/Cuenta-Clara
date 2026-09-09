@@ -1,5 +1,6 @@
 import { LayoutDashboard, ArrowLeftRight, CreditCard, Settings, Repeat, CalendarRange, CalendarClock, HandCoins, Shield, Landmark } from 'lucide-react';
 import Logo from './Logo';
+import { rutaDeTab } from '../lib/rutas.js';
 
 export default function Sidebar({ activeTab, onChangeTab }) {
   /*
@@ -30,16 +31,29 @@ export default function Sidebar({ activeTab, onChangeTab }) {
         </div>
       </div>
       <div className="cc-nav">
+        {/*
+          * Enlaces de verdad y no botones: ahora que cada pestaña tiene su
+          * dirección, con un <a> el navegador da gratis lo que un botón no
+          * puede —clic derecho para copiar el enlace, ctrl+clic para abrir en
+          * otra pestaña, y la dirección abajo al pasar por encima—. El clic
+          * normal lo seguimos manejando nosotros para no recargar la página.
+          */}
         {items.map((it) => (
-          <button
+          <a
             key={it.id}
-            type="button"
+            href={rutaDeTab(it.id)}
             className={`cc-nav-item ${activeTab === it.id ? 'active' : ''}`}
-            onClick={() => onChangeTab(it.id)}
+            aria-current={activeTab === it.id ? 'page' : undefined}
+            onClick={(e) => {
+              /* Ctrl/cmd+clic y el botón del medio son del navegador. */
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+              e.preventDefault();
+              onChangeTab(it.id);
+            }}
           >
             <it.Icon size={17} />
             {it.label}
-          </button>
+          </a>
         ))}
       </div>
     </div>

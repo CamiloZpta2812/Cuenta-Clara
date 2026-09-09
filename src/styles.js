@@ -54,6 +54,8 @@ export const STYLES = `
   font-family: 'Poppins', sans-serif; font-size: 14px; font-weight: 500;
   color: var(--ink-soft); transition: background .15s ease, color .15s ease;
   border-left: 3px solid transparent;
+  /* Son <a>: hay que quitarles el subrayado que el navegador les pone. */
+  text-decoration: none;
 }
 .cc-nav-item:hover { background: rgba(32,43,56,0.05); color: var(--ink); }
 .cc-nav-item.active { background: var(--card); color: var(--ink); border-left: 3px solid var(--brand); font-weight: 600; box-shadow: 0 1px 2px rgba(46,43,39,.06); }
