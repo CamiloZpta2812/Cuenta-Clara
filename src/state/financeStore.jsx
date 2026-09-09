@@ -116,6 +116,7 @@ export function FinanceProvider({ children }) {
 
   const [showDebtForm, setShowDebtForm] = useState(false);
   const [debtForm, setDebtForm] = useState({ name: '', totalAmount: '', interestRate: '', monthlyPayment: '', dueDay: '', startDate: todayStr(), currency: 'COP', exchangeRate: '' });
+  const [editingDebtId, setEditingDebtId] = useState(null);
   const [debtFormError, setDebtFormError] = useState('');
   const [paymentInputs, setPaymentInputs] = useState({});
 
@@ -566,8 +567,7 @@ export function FinanceProvider({ children }) {
       setDebtFormError('No pudimos traer la tasa de cambio automáticamente. Escribe la tasa (COP por USD) para guardar esta deuda.');
       return;
     }
-    setDebts((prev) => [...prev, {
-      id: uid(),
+    const datos = {
       name: debtForm.name.trim(),
       totalAmount: total,
       interestRate: debtForm.interestRate ? parseFloat(debtForm.interestRate) : 0,
@@ -582,15 +582,52 @@ export function FinanceProvider({ children }) {
        * cada mes, y currentBalance de dónde arranca la proyección.
        */
       fixedPayment: debtForm.monthlyPayment ? parseFloat(debtForm.monthlyPayment) : 0,
-      payoffMode: 'reducir-plazo',
-      currentBalance: total,
-      payments: [],
-    }]);
+    };
+
+    if (editingDebtId) {
+      /*
+       * Al editar NO se toca currentBalance ni payments: el saldo lo mueven
+       * los abonos, y pisarlo con el monto del formulario borraría de un golpe
+       * todo lo que llevas pagado.
+       */
+      setDebts((prev) => prev.map((d) => (d.id === editingDebtId ? { ...d, ...datos } : d)));
+      setEditingDebtId(null);
+    } else {
+      setDebts((prev) => [...prev, {
+        id: uid(), ...datos, payoffMode: 'reducir-plazo', currentBalance: total, payments: [],
+      }]);
+    }
     setDebtForm({ name: '', totalAmount: '', interestRate: '', monthlyPayment: '', dueDay: '', startDate: todayStr(), currency: 'COP', exchangeRate: '' });
     setShowDebtForm(false);
   }
+  /*
+   * Editar una deuda.
+   *
+   * No existía: el formulario solo servía para crear, así que una deuda
+   * sembrada por SQL —o cualquiera a la que se le olvidara un campo— quedaba
+   * congelada. El día de pago del crédito estuvo vacío semanas por esto, y sin
+   * él la cuota no aparecía en el Calendario: la salida más grande del mes,
+   * invisible, sin forma de arreglarlo desde la app.
+   */
+  function handleEditDebt(d) {
+    setDebtFormError('');
+    setEditingDebtId(d.id);
+    setDebtForm({
+      name: d.name || '',
+      totalAmount: d.totalAmount != null ? String(d.totalAmount) : '',
+      interestRate: d.interestRate != null ? String(d.interestRate) : '',
+      monthlyPayment: d.monthlyPayment != null ? String(d.monthlyPayment) : '',
+      dueDay: d.dueDay != null ? String(d.dueDay) : '',
+      startDate: d.startDate || todayStr(),
+      currency: d.currency || 'COP',
+      exchangeRate: d.exchangeRate != null ? String(d.exchangeRate) : '',
+    });
+    setShowDebtForm(true);
+  }
+
   function handleCancelDebtForm() {
     setDebtFormError('');
+    setEditingDebtId(null);
     setDebtForm({ name: '', totalAmount: '', interestRate: '', monthlyPayment: '', dueDay: '', startDate: todayStr(), currency: 'COP', exchangeRate: '' });
     setShowDebtForm(false);
   }
@@ -1182,6 +1219,8 @@ export function FinanceProvider({ children }) {
     editingBucketId,
     handleAddBucket,
     handleCancelDebtForm,
+    handleEditDebt,
+    editingDebtId,
     handleBucketMovement,
     handleAdjustBucketMonth,
     handleAddIncomeSource,

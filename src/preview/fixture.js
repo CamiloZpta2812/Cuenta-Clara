@@ -160,6 +160,8 @@ export function buildValue(overrides = {}) {
     bucketAdjustments: estado.bucketAdjustments,
     quincenas: buildQuincenas(estado, MES),
     incomeSources: estado.incomeSources,
+    handleEditDebt: () => {},
+    editingDebtId: null,
     handleAddIncomeSource: () => {},
     handleUpdateIncomeSource: () => {},
     handleDeleteIncomeSource: () => {},

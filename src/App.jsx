@@ -39,7 +39,7 @@ function Shell() {
     showTxForm, handleCancelTxForm, editingTxId,
     showFixedForm, handleCancelFixedForm, editingFixedId,
     showBucketForm, handleCancelBucketForm, editingBucketId,
-    showDebtForm, handleCancelDebtForm,
+    showDebtForm, handleCancelDebtForm, editingDebtId,
   } = useFinance();
 
   if (loading) {
@@ -121,7 +121,10 @@ function Shell() {
           <FormBucket />
         </Modal>
 
-        <Modal open={showDebtForm} onClose={handleCancelDebtForm} title="Nueva deuda">
+        <Modal
+          open={showDebtForm} onClose={handleCancelDebtForm}
+          title={editingDebtId ? 'Editar deuda' : 'Nueva deuda'}
+        >
           <FormDeuda />
         </Modal>
 

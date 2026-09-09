@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  CreditCard, TrendingDown, CalendarCheck, Flame, AlertTriangle, Sparkles, ChevronDown, Plus, Check,
+  CreditCard, TrendingDown, CalendarCheck, Flame, AlertTriangle, Sparkles, ChevronDown, Plus, Check, Pencil,
 } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
 import { addMonths, currentMonthKey, monthKeyFromDate, monthLabel } from '../lib/dates.js';
@@ -40,6 +40,7 @@ export default function Deuda() {
   const {
     debtOutlook, simulatePlan, debts, selectedDebtId, setSelectedDebtId,
     paymentInputs, setPaymentInputs, balanceInputs, setBalanceInputs, handleAddPayment,
+    handleEditDebt,
   } = useFinance();
   const [ajustes, setAjustes] = useState({});
   const [verTabla, setVerTabla] = useState(false);
@@ -154,11 +155,27 @@ export default function Deuda() {
 
   return (
     <>
-      <div className="cc-page-title">Deuda</div>
-      <p className="cc-page-sub">
-        {debt.name} · {fmtCOP(debt.currentBalance)} al {debt.interestRate}% mensual ·
-        cuota de {fmtCOP(debt.fixedPayment)}
-      </p>
+      <div className="cc-section-head">
+        <div>
+          <div className="cc-page-title">Deuda</div>
+          <p className="cc-page-sub" style={{ marginBottom: 0 }}>
+            {debt.name} · {fmtCOP(debt.currentBalance)} al {debt.interestRate}% mensual ·
+            cuota de {fmtCOP(debt.fixedPayment)}
+            {/*
+              * El día se muestra aunque falte, y por eso dice "sin día" en vez
+              * de callarse: mientras estuvo vacío la cuota no salía en el
+              * Calendario y no había nada en pantalla que lo delatara.
+              */}
+            {debt.dueDay ? ` · se cobra el ${debt.dueDay}` : ' · sin día de cobro'}
+          </p>
+        </div>
+        <button
+          type="button" className="cc-btn cc-btn-outline cc-btn-sm"
+          onClick={() => handleEditDebt(debt)}
+        >
+          <Pencil size={13} /> Editar deuda
+        </button>
+      </div>
 
       {varias && (
         <>
