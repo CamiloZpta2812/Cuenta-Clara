@@ -223,3 +223,49 @@ test('un estado vacío no revienta', () => {
   assert.deepEqual(monthEvents({}, MES), []);
   assert.deepEqual(paydays({}), []);
 });
+
+test('la cuota aparece en el tramo que la cobra, aunque el mes mirado no la tenga', () => {
+  /*
+   * El error que Camilo vio en pantalla. El crédito se desembolsó el 8 de
+   * septiembre, así que septiembre no lleva cuota — pero el tramo que va del
+   * 30 de septiembre al 15 de octubre sí la incluye, porque el banco cobra el
+   * 8 de octubre.
+   *
+   * El motor resolvía una sola vez contra el mes seleccionado, así que al
+   * mirar septiembre la cuota desaparecía del calendario entero: se perdía la
+   * salida más grande del mes.
+   */
+  const sept = buildQuincenas(estado, '2026-09');
+
+  const primero = sept.periods[0];
+  assert.ok(!primero.items.some((i) => i.kind === 'deuda'),
+    'el tramo de septiembre no lleva cuota: el crédito nació el 8');
+
+  const ultimo = sept.periods.at(-1);
+  const cuota = ultimo.items.find((i) => i.kind === 'deuda');
+  assert.equal(cuota.date, '2026-10-08');
+  assert.equal(cuota.amount, -446_413);
+});
+
+test('un ajuste de un mes no se cuela en la parte del tramo que es de otro', () => {
+  /*
+   * Misma raíz: el monto también depende del mes. Si octubre tiene el colchón
+   * ajustado y septiembre no, el tramo que los cruza tiene que usar cada uno
+   * en su mitad.
+   */
+  const conAjuste = {
+    ...estado,
+    bucketAdjustments: [{ id: 'aj', month: '2026-10', bucketId: 'seg', amount: 100_000 }],
+  };
+  const sept = buildQuincenas(conAjuste, '2026-09');
+
+  const enSeptiembre = sept.periods
+    .flatMap((p) => p.items)
+    .find((i) => i.id === 'seg' && i.date.startsWith('2026-09'));
+  assert.equal(enSeptiembre.amount, -300_000, 'septiembre va por el monto de siempre');
+
+  const enOctubre = buildQuincenas(conAjuste, '2026-10').periods
+    .flatMap((p) => p.items)
+    .find((i) => i.id === 'seg' && i.date.startsWith('2026-10'));
+  assert.equal(enOctubre.amount, -100_000, 'octubre por el ajustado');
+});

@@ -87,20 +87,18 @@ function largo(p) {
 }
 
 /*
- * La fecha en que cae un día del mes dentro de un tramo, o null si no cae.
+ * Los meses que toca un tramo. Casi siempre dos, porque un tramo cruza de mes
+ * por definición: el sueldo del 30 paga hasta el 15 del siguiente.
  *
- * Un tramo puede cruzar de mes, así que el día 3 puede pertenecer al tramo que
- * arrancó el 30 del mes pasado. Se prueban las dos posibilidades y se toma la
- * que caiga dentro.
+ * Importa más de lo que parece. Lo que se mueve en un mes no es lo mismo que
+ * en otro —una deuda desembolsada en septiembre no cobra cuota hasta octubre,
+ * un colchón puede estar ajustado solo para este mes— así que cada ocurrencia
+ * hay que resolverla contra SU mes, no contra el que esté seleccionado en la
+ * pantalla. Incluir el mes de la fecha de corte de más es inofensivo: nada que
+ * caiga ahí pasa el filtro del rango.
  */
-function fechaEnTramo(p, dia, month) {
-  if (!dia) return null;
-  const candidatos = [
-    fechaEn(addMonths(month, -1), dia),
-    fechaEn(month, dia),
-    fechaEn(addMonths(month, 1), dia),
-  ];
-  return candidatos.find((f) => f >= p.start && f < p.endExclusive) || null;
+function mesesDe(p) {
+  return [...new Set([p.start.slice(0, 7), p.endExclusive.slice(0, 7)])];
 }
 
 /*
@@ -173,19 +171,27 @@ export function buildQuincenas(estado, month) {
   const tramos = periods(estado, month);
   if (tramos.length === 0) return { periods: [], unscheduled: [], daily: 0 };
 
-  const eventos = monthEvents(estado, month);
   const porDia = vidaDiaria(estado, month);
-  const ubicados = new Set();
 
   const periodos = tramos.map((p) => {
     const dias = largo(p);
     const items = [];
 
-    eventos.forEach((e) => {
-      const fecha = fechaEnTramo(p, e.day, month);
-      if (!fecha) return;
-      ubicados.add(e);
-      items.push({ ...e, date: fecha });
+    /*
+     * Cada mes que toca el tramo se resuelve por separado. Antes se resolvía
+     * una sola vez contra el mes seleccionado, y por eso la cuota del crédito
+     * desaparecía del calendario de septiembre: el crédito se desembolsó el 8
+     * de septiembre, no cobra cuota hasta octubre, y el tramo que va del 30 de
+     * septiembre al 15 de octubre —que sí la incluye— se quedaba sin ella. Se
+     * perdía justo la salida más grande del mes.
+     */
+    mesesDe(p).forEach((mes) => {
+      monthEvents(estado, mes).forEach((e) => {
+        if (!e.day) return;
+        const fecha = fechaEn(mes, e.day);
+        if (fecha < p.start || fecha >= p.endExclusive) return;
+        items.push({ ...e, date: fecha });
+      });
     });
 
     items.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
@@ -207,7 +213,7 @@ export function buildQuincenas(estado, month) {
 
   return {
     periods: periodos,
-    unscheduled: eventos.filter((e) => !ubicados.has(e)),
+    unscheduled: monthEvents(estado, month).filter((e) => !e.day),
     daily: porDia,
   };
 }
