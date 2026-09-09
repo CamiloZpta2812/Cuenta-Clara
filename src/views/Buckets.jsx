@@ -40,17 +40,22 @@ function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar, nombreDe
 
   /*
    * Una reserva no tiene aportes: se llena con los gastos que apuntan a ella.
-   * Un colchón de verdad sí, y ahí el saldo es lo que hay en el pote.
+   * Un colchón de verdad sí, y lo acumulado es lo que TÚ llevas puesto.
    */
   const saldo = reserva ? gastadoEnMes(bucket.id) : acumulado(bucket);
 
   /* Del pote sale lo de todos; de tu cuenta, tu fracción. */
   const factor = total > 0 ? mio / total : 1;
+  /*
+   * Lo que habría en el pote si el otro va al día. Es una estimación y se
+   * muestra como tal: la app no puede ver la cuenta de Sofi.
+   */
+  const enElPote = factor > 0 ? saldo / factor : saldo;
   /* Se lee en cada render y no al cargar el módulo: con la app abierta toda
      la noche, un valor congelado seguiría hablando del mes pasado. */
   const esteMes = reserva
     ? gastadoEnMes(bucket.id)
-    : movidoEnMes(bucket, currentMonthKey()) * factor;
+    : movidoEnMes(bucket, currentMonthKey());
   /* Lo del mes se compara contra TU parte: es lo que sale de tu cuenta. */
   const planeado = mio;
   const falta = planeado - esteMes;
@@ -128,7 +133,7 @@ function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar, nombreDe
             <strong className="cc-mono">{fmtCOP(saldo)}</strong>
             {!reserva && compartido && (
               <span style={{ color: COLORS.inkSoft }}>
-                {' '}· tu parte, {fmtCOP(saldo * factor)}
+                {' '}· en el pote irían {fmtCOP(enElPote)} si cada uno va al día
               </span>
             )}
             {reserva && planeado > 0 && (
@@ -164,19 +169,31 @@ function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar, nombreDe
           etiquetes con ella. Registra la tanqueada como un movimiento normal y escógela.
         </p>
       ) : (
-      <div className="cc-inline-form">
-        <input
-          className="cc-input" type="number" min="0" step="any" placeholder="Monto"
-          value={input || ''}
-          onChange={(e) => onInput(bucket.id, e.target.value)}
-        />
-        <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => onMover(bucket.id, 1)}>
-          Aportar
-        </button>
-        <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => onMover(bucket.id, -1)}>
-          {bucket.kind === 'colchon' ? 'Usar' : 'Retirar'}
-        </button>
-      </div>
+      <>
+        <div className="cc-inline-form">
+          <input
+            className="cc-input" type="number" min="0" step="any" placeholder="Monto"
+            value={input || ''}
+            onChange={(e) => onInput(bucket.id, e.target.value)}
+          />
+          <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => onMover(bucket.id, 1)}>
+            Aportar
+          </button>
+          <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => onMover(bucket.id, -1)}>
+            {bucket.kind === 'colchon' ? 'Usar' : 'Retirar'}
+          </button>
+        </div>
+        {/*
+          * En un pote compartido los dos botones hablan de plata distinta, y
+          * sin decirlo uno teclea el mismo número para las dos cosas.
+          */}
+        {compartido && (
+          <p className="cc-page-sub" style={{ marginTop: 6, marginBottom: 0 }}>
+            Aportas lo TUYO; usas del pote. Sacar {fmtCOP(10_000)} del pote te
+            cuesta {fmtCOP(10_000 * factor)}.
+          </p>
+        )}
+      </>
       )}
     </div>
   );

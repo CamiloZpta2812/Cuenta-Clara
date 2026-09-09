@@ -342,11 +342,8 @@ export function FinanceProvider({ children }) {
    */
   const totalSavings = useMemo(() => buckets
     .filter((b) => b.movesCash !== false)
-    .reduce((s, b) => {
-      const total = Number(b.monthlyAmount) || 0;
-      const factor = total > 0 ? myBucketShare(b) / total : 1;
-      return s + (b.contributions || []).reduce((a, c) => a + (Number(c.amount) || 0), 0) * factor;
-    }, 0), [buckets]);
+    .reduce((s, b) => s + (b.contributions || [])
+      .reduce((a, c) => a + (Number(c.amount) || 0), 0), 0), [buckets]);
   function debtRemainingCOP(d) {
     const paid = d.payments.reduce((a, p) => a + p.amount, 0);
     const remaining = Math.max(0, parseFloat(d.totalAmount) - paid);
@@ -904,13 +901,28 @@ export function FinanceProvider({ children }) {
    * —plata que entra o sale del bucket— y separarlos obligaría a sumar dos
    * listas para saber cuánto hay.
    */
+  /*
+   * Aportar y retirar no son la misma operación al revés.
+   *
+   * Lo que aportas es TUYO y entra tal cual: si pones 150.000 al fondo con
+   * Sofi, saliste de 150.000, sin importar que el pote sean 600.000 al mes.
+   *
+   * Lo que retiras sale del POTE y te cuesta tu fracción: sacar 200.000 para
+   * el veterinario de los gatos —que van a medias— te cuesta 100.000. Por eso
+   * el retiro se convierte y el aporte no.
+   */
   function handleBucketMovement(bucketId, sign) {
     const amt = parseFloat(bucketInputs[bucketId]);
     if (!amt || amt <= 0) return;
+    const bucket = buckets.find((b) => b.id === bucketId);
+    const total = Number(bucket && bucket.monthlyAmount) || 0;
+    /* Sin monto mensual no hay proporción que sacar: el pote es todo tuyo. */
+    const factor = total > 0 ? myBucketShare(bucket) / total : 1;
+    const monto = sign < 0 ? -amt * factor : amt;
     const hoy = todayStr();
     setBuckets((prev) => prev.map((b) => (b.id === bucketId
       ? { ...b, contributions: [...(b.contributions || []),
-          { id: uid(), amount: amt * sign, date: hoy, month: monthKeyFromDate(hoy) }] }
+          { id: uid(), amount: monto, date: hoy, month: monthKeyFromDate(hoy) }] }
       : b)));
     setBucketInputs((prev) => ({ ...prev, [bucketId]: '' }));
   }

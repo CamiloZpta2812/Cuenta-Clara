@@ -155,3 +155,20 @@ test('el saldo de hoy no cuenta lo que viene después', () => {
 test('sin ancla la curva sigue arrancando en cero, como antes', () => {
   assert.equal(buildCashFlow(estado, ['2026-09'])[0].saldo, -300_000);
 });
+
+test('un aporte a un pote compartido baja el saldo por lo tuyo, no por el pote', () => {
+  /*
+   * Antes la curva restaba el monto guardado tal cual, y como ese monto era el
+   * del pote, un aporte a los gatos bajaba el saldo el doble de lo que salió
+   * de la cuenta. Ahora el aporte YA viene en plata tuya.
+   */
+  const conPote = {
+    transactions: [],
+    debts: [],
+    buckets: [{ id: 'gatos', name: 'Colchón gatos', monthlyAmount: 130_000,
+      shares: [{ id: 's', personId: 'p-sofi', amount: 65_000 }],
+      contributions: [{ id: 'a1', amount: 65_000, date: '2026-09-15' }] }],
+    balanceAnchor: { date: '2026-09-08', amount: 357_000 },
+  };
+  assert.equal(currentBalance(conPote, '2026-09-30'), 292_000);
+});

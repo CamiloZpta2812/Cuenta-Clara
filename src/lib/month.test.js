@@ -535,15 +535,46 @@ test('una reserva resta en el plan igual que un colchón', () => {
   );
 });
 
-test('un aporte al pote cuenta solo por tu fracción', () => {
+test('un aporte guarda tu plata, no la del pote', () => {
   const conAporte = {
     ...compartido,
     buckets: compartido.buckets.map((b) => (b.id === 'gatos'
-      ? { ...b, contributions: [{ id: 'a1', amount: 130_000, date: '2026-09-05' }] }
+      ? { ...b, contributions: [{ id: 'a1', amount: 65_000, date: '2026-09-05' }] }
       : b)),
   };
-  // Al pote entraron 130.000, pero de tu cuenta salieron 65.000.
   assert.equal(monthActual(conAporte, MES).cushion, 65_000);
+});
+
+test('tu mitad pagada en dos quincenas suma tu mitad, no la mitad de tu mitad', () => {
+  /*
+   * El caso que rompía el modelo viejo. Camilo pone sus 300.000 del fondo con
+   * Sofi en dos: 150.000 el 15 y 150.000 el 30. Antes cada depósito se leía
+   * como si fuera del pote y se le acreditaba la mitad, así que sus 300.000
+   * aparecían como 150.000 y el mes salía en rojo sin estarlo.
+   */
+  const enDosQuincenas = {
+    ...compartido,
+    buckets: compartido.buckets.map((b) => (b.id === 'fondo'
+      ? { ...b,
+        contributions: [
+          { id: 'q1', amount: 150_000, date: '2026-09-15' },
+          { id: 'q2', amount: 150_000, date: '2026-09-30' },
+        ] }
+      : b)),
+  };
+  const real = monthActual(enDosQuincenas, MES);
+  assert.equal(real.savings, 300_000);
+  assert.equal(real.savings, monthPlan(compartido, MES).savings, 'el mes cierra parejo');
+});
+
+test('media quincena aportada es media quincena, no un cuarto', () => {
+  const soloLaPrimera = {
+    ...compartido,
+    buckets: compartido.buckets.map((b) => (b.id === 'fondo'
+      ? { ...b, contributions: [{ id: 'q1', amount: 150_000, date: '2026-09-15' }] }
+      : b)),
+  };
+  assert.equal(monthActual(soloLaPrimera, MES).savings, 150_000);
 });
 
 test('una reserva se mide por lo gastado, no por lo aportado', () => {
@@ -565,7 +596,7 @@ test('un colchón real no cuenta doble el aporte y el gasto', () => {
   const gatosConVet = {
     ...compartido,
     buckets: compartido.buckets.map((b) => (b.id === 'gatos'
-      ? { ...b, contributions: [{ id: 'a1', amount: 130_000, date: '2026-09-05' }] }
+      ? { ...b, contributions: [{ id: 'a1', amount: 65_000, date: '2026-09-05' }] }
       : b)),
     transactions: [
       { id: 'vet', type: 'gasto', amount: 200_000, category: 'salud', date: '2026-09-12', bucketId: 'gatos' },

@@ -202,19 +202,24 @@ function frozenPlan(p) {
 const debtPayments = (estado) => (estado.debts || []).flatMap((d) => d.payments || []);
 
 /*
- * Cada aporte se lleva el tipo de su bucket, si mueve plata, y qué fracción del
- * pote es tuya. Un aporte de 130.000 a un colchón compartido a medias son
- * 65.000 saliendo de tu cuenta.
+ * Cada aporte se lleva el tipo de su bucket y si mueve plata.
+ *
+ * Un aporte guarda TU plata, no la del pote. Antes guardaba la del pote y aquí
+ * se multiplicaba por tu fracción, lo cual solo funcionaba si los dos metían
+ * lo suyo el mismo día y por partes iguales. En cuanto uno paga su mitad en
+ * dos quincenas —150.000 el 15 y 150.000 el 30— la cuenta se partía: la app
+ * leía cada depósito como si fuera del pote y te acreditaba la mitad, o sea
+ * 150.000 de los 300.000 que de verdad pusiste.
+ *
+ * La conversión sigue existiendo, pero se hace al RETIRAR y en la pantalla,
+ * donde se puede ver: sacar 200.000 del pote de los gatos te cuesta 100.000.
+ * Aportar no necesita conversión porque lo que aportas ya es tuyo.
  */
-const bucketContributions = (estado) => (estado.buckets || []).flatMap((b) => {
-  const total = num(b.monthlyAmount);
-  const mio = myBucketShare(b);
-  /* Sin monto mensual no hay proporción que sacar: el aporte es todo tuyo. */
-  const factor = total > 0 ? mio / total : 1;
-  return (b.contributions || []).map((c) => ({
-    ...c, kind: b.kind, movesCash: b.movesCash !== false, factor,
-  }));
-});
+const bucketContributions = (estado) => (estado.buckets || []).flatMap((b) => (
+  (b.contributions || []).map((c) => ({
+    ...c, kind: b.kind, movesCash: b.movesCash !== false,
+  }))
+));
 
 /* De qué tipo es la reserva a la que apunta un gasto, si es que apunta a una. */
 function reservaKind(estado, bucketId) {
@@ -275,7 +280,7 @@ export function monthActual(estado, month) {
   const porBucket = (kind) => {
     const deAportes = sum(
       aportes.filter((a) => a.kind === kind && a.movesCash !== false),
-      (a) => a.amount * a.factor,
+      (a) => a.amount,
     );
     const deGastos = sum(
       gastosDeReserva.filter((t) => reservaKind(estado, t.bucketId) === kind),
