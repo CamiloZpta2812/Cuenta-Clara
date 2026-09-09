@@ -15,7 +15,7 @@ import { buildCardStatements, nextStatement, buildCommitments, activeInstallment
 import { monthSummary, targetDebt, simulatePlanChange, myBucketShare } from '../lib/month.js';
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
 import { buildCashFlow, currentBalance } from '../lib/cashflow.js';
-import { buildQuincenas } from '../lib/quincenas.js';
+import { buildQuincenas, monthGrid } from '../lib/quincenas.js';
 import { upcomingCharges } from '../lib/upcoming.js';
 
 /*
@@ -1187,6 +1187,12 @@ export function FinanceProvider({ children }) {
     [snapshot, selectedMonth],
   );
 
+  /* Lo mismo, en cuadrícula de calendario. */
+  const calendarioRejilla = useMemo(
+    () => monthGrid(snapshot(), selectedMonth),
+    [snapshot, selectedMonth],
+  );
+
   /*
    * Anclar es decir "hoy cerré con tanto". No crea un movimiento: los
    * movimientos son cosas que pasaron, y esto es una medición del resultado.
@@ -1203,6 +1209,7 @@ export function FinanceProvider({ children }) {
     cashFlow,
     saldoReal,
     quincenas,
+    calendarioRejilla,
     balanceAnchor,
     handleAnchorBalance,
     debtOutlook,

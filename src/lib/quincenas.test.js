@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { paydays, periods, monthEvents, buildQuincenas } from './quincenas.js';
+import {
+  paydays, periods, monthEvents, buildQuincenas, monthGrid,
+} from './quincenas.js';
 
 const MES = '2026-10';
 
@@ -268,4 +270,64 @@ test('un ajuste de un mes no se cuela en la parte del tramo que es de otro', () 
     .flatMap((p) => p.items)
     .find((i) => i.id === 'seg' && i.date.startsWith('2026-10'));
   assert.equal(enOctubre.amount, -100_000, 'octubre por el ajustado');
+});
+
+/* --------------------------------------------------------- la cuadrícula -- */
+
+test('la cuadrícula arma semanas de lunes a domingo', () => {
+  const semanas = monthGrid(estado, MES, '2026-10-09');
+  assert.ok(semanas.every((s) => s.length === 7));
+  /* El 1 de octubre de 2026 es jueves: tres huecos antes. */
+  assert.deepEqual(semanas[0].slice(0, 3), [null, null, null]);
+  assert.equal(semanas[0][3].day, 1);
+});
+
+test('están todos los días del mes y ninguno de otro', () => {
+  const dias = monthGrid(estado, MES, '2026-10-09').flat().filter(Boolean);
+  assert.equal(dias.length, 31);
+  assert.ok(dias.every((d) => d.date.startsWith('2026-10')));
+});
+
+test('cada día sabe a qué quincena pertenece', () => {
+  const dias = monthGrid(estado, MES, '2026-10-09').flat().filter(Boolean);
+  /* Los tramos son [30 sep, 15 oct), [15 oct, 30 oct) y [30 oct, 15 nov). */
+  assert.equal(dias.find((d) => d.day === 1).periodIndex, 0);
+  assert.equal(dias.find((d) => d.day === 14).periodIndex, 0);
+  assert.equal(dias.find((d) => d.day === 15).periodIndex, 1);
+  assert.equal(dias.find((d) => d.day === 29).periodIndex, 1);
+  assert.equal(dias.find((d) => d.day === 30).periodIndex, 2);
+});
+
+test('el día de hoy queda marcado, y solo ese', () => {
+  const dias = monthGrid(estado, MES, '2026-10-09').flat().filter(Boolean);
+  assert.deepEqual(dias.filter((d) => d.isToday).map((d) => d.day), [9]);
+});
+
+test('un hoy de otro mes no marca ningún día', () => {
+  const dias = monthGrid(estado, MES, '2026-11-03').flat().filter(Boolean);
+  assert.ok(!dias.some((d) => d.isToday));
+});
+
+test('los movimientos caen en su día', () => {
+  const dias = monthGrid(estado, MES, '2026-10-09').flat().filter(Boolean);
+  assert.deepEqual(dias.find((d) => d.day === 1).items.map((i) => i.name).sort(),
+    ['Aporte Casa', 'Gimnasio']);
+  assert.equal(dias.find((d) => d.day === 8).items[0].kind, 'deuda');
+  assert.deepEqual(dias.find((d) => d.day === 2).items, []);
+});
+
+test('el día en que arranca una quincena viene marcado', () => {
+  const dias = monthGrid(estado, MES, '2026-10-09').flat().filter(Boolean);
+  assert.deepEqual(dias.filter((d) => d.startsPeriod).map((d) => d.day), [15, 30]);
+});
+
+test('un mes sin días de pago igual arma la cuadrícula', () => {
+  // Sin quincenas no hay bandas, pero el calendario sigue siendo un calendario.
+  const sinDias = {
+    ...estado,
+    incomeSources: [{ id: 'x', name: 'Sueldo', expected: 1_000_000, active: true }],
+  };
+  const dias = monthGrid(sinDias, MES, '2026-10-09').flat().filter(Boolean);
+  assert.equal(dias.length, 31);
+  assert.ok(dias.every((d) => d.periodIndex === null));
 });

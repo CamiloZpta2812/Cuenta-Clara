@@ -1,5 +1,5 @@
 import {
-  CalendarClock, TrendingUp, AlertTriangle, HelpCircle, Wallet,
+  CalendarClock, TrendingUp, AlertTriangle, HelpCircle, Wallet, MapPin,
 } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
 import { monthLabel } from '../lib/dates.js';
@@ -101,9 +101,105 @@ function Tramo({ p }) {
   );
 }
 
+
+const DIAS_SEMANA = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+
+/* Lo que se ve al pasar el mouse por un día: el detalle sin gastar celda. */
+function detalleDelDia(items, total) {
+  const lineas = items.map((x) => `${x.name}: ${fmtCOP(x.amount)}`);
+  return [...lineas, `= ${fmtCOP(total)}`].join('\n');
+}
+
+/*
+ * El mes en cuadrícula.
+ *
+ * Las tarjetas de arriba responden "¿cuál quincena va apretada?". Esta
+ * responde la que no se puede leer en una lista: "¿cómo se amontonan los
+ * días?". Que casi todo lo fijo caiga en la primera semana es algo que en
+ * columnas hay que deducir sumando, y aquí se ve de un vistazo.
+ *
+ * La banda de color dice a qué quincena pertenece cada día. Es lo que hace
+ * visible que el sueldo del 30 paga hasta el 15 — lo que el mes calendario
+ * esconde por construcción.
+ */
+function Rejilla({ semanas, tramos }) {
+  const hoy = semanas.flat().find((d) => d && d.isToday);
+
+  return (
+    <div className="cc-card" style={{ marginTop: 14 }}>
+      <p className="cc-chart-title">El mes de un vistazo</p>
+      <p className="cc-chart-sub">
+        Cada punto es un movimiento. El color de fondo dice de qué quincena es el día.
+      </p>
+
+      <div className="cc-cal">
+        {DIAS_SEMANA.map((d, i) => (
+          /* eslint-disable-next-line react/no-array-index-key */
+          <div key={i} className="cc-cal-cabecera">{d}</div>
+        ))}
+
+        {semanas.flat().map((d, i) => {
+          if (!d) return <div key={`hueco-${i}`} className="cc-cal-hueco" />;
+          const sale = d.items.filter((x) => x.amount < 0);
+          const entra = d.items.filter((x) => x.amount > 0);
+          const total = d.items.reduce((s, x) => s + x.amount, 0);
+          const clases = [
+            'cc-cal-dia',
+            d.periodIndex !== null ? `q${d.periodIndex % 2}` : '',
+            d.isToday ? 'hoy' : '',
+            d.startsPeriod ? 'arranque' : '',
+          ].filter(Boolean).join(' ');
+
+          return (
+            <div
+              key={d.date} className={clases}
+              /* El título nativo da el detalle sin gastar espacio en la celda. */
+              title={d.items.length ? detalleDelDia(d.items, total) : undefined}
+            >
+              <span className="cc-cal-num">{d.day}</span>
+              {d.isToday && <span className="cc-cal-hoy">hoy</span>}
+              <span className="cc-cal-puntos">
+                {entra.map((x) => <i key={x.id} className="cc-cal-punto entra" />)}
+                {sale.map((x) => <i key={x.id} className={`cc-cal-punto ${x.kind}`} />)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="cc-cal-leyenda">
+        <span><i className="cc-cal-punto entra" /> entra</span>
+        <span><i className="cc-cal-punto fijo" /> gasto fijo</span>
+        <span><i className="cc-cal-punto deuda" /> cuota</span>
+        <span><i className="cc-cal-punto bucket" /> apartas</span>
+      </div>
+
+      {/*
+        * El "estás aquí" en palabras. El recuadro en la cuadrícula dice QUÉ día
+        * es hoy; esto dice lo que de verdad se quiere saber: en cuál quincena
+        * estás parado y cuánto falta para la siguiente.
+        */}
+      {hoy && hoy.periodIndex !== null && (() => {
+        const t = tramos[hoy.periodIndex];
+        const faltan = Math.max(0, Math.round(
+          (new Date(`${t.endExclusive}T12:00:00`) - new Date(`${hoy.date}T12:00:00`)) / 86400000,
+        ));
+        return (
+          <p className="cc-page-sub" style={{ marginTop: 10, marginBottom: 0 }}>
+            <MapPin size={13} style={{ verticalAlign: '-2px' }} />{' '}
+            <strong>Estás aquí:</strong> en la quincena del {dia(t.start)}, que tiene que
+            aguantar {faltan === 0 ? 'hasta hoy' : `${faltan} día${faltan === 1 ? '' : 's'} más`}.
+            Al final te quedan <strong className="cc-mono">{fmtCOP(t.leftover)}</strong>.
+          </p>
+        );
+      })()}
+    </div>
+  );
+}
+
 export default function Calendario() {
   const {
-    quincenas, availableMonths, selectedMonth, setSelectedMonth,
+    quincenas, calendarioRejilla, availableMonths, selectedMonth, setSelectedMonth,
   } = useFinance();
 
   const { periods: tramos, unscheduled, daily } = quincenas;
@@ -136,6 +232,8 @@ export default function Calendario() {
           <div className="cc-quincenas-grid">
             {tramos.map((p) => <Tramo key={p.start} p={p} />)}
           </div>
+
+          <Rejilla semanas={calendarioRejilla} tramos={tramos} />
 
           <p className="cc-page-sub" style={{ marginTop: 10 }}>
             <Wallet size={13} style={{ verticalAlign: '-2px' }} />{' '}

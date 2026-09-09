@@ -1,7 +1,7 @@
 import { monthSummary, targetDebt, simulatePlanChange } from '../lib/month.js';
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
 import { buildCashFlow, currentBalance } from '../lib/cashflow.js';
-import { buildQuincenas } from '../lib/quincenas.js';
+import { buildQuincenas, monthGrid } from '../lib/quincenas.js';
 import { upcomingCharges } from '../lib/upcoming.js';
 import { buildRecommendations, getStatus } from '../lib/insights.js';
 import { COLORS } from '../lib/constants.js';
@@ -159,6 +159,7 @@ export function buildValue(overrides = {}) {
     saldoReal: currentBalance(estado, '2026-09-30'),
     bucketAdjustments: estado.bucketAdjustments,
     quincenas: buildQuincenas(estado, MES),
+    calendarioRejilla: monthGrid(estado, MES, '2026-09-09'),
     incomeSources: estado.incomeSources,
     handleEditDebt: () => {},
     editingDebtId: null,

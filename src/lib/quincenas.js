@@ -1,4 +1,4 @@
-import { daysInMonth, addMonths } from './dates.js';
+import { daysInMonth, addMonths, todayStr } from './dates.js';
 import { myShare, myBucketShare, plannedBucketShare, debtDueIn } from './month.js';
 
 /*
@@ -216,4 +216,62 @@ export function buildQuincenas(estado, month) {
     unscheduled: monthEvents(estado, month).filter((e) => !e.day),
     daily: porDia,
   };
+}
+
+/*
+ * El mes en cuadrícula, para verlo como calendario.
+ *
+ * Las tarjetas de arriba responden "¿cuál quincena va apretada?". Esta
+ * responde otra que no se puede leer en una lista: "¿cómo se amontonan los
+ * días?". Que el 89% de lo fijo caiga entre el 1 y el 7 es un hecho que en
+ * columnas hay que deducir sumando, y en una cuadrícula se ve de un vistazo.
+ *
+ * Cada día sabe a qué quincena pertenece, y de ahí sale la banda de color: es
+ * lo que hace visible que el sueldo del 30 paga hasta el 15, algo que el mes
+ * calendario esconde por construcción.
+ */
+export function monthGrid(estado, month, hoy = todayStr()) {
+  const { periods: tramos } = buildQuincenas(estado, month);
+  const [y, mes] = month.split('-').map(Number);
+  const total = daysInMonth(y, mes - 1);
+
+  const porFecha = new Map();
+  tramos.forEach((p, i) => p.items.forEach((it) => {
+    if (!porFecha.has(it.date)) porFecha.set(it.date, { items: [], periodIndex: i });
+    porFecha.get(it.date).items.push(it);
+  }));
+
+  /* A qué tramo pertenece un día, tenga movimientos o no. */
+  const tramoDe = (fecha) => {
+    const i = tramos.findIndex((p) => fecha >= p.start && fecha < p.endExclusive);
+    return i === -1 ? null : i;
+  };
+
+  const dias = [];
+  for (let d = 1; d <= total; d += 1) {
+    const fecha = iso(y, mes, d);
+    const info = porFecha.get(fecha);
+    dias.push({
+      date: fecha,
+      day: d,
+      items: info ? info.items : [],
+      periodIndex: tramoDe(fecha),
+      isToday: fecha === hoy,
+      startsPeriod: tramos.some((p) => p.start === fecha),
+    });
+  }
+
+  /*
+   * Se rellena hasta cuadrar semanas de lunes a domingo. Los huecos van como
+   * null y no como días del mes vecino: esos días pertenecen a otra
+   * cuadrícula, y pintarlos invitaría a leerlos como parte de esta.
+   */
+  const primerDia = new Date(y, mes - 1, 1).getDay();
+  const relleno = (primerDia + 6) % 7;
+  const celdas = [...Array(relleno).fill(null), ...dias];
+  while (celdas.length % 7 !== 0) celdas.push(null);
+
+  const semanas = [];
+  for (let i = 0; i < celdas.length; i += 7) semanas.push(celdas.slice(i, i + 7));
+  return semanas;
 }

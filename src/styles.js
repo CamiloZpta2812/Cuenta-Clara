@@ -130,6 +130,43 @@ export const STYLES = `
 .cc-quincena-dia { color: var(--ink-soft); font-size: 11px; }
 .cc-quincena-vida { color: var(--ink-soft); font-style: italic; }
 
+/* El mes en cuadrícula. La banda de fondo dice de qué quincena es cada día:
+   es lo que hace ver que el sueldo del 30 paga hasta el 15. */
+.cc-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px; }
+.cc-cal-cabecera { text-align: center; font-size: 11px; font-weight: 600;
+  color: var(--ink-soft); padding-bottom: 2px; }
+.cc-cal-hueco { aspect-ratio: 1; }
+.cc-cal-dia { aspect-ratio: 1; border-radius: 8px; padding: 4px; position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: var(--surface-2, #F1EEE7); border: 1px solid transparent; }
+/* Dos tonos alternos, no un color por quincena: lo que importa es dónde está
+   el corte, no cuál tramo es cuál. */
+.cc-cal-dia.q0 { background: #EDE7DC; }
+.cc-cal-dia.q1 { background: #E3EAEF; }
+/* El arranque de quincena lleva el borde izquierdo: ahí cayó el sueldo. */
+.cc-cal-dia.arranque { border-left: 3px solid var(--income, #2F7D5C); }
+.cc-cal-dia.hoy { border-color: var(--accent, #B0524B); box-shadow: 0 0 0 2px var(--accent, #B0524B); }
+.cc-cal-num { font-size: 12px; font-weight: 600; line-height: 1.1; }
+.cc-cal-hoy { font-size: 8.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--accent, #B0524B); line-height: 1; }
+.cc-cal-puntos { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; }
+.cc-cal-punto { width: 5px; height: 5px; border-radius: 50%; display: inline-block;
+  background: var(--ink-soft); }
+.cc-cal-punto.entra { background: #2F7D5C; }
+.cc-cal-punto.fijo { background: #6B5199; }
+.cc-cal-punto.deuda { background: #B0524B; }
+.cc-cal-punto.bucket { background: #3E7FB0; }
+.cc-cal-leyenda { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px;
+  font-size: 11.5px; color: var(--ink-soft); }
+.cc-cal-leyenda span { display: inline-flex; align-items: center; gap: 5px; }
+
+@media (max-width: 480px) {
+  .cc-cal { gap: 3px; }
+  .cc-cal-dia { padding: 2px; border-radius: 6px; }
+  .cc-cal-num { font-size: 11px; }
+  .cc-cal-punto { width: 4px; height: 4px; }
+}
+
 /* Fuentes de ingreso, en Configuración. Cada fila es una fuente; en pantalla
    angosta los campos se apilan solos. */
 .cc-ingreso-fila { display: grid; gap: 10px; align-items: end;
