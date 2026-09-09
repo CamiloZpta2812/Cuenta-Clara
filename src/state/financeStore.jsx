@@ -120,7 +120,12 @@ export function FinanceProvider({ children }) {
 
   const [showFixedForm, setShowFixedForm] = useState(false);
   const [editingFixedId, setEditingFixedId] = useState(null);
-  const [fixedForm, setFixedForm] = useState({ name: '', category: 'servicios', amount: '', dueDay: '', paymentMethod: 'debito', cardId: '' });
+  /* El monto es el TOTAL del servicio; tu parte se deriva del reparto. */
+  const FIJO_VACIO = {
+    name: '', category: 'servicios', totalAmount: '', shares: [],
+    dueDay: '', paymentMethod: 'debito', cardId: '',
+  };
+  const [fixedForm, setFixedForm] = useState(FIJO_VACIO);
 
   const [showDebtForm, setShowDebtForm] = useState(false);
   const [debtForm, setDebtForm] = useState({ name: '', totalAmount: '', interestRate: '', monthlyPayment: '', dueDay: '', startDate: todayStr(), currency: 'COP', exchangeRate: '' });
@@ -732,17 +737,41 @@ export function FinanceProvider({ children }) {
     setCreditCards((prev) => prev.filter((c) => c.id !== id));
   }
 
+  /*
+   * Guardar un gasto fijo, con su reparto.
+   *
+   * El monto del formulario es el TOTAL del servicio, no tu parte. Antes se
+   * guardaba en `amount` y el plan lee `totalAmount`, así que cambiarle el
+   * precio a HBO desde la app no movía nada: ni el plan, ni Cobros, ni el
+   * Calendario. El formulario decía editar algo que nadie leía.
+   *
+   * `amount` se sigue escribiendo, pero derivado: es tu parte, y lo mantienen
+   * al día las pantallas viejas que todavía lo leen. Derivarlo en vez de
+   * pedirlo es lo que impide que las dos cifras se contradigan.
+   */
   function handleAddFixedExpense(e) {
     e.preventDefault();
-    const amt = parseFloat(fixedForm.amount);
-    if (!fixedForm.name.trim() || !amt || amt <= 0) return;
+    const total = parseFloat(fixedForm.totalAmount);
+    if (!fixedForm.name.trim() || !total || total <= 0) return;
+
+    /*
+     * Las filas del reparto sin persona o sin monto se descartan en vez de
+     * guardarse en cero: una fila vacía en Cobros es un cobro fantasma que hay
+     * que marcar todos los meses.
+     */
+    const shares = (fixedForm.shares || [])
+      .filter((r) => r.personId && parseFloat(r.amount) > 0)
+      .map((r) => ({ id: r.id, personId: r.personId, amount: parseFloat(r.amount) }));
+
     const data = {
       name: fixedForm.name.trim(),
       category: fixedForm.category,
-      amount: amt,
+      totalAmount: total,
+      amount: total - shares.reduce((a, r) => a + r.amount, 0),
       dueDay: fixedForm.dueDay ? parseInt(fixedForm.dueDay, 10) : null,
       paymentMethod: fixedForm.paymentMethod,
       cardId: fixedForm.paymentMethod === 'credito' ? (fixedForm.cardId || null) : null,
+      shares,
     };
     if (editingFixedId) {
       setFixedExpenses((prev) => prev.map((f) => (f.id === editingFixedId ? { ...f, ...data } : f)));
@@ -750,14 +779,54 @@ export function FinanceProvider({ children }) {
     } else {
       setFixedExpenses((prev) => [...prev, { id: uid(), ...data }]);
     }
-    setFixedForm({ name: '', category: EXPENSE_CATEGORIES[0].id, amount: '', dueDay: '', paymentMethod: 'debito', cardId: '' });
+    setFixedForm(FIJO_VACIO);
     setShowFixedForm(false);
   }
+
+  /* Una fila más en el reparto, vacía para que la llenen. */
+  function handleAddFixedShare() {
+    setFixedForm((f) => ({
+      ...f,
+      shares: [...(f.shares || []), { id: uid(), personId: '', amount: '' }],
+    }));
+  }
+
+  function handleUpdateFixedShare(id, cambios) {
+    setFixedForm((f) => ({
+      ...f,
+      shares: (f.shares || []).map((r) => (r.id === id ? { ...r, ...cambios } : r)),
+    }));
+  }
+
+  function handleRemoveFixedShare(id) {
+    setFixedForm((f) => ({ ...f, shares: (f.shares || []).filter((r) => r.id !== id) }));
+  }
+
+  /*
+   * Meter a alguien que todavía no existe, sin salir del formulario.
+   *
+   * No hay pantalla de personas, y mandar a crearla en otro sitio para poder
+   * repartir un gasto es la clase de rodeo por la que uno termina no
+   * repartiéndolo.
+   */
+  function handleAddPerson(nombre) {
+    const limpio = String(nombre || '').trim();
+    if (!limpio) return null;
+    const ya = people.find((x) => x.name.toLowerCase() === limpio.toLowerCase());
+    if (ya) return ya.id;
+    const id = uid();
+    setPeople((prev) => [...prev, { id, name: limpio }]);
+    return id;
+  }
+
   function handleEditFixedExpense(fe) {
     setFixedForm({
       name: fe.name,
       category: fe.category,
-      amount: String(fe.amount),
+      totalAmount: String(fe.totalAmount != null ? fe.totalAmount : fe.amount),
+      shares: (fe.shares || []).map((r) => ({
+        id: r.id, personId: r.personId, amount: String(r.amount),
+      })),
       dueDay: fe.dueDay != null ? String(fe.dueDay) : '',
       paymentMethod: fe.paymentMethod || 'efectivo',
       cardId: fe.cardId || '',
@@ -768,7 +837,7 @@ export function FinanceProvider({ children }) {
   function handleCancelFixedForm() {
     setEditingFixedId(null);
     setShowFixedForm(false);
-    setFixedForm({ name: '', category: EXPENSE_CATEGORIES[0].id, amount: '', dueDay: '', paymentMethod: 'debito', cardId: '' });
+    setFixedForm(FIJO_VACIO);
   }
   function handleDeleteFixedExpense(id) {
     if (!window.confirm('¿Eliminar este gasto fijo? Los movimientos que ya generó no se borran.')) return;
@@ -1305,6 +1374,10 @@ export function FinanceProvider({ children }) {
     handleAddCustomCategory,
     handleAddDebt,
     handleAddFixedExpense,
+    handleAddFixedShare,
+    handleUpdateFixedShare,
+    handleRemoveFixedShare,
+    handleAddPerson,
     handleAddPayment,
     handleAddTransaction,
     handleCancelCardForm,

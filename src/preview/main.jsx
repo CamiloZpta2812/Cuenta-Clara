@@ -16,6 +16,7 @@ import Modal from '../components/Modal';
 import BotonAgregar from '../components/BotonAgregar';
 import FormMovimiento from '../components/forms/FormMovimiento';
 import FormDeuda from '../components/forms/FormDeuda';
+import FormGastoFijo from '../components/forms/FormGastoFijo';
 
 /*
  * Banco de pruebas de las pantallas. Se abre con `npm run dev` en /preview.html
@@ -28,11 +29,14 @@ function VentanaMovimiento() {
 function VentanaDeuda() {
   return <Modal open title="Nueva deuda" onClose={() => {}}><FormDeuda /></Modal>;
 }
+function VentanaGastoFijo() {
+  return <Modal open title="Editar gasto fijo" onClose={() => {}}><FormGastoFijo /></Modal>;
+}
 function Boton() { return <BotonAgregar />; }
 
 const PANTALLAS = {
   Mes, Calendario, Configuracion, Cobros, Buckets, Deuda, Resumen, GastosFijos, Movimientos,
-  VentanaMovimiento, VentanaDeuda, Boton,
+  VentanaMovimiento, VentanaDeuda, VentanaGastoFijo, Boton,
 };
 
 function Preview() {

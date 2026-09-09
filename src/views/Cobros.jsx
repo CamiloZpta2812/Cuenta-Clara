@@ -1,4 +1,4 @@
-import { HandCoins, Check, Undo2, TrendingDown, Users } from 'lucide-react';
+import { HandCoins, Check, Undo2, TrendingDown, Users, Pencil } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
 import { monthLabel } from '../lib/dates.js';
 import { fmtCOP } from '../lib/money.js';
@@ -22,7 +22,13 @@ export default function Cobros() {
   const {
     availableMonths, selectedMonth, setSelectedMonth,
     monthReport, people, handleToggleCollection,
+    fixedExpenses, handleEditFixedExpense,
   } = useFinance();
+
+  const editarGasto = (id) => {
+    const fe = (fixedExpenses || []).find((f) => f.id === id);
+    if (fe) handleEditFixedExpense(fe);
+  };
 
   const { collections } = monthReport;
 
@@ -116,6 +122,20 @@ export default function Cobros() {
                         ? <Check size={14} color={COLORS.income} />
                         : <HandCoins size={14} />}
                       {c.fixedExpenseName}
+                      {/*
+                        * El monto de un cobro es el reparto del gasto fijo, así
+                        * que se edita allá y no aquí: dos sitios para el mismo
+                        * número es la manera de que un día no coincidan. El
+                        * lápiz lleva al formulario del gasto, ya abierto.
+                        */}
+                      <button
+                        type="button" className="cc-icon-btn"
+                        onClick={() => editarGasto(c.fixedExpenseId)}
+                        aria-label={`Editar ${c.fixedExpenseName}`}
+                        title="Cambiar el monto o el reparto"
+                      >
+                        <Pencil size={13} />
+                      </button>
                     </span>
                     <span
                       className="cc-mono"

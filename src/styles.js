@@ -198,6 +198,26 @@ export const STYLES = `
 /* En la leyenda el punto siempre se ve, aunque en las celdas esté escondido. */
 .cc-cal-leyenda .cc-cal-punto { display: inline-block; }
 
+/* El reparto de un gasto fijo, dentro de su formulario. */
+.cc-reparto-fila { display: grid; grid-template-columns: 1fr 110px auto; gap: 8px;
+  align-items: center; margin-top: 8px; }
+.cc-reparto-pie { display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+/* Un reparto que suma más que el total no es un aviso menor: son cuentas que
+   no cierran, y tiene que verse como error y no como nota al pie. */
+.cc-reparto-mal { font-size: 12px; font-weight: 600; color: var(--expense); }
+
+/* Lápiz discreto al lado de un nombre: se ve cuando lo buscas y no compite
+   con el botón de la fila, que es la acción principal. */
+.cc-icon-btn { border: none; background: transparent; padding: 2px; margin-left: 2px;
+  color: var(--ink-soft); cursor: pointer; display: inline-flex; align-items: center;
+  border-radius: 4px; opacity: .55; }
+.cc-icon-btn:hover { opacity: 1; background: rgba(32,43,56,0.06); }
+
+@media (max-width: 520px) {
+  .cc-reparto-fila { grid-template-columns: 1fr 90px auto; }
+}
+
 /* En celular no cabe un nombre: se cambian los nombres por puntos y se deja
    la cifra del día, que es lo único que sigue siendo legible a ese tamaño. */
 @media (max-width: 700px) {

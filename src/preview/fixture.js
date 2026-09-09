@@ -162,6 +162,11 @@ export function buildValue(overrides = {}) {
     calendarioRejilla: monthGrid(estado, MES, '2026-09-09'),
     incomeSources: estado.incomeSources,
     handleEditDebt: () => {},
+    handleAddFixedShare: () => {},
+    handleUpdateFixedShare: () => {},
+    handleRemoveFixedShare: () => {},
+    handleAddPerson: () => null,
+
     editingDebtId: null,
     handleAddIncomeSource: () => {},
     handleUpdateIncomeSource: () => {},
@@ -201,7 +206,12 @@ export function buildValue(overrides = {}) {
     handleAddFixedExpense: (e) => e.preventDefault(),
     handleCancelFixedForm: () => {}, showFixedForm: false, setShowFixedForm: () => {},
     editingFixedId: null,
-    fixedForm: { name: '', category: 'servicios', amount: '', dueDay: '', paymentMethod: 'debito', cardId: '' },
+    /* HBO en edición, para probar el reparto con datos reales. */
+    fixedForm: {
+      name: 'HBO Max', category: 'entretenimiento', totalAmount: '12450',
+      shares: [{ id: 'shr-hbo-juanjo', personId: 'p-juanjo', amount: '4150' }],
+      dueDay: '12', paymentMethod: 'debito', cardId: '',
+    },
     setFixedForm: () => {},
     cardLabel: () => 'Visa 4417',
     proximosCobros: upcomingCharges(estado, 8, '2026-09-08'),
