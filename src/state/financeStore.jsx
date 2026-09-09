@@ -44,7 +44,8 @@ export function FinanceProvider({ children }) {
   const [pendingChanges, setPendingChanges] = useState(false);
   const [exporting, setExporting] = useState('');   // '' | 'trabajando' | mensaje de error
   /* Arranca en El mes: es la pregunta que la app existe para responder. */
-  const [activeTab, setActiveTab] = useState('mes');
+  /* Resumen de entrada: es la foto, y desde ahí se baja al detalle. */
+  const [activeTab, setActiveTab] = useState('resumen');
   const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
