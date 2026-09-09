@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react';
 import { AlertTriangle, Loader2, CloudOff, Check } from 'lucide-react';
 import { STYLES } from './styles.js';
 import { FinanceProvider, useFinance } from './state/financeStore';
@@ -8,17 +9,34 @@ import FormMovimiento from './components/forms/FormMovimiento';
 import FormGastoFijo from './components/forms/FormGastoFijo';
 import FormBucket from './components/forms/FormBucket';
 import FormDeuda from './components/forms/FormDeuda';
-import Resumen from './views/Resumen';
-import Mes from './views/Mes';
-import Calendario from './views/Calendario';
-import Cobros from './views/Cobros';
-import Tarjetas from './views/Tarjetas';
-import Buckets from './views/Buckets';
-import Deuda from './views/Deuda';
-import Movimientos from './views/Movimientos';
-import GastosFijos from './views/GastosFijos';
-import Configuracion from './views/Configuracion';
-import PrintReport from './views/PrintReport';
+/*
+ * Las pantallas se cargan cuando se abren, no al arrancar.
+ *
+ * Antes el bundle traía las diez de una, aunque solo mires una: las gráficas
+ * de Resumen, la tabla de amortización de Deuda y el reporte de impresión
+ * viajaban en el arranque incluso si nunca abrías esas pestañas. En el celular
+ * con datos eso es medio segundo largo antes de ver nada.
+ *
+ * El resto de la app no cambia: cada pantalla sigue siendo el mismo componente
+ * y el estado vive en el contexto, así que cambiar de pestaña no recarga nada
+ * ya cargado. Lo único que se difiere es la PRIMERA vez que se abre cada una.
+ */
+const Resumen = lazy(() => import('./views/Resumen'));
+const Mes = lazy(() => import('./views/Mes'));
+const Calendario = lazy(() => import('./views/Calendario'));
+const Cobros = lazy(() => import('./views/Cobros'));
+const Tarjetas = lazy(() => import('./views/Tarjetas'));
+const Buckets = lazy(() => import('./views/Buckets'));
+const Deuda = lazy(() => import('./views/Deuda'));
+const Movimientos = lazy(() => import('./views/Movimientos'));
+const GastosFijos = lazy(() => import('./views/GastosFijos'));
+const Configuracion = lazy(() => import('./views/Configuracion'));
+
+/*
+ * El reporte solo se dibuja al imprimir —vive detrás de un @media print— así
+ * que cargarlo siempre era pagar por algo que casi nunca se usa.
+ */
+const PrintReport = lazy(() => import('./views/PrintReport'));
 
 const TABS = {
   mes: Mes,
@@ -32,6 +50,18 @@ const TABS = {
   gastosfijos: GastosFijos,
   configuracion: Configuracion,
 };
+
+/*
+ * Mientras llega el trozo de la pantalla. Ocupa alto para que el layout no dé
+ * un salto cuando entra el contenido.
+ */
+function Cargando() {
+  return (
+    <div className="cc-loading" style={{ minHeight: 280 }}>
+      <Loader2 size={22} className="cc-spin" />
+    </div>
+  );
+}
 
 function Shell() {
   const {
@@ -85,7 +115,7 @@ function Shell() {
           {!offline && !saveError && pendingChanges && (
             <div className="cc-banner cc-banner-ok"><Check size={15} /> Guardando…</div>
           )}
-          <ActiveView />
+          <Suspense fallback={<Cargando />}><ActiveView /></Suspense>
         </div>
 
         <BotonAgregar />
@@ -129,7 +159,7 @@ function Shell() {
         </Modal>
 
       </div>
-      <PrintReport />
+      <Suspense fallback={null}><PrintReport /></Suspense>
     </>
   );
 }

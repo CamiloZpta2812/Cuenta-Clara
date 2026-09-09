@@ -1,18 +1,28 @@
-import {
-  AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine,
-} from 'recharts';
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import {
   TrendingUp, TrendingDown, ShoppingBag, Check, Landmark, Sheet, AlertTriangle, Activity, Wallet,
 } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
 import { monthLabel, todayStr } from '../lib/dates.js';
-import { fmtCOP, fmtShort } from '../lib/money.js';
+import { fmtCOP } from '../lib/money.js';
 import StatCard from '../components/StatCard';
 import RecCard from '../components/RecCard';
 import EmptyState from '../components/EmptyState';
 import { useFinance } from '../state/financeStore';
+
+/*
+ * Las gráficas llegan aparte. Son 108 KB comprimidos de recharts —más que
+ * todo el resto de la app junta— y esta pantalla es la que abre por defecto,
+ * así que traerlas en el arranque retrasaba el saldo y los cuatro números por
+ * algo que se puede pintar un instante después. Ver components/Graficas.jsx.
+ */
+const Pulso = lazy(() => import('../components/Graficas').then((m) => ({ default: m.Pulso })));
+const Reparto = lazy(() => import('../components/Graficas').then((m) => ({ default: m.Reparto })));
+
+/* Reserva el alto exacto de la gráfica: si no, al llegar empuja la página. */
+function HuecoGrafica({ alto }) {
+  return <div style={{ height: alto }} aria-hidden="true" />;
+}
 
 /*
  * Resumen: la foto de cómo va la plata.
@@ -37,15 +47,6 @@ const diaLargo = (d) => {
   return new Date(y, m - 1, dia).toLocaleDateString('es-CO', { day: 'numeric', month: 'long' });
 };
 
-const ejeFecha = (d) => {
-  const [, m, dia] = String(d).split('-');
-  return `${parseInt(dia, 10)}/${parseInt(m, 10)}`;
-};
-
-const tooltipStyle = {
-  fontFamily: 'Poppins', fontSize: 13, borderRadius: 8, border: `1px solid ${COLORS.line}`,
-};
-
 /*
  * Qué está mirando el usuario cambia según si hay ancla: con ella la línea es
  * el saldo, sin ella es la variación. Decirlo mal es peor que no decir nada.
@@ -58,18 +59,6 @@ function PieDeLaGrafica() {
         ? 'Es el saldo de la cuenta día a día. Lo apartado en colchones ya está descontado, aunque siga siendo tuyo.'
         : 'Es cuánto te has movido en la ventana, no el saldo del banco: arranca en cero porque todavía no le has dicho con cuánto cuentas.'}
     </p>
-  );
-}
-
-function PulsoTooltip({ active, payload }) {
-  if (!active || !payload || !payload.length) return null;
-  const p = payload[0].payload;
-  return (
-    <div className="cc-card" style={{ padding: '8px 12px', fontSize: 12.5 }}>
-      <div style={{ fontWeight: 600 }}>{p.date}</div>
-      <div className="cc-mono">{fmtCOP(p.saldo)}</div>
-      {p.label && <div style={{ color: COLORS.inkSoft }}>{p.label}</div>}
-    </div>
   );
 }
 
@@ -230,32 +219,9 @@ export default function Resumen() {
           />
         ) : (
           <>
-            <ResponsiveContainer width="100%" height={230}>
-              <AreaChart data={cashFlow} margin={{ top: 6, right: 6, left: -14, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="pulso" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={COLORS.income} stopOpacity={0.28} />
-                    <stop offset="100%" stopColor={COLORS.income} stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={COLORS.line} vertical={false} />
-                <XAxis
-                  dataKey="date" tickFormatter={ejeFecha} minTickGap={28}
-                  tick={{ fontSize: 11, fill: COLORS.inkSoft }}
-                  axisLine={{ stroke: COLORS.line }} tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: COLORS.inkSoft }} axisLine={false}
-                  tickLine={false} tickFormatter={fmtShort} width={46}
-                />
-                <ReferenceLine y={0} stroke={COLORS.inkSoft} strokeDasharray="4 4" />
-                <Tooltip content={<PulsoTooltip />} />
-                <Area
-                  type="monotone" dataKey="saldo" stroke={COLORS.income}
-                  strokeWidth={2.5} fill="url(#pulso)" dot={false} activeDot={{ r: 4 }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            <Suspense fallback={<HuecoGrafica alto={230} />}>
+              <Pulso data={cashFlow} />
+            </Suspense>
             <PieDeLaGrafica />
           </>
         )}
@@ -273,17 +239,9 @@ export default function Resumen() {
           />
         ) : (
           <div className="cc-split">
-            <ResponsiveContainer width="100%" height={240}>
-              <PieChart>
-                <Pie
-                  data={planDistribution} dataKey="value" nameKey="name"
-                  innerRadius={60} outerRadius={98} paddingAngle={2}
-                >
-                  {planDistribution.map((e) => <Cell key={e.name} fill={e.color} />)}
-                </Pie>
-                <Tooltip formatter={(v) => fmtCOP(v)} contentStyle={tooltipStyle} />
-              </PieChart>
-            </ResponsiveContainer>
+            <Suspense fallback={<HuecoGrafica alto={240} />}>
+              <Reparto data={planDistribution} />
+            </Suspense>
 
             {/*
               La leyenda va como lista y no dentro de la gráfica: con seis
