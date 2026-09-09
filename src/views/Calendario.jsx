@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   CalendarClock, TrendingUp, AlertTriangle, HelpCircle, Wallet, MapPin,
 } from 'lucide-react';
@@ -5,6 +6,7 @@ import { COLORS } from '../lib/constants.js';
 import { monthLabel } from '../lib/dates.js';
 import { fmtCOP, fmtShort } from '../lib/money.js';
 import EmptyState from '../components/EmptyState';
+import Modal from '../components/Modal';
 import { useFinance } from '../state/financeStore';
 
 /*
@@ -104,10 +106,81 @@ function Tramo({ p }) {
 
 const DIAS_SEMANA = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
-/* Lo que se ve al pasar el mouse por un día: el detalle sin gastar celda. */
-function detalleDelDia(items, total) {
-  const lineas = items.map((x) => `${x.name}: ${fmtCOP(x.amount)}`);
-  return [...lineas, `= ${fmtCOP(total)}`].join('\n');
+/* "Miércoles 9 de septiembre" — el título de la ventana de un día. */
+function fechaLarga(d) {
+  const [y, m, x] = String(d).split('-').map(Number);
+  const t = new Date(y, m - 1, x)
+    .toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
+    /* es-CO mete una coma tras el día de la semana: "martes, 15 de septiembre". */
+    .replace(',', '');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/*
+ * El detalle de un día, en ventana flotante.
+ *
+ * La cuadrícula muestra hasta tres nombres por celda y el resto queda en un
+ * "+N más". Con el mouse encima se veía el resto en el título nativo del
+ * navegador, pero en el celular no hay mouse — y el celular es donde más se
+ * mira esto. Un toque abre lo mismo, y de paso cabe lo que en la celda nunca
+ * cupo: a qué quincena pertenece el día y con cuánto termina esa quincena.
+ */
+function DetalleDia({ dia: d, tramo, onClose }) {
+  if (!d) return null;
+  const total = d.items.reduce((s, x) => s + x.amount, 0);
+
+  return (
+    <Modal open title={fechaLarga(d.date)} onClose={onClose}>
+      {tramo && (
+        <p className="cc-page-sub" style={{ marginTop: 0 }}>
+          {d.startsPeriod
+            ? <>Aquí empieza la quincena que va hasta el {dia(tramo.endExclusive)}.</>
+            : <>Está en la quincena del {dia(tramo.start)} al {dia(tramo.endExclusive)}.</>}
+          {' '}Al final de esa quincena te quedan{' '}
+          <strong className="cc-mono">{fmtCOP(tramo.leftover)}</strong>.
+        </p>
+      )}
+
+      {d.items.length === 0 ? (
+        <p className="cc-stat-sub" style={{ marginBottom: 0 }}>
+          Este día no se mueve nada de lo planeado. Lo que gastes cuenta dentro de
+          la vida diaria de la quincena.
+        </p>
+      ) : (
+        <div className="cc-commit-list">
+          {d.items.map((x) => (
+            <div key={x.id} className="cc-plan-row" style={{ gridTemplateColumns: '1fr auto' }}>
+              <span className="cc-plan-concept">
+                <span
+                  style={{
+                    width: 10, height: 10, borderRadius: 3, flexShrink: 0,
+                    background: COLOR_POR_TIPO[x.kind],
+                  }}
+                />
+                {x.name}
+              </span>
+              <span
+                className="cc-mono"
+                style={{ color: x.amount > 0 ? COLORS.income : COLORS.ink }}
+              >
+                {fmtCOP(x.amount)}
+              </span>
+            </div>
+          ))}
+
+          <div
+            className="cc-plan-row cc-cal-neto"
+            style={{ gridTemplateColumns: '1fr auto' }}
+          >
+            <span>Ese día</span>
+            <span className="cc-mono" style={{ color: total > 0 ? COLORS.income : COLORS.ink }}>
+              {fmtCOP(total)}
+            </span>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
 }
 
 /*
@@ -124,13 +197,14 @@ function detalleDelDia(items, total) {
  */
 function Rejilla({ semanas, tramos }) {
   const hoy = semanas.flat().find((d) => d && d.isToday);
+  const [abierto, setAbierto] = useState(null);
 
   return (
     <div className="cc-card" style={{ marginTop: 14 }}>
       <p className="cc-chart-title">El mes de un vistazo</p>
       <p className="cc-chart-sub">
-        El color de fondo dice de qué quincena es cada día. La cifra de la esquina es
-        lo que se mueve ese día.
+        El color de fondo dice de qué quincena es cada día y la cifra de la esquina es
+        lo que se mueve. Toca un día para ver el detalle.
       </p>
 
       <div className="cc-cal">
@@ -152,10 +226,15 @@ function Rejilla({ semanas, tramos }) {
           ].filter(Boolean).join(' ');
 
           return (
-            <div
-              key={d.date} className={clases}
-              /* El título nativo da el detalle sin gastar espacio en la celda. */
-              title={d.items.length ? detalleDelDia(d.items, total) : undefined}
+            /*
+             * Botón y no div: se puede llegar con el teclado y el lector de
+             * pantalla lo anuncia como algo que se puede abrir. El title nativo
+             * se fue con el clic — decía lo mismo, pero solo con mouse.
+             */
+            <button
+              type="button" key={d.date} className={clases}
+              onClick={() => setAbierto(d)}
+              aria-label={`${d.day}, ${d.items.length} movimiento${d.items.length === 1 ? '' : 's'}`}
             >
               <span className="cc-cal-fila1">
                 <span className="cc-cal-num">
@@ -190,10 +269,16 @@ function Rejilla({ semanas, tramos }) {
                 {entra.map((x) => <i key={x.id} className="cc-cal-punto entra" />)}
                 {sale.map((x) => <i key={x.id} className={`cc-cal-punto ${x.kind}`} />)}
               </span>
-            </div>
+            </button>
           );
         })}
       </div>
+
+      <DetalleDia
+        dia={abierto}
+        tramo={abierto && abierto.periodIndex !== null ? tramos[abierto.periodIndex] : null}
+        onClose={() => setAbierto(null)}
+      />
 
       <div className="cc-cal-leyenda">
         <span><i className="cc-cal-punto entra" /> entra</span>
