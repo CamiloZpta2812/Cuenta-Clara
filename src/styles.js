@@ -129,6 +129,21 @@ export const STYLES = `
   align-items: baseline; font-size: 12.5px; }
 .cc-quincena-dia { color: var(--ink-soft); font-size: 11px; }
 .cc-quincena-vida { color: var(--ink-soft); font-style: italic; }
+
+/* Fuentes de ingreso, en Configuración. Cada fila es una fuente; en pantalla
+   angosta los campos se apilan solos. */
+.cc-ingreso-fila { display: grid; gap: 10px; align-items: end;
+  grid-template-columns: minmax(140px, 2fr) minmax(100px, 1fr) 90px auto;
+  padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.cc-ingreso-fila:last-child { border-bottom: 0; padding-bottom: 0; }
+.cc-ingreso-flags { display: flex; align-items: center; gap: 12px; padding-bottom: 2px; }
+.cc-check { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px;
+  color: var(--ink-soft); white-space: nowrap; cursor: pointer; }
+
+@media (max-width: 720px) {
+  .cc-ingreso-fila { grid-template-columns: 1fr 1fr; }
+  .cc-ingreso-flags { grid-column: 1 / -1; }
+}
 .cc-chart-sub { font-size: 12px; color: var(--ink-soft); margin: 0 0 10px 0; }
 
 .cc-rec-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }

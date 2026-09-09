@@ -44,6 +44,26 @@ export default function FormBucket() {
           Esto sale del plan del mes, así que baja lo que te queda para abonarle a la deuda.
         </span>
       </div>
+      {/*
+        * El día importa tanto como el monto. Apartar 300.000 el 15 o el 30 no
+        * cambia el mes en total, pero sí cambia cuál de las dos quincenas
+        * queda apretada — y es la única fecha del mes que decides tú solo, sin
+        * negociarla con el banco ni con nadie. Ver views/Calendario.jsx.
+        */}
+      {bucketForm.movesCash !== false && (
+        <div className="cc-field">
+          <label>¿Qué día apartas?</label>
+          <input
+            className="cc-input" type="number" min="1" max="31" placeholder="15"
+            value={bucketForm.depositDay}
+            onChange={(e) => setBucketForm((f) => ({ ...f, depositDay: e.target.value }))}
+          />
+          <span className="cc-stat-sub" style={{ fontSize: 11 }}>
+            Opcional, pero sin esto el Calendario no sabe en qué quincena cae.
+          </span>
+        </div>
+      )}
+
       {bucketForm.kind === 'meta' && (
         <>
           <div className="cc-field">

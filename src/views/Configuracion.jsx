@@ -3,6 +3,7 @@ import { COLORS, COLOR_CHOICES } from '../lib/constants.js';
 import { ICON_CHOICES, getCategory } from '../lib/categories.js';
 import IconCircle from '../components/IconCircle';
 import { supabase } from '../supabaseClient.js';
+import { fmtCOP } from '../lib/money.js';
 import { useFinance } from '../state/financeStore';
 export default function Configuracion() {
   const {
@@ -23,9 +24,14 @@ export default function Configuracion() {
     setNewCatIngreso,
     setPinForm,
     userEmail,
+    incomeSources,
+    handleAddIncomeSource,
+    handleUpdateIncomeSource,
+    handleDeleteIncomeSource,
   } = useFinance();
 
   const subTabs = [
+    { id: 'ingresos', label: 'Ingresos' },
     { id: 'categorias', label: 'Categorías' },
     { id: 'pin', label: 'Contraseña' },
     { id: 'datos', label: 'Datos y sesión' },
@@ -47,6 +53,13 @@ export default function Configuracion() {
           </button>
         ))}
       </div>
+
+      {configTab === 'ingresos' && <Ingresos
+        fuentes={incomeSources}
+        onAgregar={handleAddIncomeSource}
+        onCambiar={handleUpdateIncomeSource}
+        onBorrar={handleDeleteIncomeSource}
+      />}
 
       {configTab === 'categorias' && (
         <>
@@ -208,4 +221,107 @@ export default function Configuracion() {
     </>
   );
 
+}
+
+/*
+ * Las fuentes de ingreso.
+ *
+ * Se cargaban y se guardaban desde el primer día, pero no había ni una
+ * pantalla para tocarlas: existían solo porque las había creado un script.
+ * Mientras solo hacía falta el monto no se notaba —nadie cambia de sueldo cada
+ * mes—, pero el Calendario necesita el DÍA en que cae cada una, y el único
+ * camino para ponerlo era volver a abrir Supabase.
+ *
+ * "Abre quincena" es la casilla que hace el trabajo: separa el sueldo, que
+ * parte el mes en dos, de un ingreso chico que simplemente cae adentro.
+ */
+function Ingresos({ fuentes, onAgregar, onCambiar, onBorrar }) {
+  const total = (fuentes || [])
+    .filter((f) => f.active !== false)
+    .reduce((s, f) => s + (Number(f.expected) || 0), 0);
+
+  return (
+    <div className="cc-card">
+      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Fuentes de ingreso</div>
+      <p className="cc-stat-sub" style={{ marginBottom: 12 }}>
+        Lo que ESPERAS que entre, no lo que entró: lo que entró son movimientos, y la
+        app compara los dos. Si te pagan quincenal, pon una fuente por quincena — así
+        el Calendario sabe que la plata llega en dos pedazos.
+      </p>
+
+      {(fuentes || []).length === 0 && (
+        <p className="cc-stat-sub">Todavía no hay ninguna.</p>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {(fuentes || []).map((f) => (
+          <div key={f.id} className="cc-ingreso-fila">
+            <div className="cc-field">
+              <label>Nombre</label>
+              <input
+                className="cc-input" type="text" placeholder="Salario 1ª quincena"
+                value={f.name || ''}
+                onChange={(e) => onCambiar(f.id, { name: e.target.value })}
+              />
+            </div>
+            <div className="cc-field">
+              <label>Cuánto</label>
+              <input
+                className="cc-input" type="number" min="0" step="any" placeholder="1700000"
+                value={f.expected ?? ''}
+                onChange={(e) => onCambiar(f.id, { expected: parseFloat(e.target.value) || 0 })}
+              />
+            </div>
+            <div className="cc-field">
+              <label>Qué día</label>
+              <input
+                className="cc-input" type="number" min="1" max="31" placeholder="15"
+                value={f.day ?? ''}
+                onChange={(e) => onCambiar(f.id, {
+                  /* Vacío es null, no cero: cero no es un día del mes. */
+                  day: e.target.value === '' ? null : parseInt(e.target.value, 10) || null,
+                })}
+              />
+            </div>
+            <div className="cc-ingreso-flags">
+              <label className="cc-check">
+                <input
+                  type="checkbox" checked={!!f.startsPeriod}
+                  onChange={(e) => onCambiar(f.id, { startsPeriod: e.target.checked })}
+                />
+                Abre quincena
+              </label>
+              <label className="cc-check">
+                <input
+                  type="checkbox" checked={f.active !== false}
+                  onChange={(e) => onCambiar(f.id, { active: e.target.checked })}
+                />
+                Activa
+              </label>
+              <button
+                type="button" className="cc-btn cc-btn-outline cc-btn-sm"
+                onClick={() => onBorrar(f.id)} aria-label={`Borrar ${f.name || 'fuente'}`}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14 }}>
+        <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={onAgregar}>
+          <Plus size={14} /> Agregar fuente
+        </button>
+        <span className="cc-stat-sub">
+          Esperado al mes: <strong className="cc-mono">{fmtCOP(total)}</strong>
+        </span>
+      </div>
+
+      <p className="cc-stat-sub" style={{ marginTop: 10 }}>
+        <strong>Abre quincena</strong> marca los pagos que parten el mes. El sueldo sí;
+        un ingreso chico no, porque partiría el mes en pedazos que no corresponden a nada.
+      </p>
+    </div>
+  );
 }

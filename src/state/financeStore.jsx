@@ -131,7 +131,7 @@ export function FinanceProvider({ children }) {
   const [editingBucketId, setEditingBucketId] = useState(null);
   const [bucketForm, setBucketForm] = useState({
     name: '', kind: 'meta', liquid: true, movesCash: true,
-    monthlyAmount: '', targetAmount: '', targetDate: '',
+    monthlyAmount: '', depositDay: '', targetAmount: '', targetDate: '',
   });
 
   const [pinForm, setPinForm] = useState({ newPin: '', confirmPin: '' });
@@ -842,7 +842,7 @@ export function FinanceProvider({ children }) {
 
   const BUCKET_VACIO = {
     name: '', kind: 'meta', liquid: true, movesCash: true,
-    monthlyAmount: '', targetAmount: '', targetDate: '',
+    monthlyAmount: '', depositDay: '', targetAmount: '', targetDate: '',
   };
 
   /*
@@ -859,6 +859,8 @@ export function FinanceProvider({ children }) {
       liquid: !!bucketForm.liquid,
       movesCash: bucketForm.movesCash !== false,
       monthlyAmount: parseFloat(bucketForm.monthlyAmount) || 0,
+      /* Vacío es null, no cero: cero no es un día del mes. */
+      depositDay: bucketForm.depositDay === '' ? null : parseInt(bucketForm.depositDay, 10) || null,
       /* Un colchón no tiene objetivo: es margen, no una meta a la que llegar. */
       targetAmount: kind === 'meta' ? (parseFloat(bucketForm.targetAmount) || null) : null,
       targetDate: kind === 'meta' ? (bucketForm.targetDate || null) : null,
@@ -882,6 +884,7 @@ export function FinanceProvider({ children }) {
       liquid: b.liquid !== false,
       movesCash: b.movesCash !== false,
       monthlyAmount: b.monthlyAmount != null ? String(b.monthlyAmount) : '',
+      depositDay: b.depositDay != null ? String(b.depositDay) : '',
       targetAmount: b.targetAmount != null ? String(b.targetAmount) : '',
       targetDate: b.targetDate || '',
     });
@@ -929,6 +932,37 @@ export function FinanceProvider({ children }) {
           { id: uid(), amount: monto, date: hoy, month: monthKeyFromDate(hoy) }] }
       : b)));
     setBucketInputs((prev) => ({ ...prev, [bucketId]: '' }));
+  }
+
+  /* ---------- Fuentes de ingreso ---------- */
+
+  /*
+   * Las fuentes de ingreso se cargaban y se guardaban desde el primer día,
+   * pero no había ni una pantalla para tocarlas: existían solo porque las
+   * había creado un script. Cuando el calendario empezó a necesitar el día en
+   * que cae cada una, el único camino era volver a abrir Supabase.
+   *
+   * `expected` es lo que ESPERAS, no lo que entró: lo que entró son
+   * movimientos, y la app compara los dos.
+   */
+  function handleAddIncomeSource() {
+    setIncomeSources((prev) => [...prev, {
+      id: uid(), name: '', expected: 0, variable: true, active: true,
+      day: null, startsPeriod: false,
+    }]);
+  }
+
+  function handleUpdateIncomeSource(id, cambios) {
+    setIncomeSources((prev) => prev.map((f) => (f.id === id ? { ...f, ...cambios } : f)));
+  }
+
+  /*
+   * Borrar de verdad, no desactivar: para eso está el interruptor de activa.
+   * Una fuente que dejaste de recibir se desactiva —así el historial sigue
+   * teniendo sentido— y una que nunca debió existir se borra.
+   */
+  function handleDeleteIncomeSource(id) {
+    setIncomeSources((prev) => prev.filter((f) => f.id !== id));
   }
 
   /*
@@ -1150,6 +1184,9 @@ export function FinanceProvider({ children }) {
     handleCancelDebtForm,
     handleBucketMovement,
     handleAdjustBucketMonth,
+    handleAddIncomeSource,
+    handleUpdateIncomeSource,
+    handleDeleteIncomeSource,
     bucketAdjustments,
     handleCancelBucketForm,
     handleEditBucket,
