@@ -1,8 +1,8 @@
 -- =============================================================================
 -- AlDía — el desembolso del 8 de septiembre
 --
--- REQUISITO: haber corrido antes `update-03-compartidos-y-gasolina.sql` y
--- `schema-v4-saldo.sql`.
+-- REQUISITO: haber corrido antes `update-03-compartidos-y-gasolina.sql`,
+-- `schema-v4-saldo.sql` y `schema-v5-ajustes-del-mes.sql`.
 --
 -- NO BORRA NADA.
 --
@@ -120,7 +120,27 @@ begin
     set amount = excluded.amount, date = excluded.date, month = excluded.month;
 
   -- ===========================================================================
-  -- 5. El plan de septiembre, sin la cuota de la deuda
+  -- 5. Septiembre viene apretado: el colchón de seguridad, a la mitad
+  --
+  -- Con todo lo pendiente más los 750.000 de las deudas pequeñas, quedaban
+  -- 22.300 diarios para comer las tres semanas que faltan. Bajando el colchón
+  -- de seguridad a 150.000 quedan 29.400, que sí cubre el estimado.
+  --
+  -- Va como AJUSTE y no como cambio del colchón: el colchón sigue siendo de
+  -- 300.000 y en octubre vuelve solo. Cambiarle el monto habría dejado el
+  -- recorte puesto para siempre, y nadie se acuerda en noviembre de por qué
+  -- ahorra la mitad.
+  --
+  -- Es también la línea correcta para recortar: es margen sin destino, así que
+  -- saltárselo un mes no te deja debiendo nada. Recortar las deudas pequeñas o
+  -- el fondo con Sofi movería un compromiso con otra persona.
+  -- ===========================================================================
+  insert into public.bucket_adjustments (user_id, id, month, bucket_id, amount)
+  values (uid, 'aj-2026-09-seguridad', '2026-09', 'bkt-seguridad', 150000)
+  on conflict (user_id, month, bucket_id) do update set amount = excluded.amount;
+
+  -- ===========================================================================
+  -- 6. El plan de septiembre, sin la cuota de la deuda
   --
   -- La cuota de 446.413 estaba restando en septiembre y no debería: el crédito
   -- se desembolsó el 8 y la primera cuota es de octubre. Con ella adentro, el
@@ -136,7 +156,7 @@ begin
      set debt_payment = 0, updated_at = now()
    where user_id = uid and month = '2026-09';
 
-  raise notice 'Listo. Saldo anclado en 357.000 al 8 de septiembre, deuda desde esa fecha, cuatro fijos enlazados y la cooperativa marcada.';
+  raise notice 'Listo. Saldo en 357.000, deuda desde el 8, cuatro fijos enlazados, cooperativa marcada y el colchón de seguridad ajustado a 150.000 solo por septiembre.';
 end $$;
 
 
@@ -177,9 +197,14 @@ fijos_pendientes as (
 -- no es plata que haya que mover el 15.
 buckets_pendientes as (
   select b.name,
-         b.monthly_amount
-         - coalesce((select sum(s.amount) from public.bucket_shares s
-                      where s.user_id = b.user_id and s.bucket_id = b.id), 0)
+         coalesce(
+           -- Si el mes está ajustado, manda el ajuste sobre el monto de siempre.
+           (select a.amount from public.bucket_adjustments a
+             where a.user_id = b.user_id and a.bucket_id = b.id and a.month = '2026-09'),
+           b.monthly_amount
+           - coalesce((select sum(s.amount) from public.bucket_shares s
+                        where s.user_id = b.user_id and s.bucket_id = b.id), 0)
+         )
          - coalesce((select sum(c.amount) from public.bucket_contributions c
                       where c.user_id = b.user_id and c.bucket_id = b.id
                         and to_char(c.date, 'YYYY-MM') = '2026-09'), 0) as tu_parte
