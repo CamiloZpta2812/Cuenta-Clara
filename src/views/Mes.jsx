@@ -128,7 +128,14 @@ export default function Mes() {
         <p className="cc-hero-sub">
           {enRojo
             ? 'No alcanza ni para la cuota mínima. No es que no abones extra: falta plata para lo que ya está comprometido.'
-            : `Encima de la cuota de ${fmtCOP(plan.debtPayment)}, sin tocar nada de lo demás.`}
+            /*
+             * Sin cuota este mes la frase quedaba en "encima de la cuota de $0",
+             * que suena a error. Pasa de verdad el mes del desembolso: el
+             * crédito ya existe pero el banco todavía no cobra nada.
+             */
+            : (plan.debtPayment > 0
+              ? `Encima de la cuota de ${fmtCOP(plan.debtPayment)}, sin tocar nada de lo demás.`
+              : 'Este mes no hay cuota que pagar, así que es todo tuyo para abonar.')}
           {plan.locked && ' Mes cerrado: se juzga contra el plan que tenía entonces.'}
         </p>
       </div>

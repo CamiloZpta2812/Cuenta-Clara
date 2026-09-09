@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cashEvents, buildCashFlow } from './cashflow.js';
+import {
+  cashEvents, buildCashFlow, balanceAnchor, currentBalance,
+} from './cashflow.js';
 
 const estado = {
   transactions: [
@@ -95,4 +97,78 @@ test('los montos en cero no ensucian la gráfica', () => {
     debts: [],
   };
   assert.deepEqual(cashEvents(conCeros), []);
+});
+
+/* ------------------------------------------------------------ el ancla -- */
+
+const conAncla = {
+  ...estado,
+  balanceAnchor: { date: '2026-09-09', amount: 0 },
+};
+
+test('con ancla la línea deja de ser variación y pasa a ser el saldo', () => {
+  const puntos = buildCashFlow(conAncla, ['2026-09']);
+  const porFecha = Object.fromEntries(puntos.map((p) => [p.date, p.saldo]));
+
+  assert.equal(porFecha['2026-09-09'], 0, 'el punto del ancla');
+  assert.equal(porFecha['2026-09-10'], -446_413, 'la cuota deja la cuenta en rojo');
+  assert.equal(porFecha['2026-09-15'], 1_253_587, 'la quincena levanta desde ahí');
+  assert.equal(porFecha['2026-09-20'], 1_206_287);
+  assert.equal(porFecha['2026-09-25'], 1_226_287);
+});
+
+test('lo anterior al ancla no se dibuja ni se arrastra', () => {
+  // El arriendo del 1 y el aporte del 5 ya están dentro de "hoy tengo 0".
+  const fechas = buildCashFlow(conAncla, ['2026-09']).map((p) => p.date);
+  assert.deepEqual(fechas, ['2026-09-09', '2026-09-10', '2026-09-15', '2026-09-20', '2026-09-25']);
+});
+
+test('lo del mismo día del ancla ya viene contado en ella', () => {
+  /*
+   * El saldo que lees en el banco a las 6 de la tarde ya trae el almuerzo de
+   * las 12. Volver a restarlo lo cobraría dos veces.
+   */
+  const mismoDia = {
+    transactions: [{ id: 'x', type: 'gasto', amount: 30_000, category: 'alimentacion', date: '2026-09-09' }],
+    buckets: [], debts: [],
+    balanceAnchor: { date: '2026-09-09', amount: 500_000 },
+  };
+  assert.equal(currentBalance(mismoDia, '2026-09-30'), 500_000);
+});
+
+test('un ancla en cero es un ancla, no la falta de una', () => {
+  assert.deepEqual(balanceAnchor(conAncla), { date: '2026-09-09', amount: 0 });
+  assert.equal(currentBalance(conAncla, '2026-09-30'), 1_226_287);
+});
+
+test('sin ancla el saldo es null, no cero', () => {
+  // Cero diría "no tienes nada"; lo cierto es que nadie ha dicho de cuánto parte.
+  assert.equal(balanceAnchor(estado), null);
+  assert.equal(currentBalance(estado, '2026-09-30'), null);
+  assert.equal(currentBalance({}), null);
+});
+
+test('el saldo de hoy no cuenta lo que viene después', () => {
+  assert.equal(currentBalance(conAncla, '2026-09-16'), 1_253_587, 'la quincena sí, el granizado no');
+});
+
+test('sin ancla la curva sigue arrancando en cero, como antes', () => {
+  assert.equal(buildCashFlow(estado, ['2026-09'])[0].saldo, -300_000);
+});
+
+test('un aporte a un pote compartido baja el saldo por lo tuyo, no por el pote', () => {
+  /*
+   * Antes la curva restaba el monto guardado tal cual, y como ese monto era el
+   * del pote, un aporte a los gatos bajaba el saldo el doble de lo que salió
+   * de la cuenta. Ahora el aporte YA viene en plata tuya.
+   */
+  const conPote = {
+    transactions: [],
+    debts: [],
+    buckets: [{ id: 'gatos', name: 'Colchón gatos', monthlyAmount: 130_000,
+      shares: [{ id: 's', personId: 'p-sofi', amount: 65_000 }],
+      contributions: [{ id: 'a1', amount: 65_000, date: '2026-09-15' }] }],
+    balanceAnchor: { date: '2026-09-08', amount: 357_000 },
+  };
+  assert.equal(currentBalance(conPote, '2026-09-30'), 292_000);
 });

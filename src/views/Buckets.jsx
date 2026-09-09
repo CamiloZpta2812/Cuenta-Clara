@@ -1,4 +1,5 @@
-import { PiggyBank, Shield, Plus, Trash2, Lock, Check, Pencil } from 'lucide-react';
+import { useState } from 'react';
+import { PiggyBank, Shield, Plus, Trash2, Lock, Check, Pencil, SlidersHorizontal } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
 import { monthKeyFromDate, currentMonthKey } from '../lib/dates.js';
 import { myBucketShare } from '../lib/month.js';
@@ -32,7 +33,12 @@ function movidoEnMes(b, mes) {
     .reduce((s, c) => s + (Number(c.amount) || 0), 0);
 }
 
-function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar, nombreDe, gastadoEnMes }) {
+function Tarjeta({
+  bucket, input, onInput, onMover, onBorrar, onEditar, nombreDe, gastadoEnMes,
+  ajuste, onAjustar,
+}) {
+  const [ajustando, setAjustando] = useState(false);
+  const [montoAjuste, setMontoAjuste] = useState('');
   const total = Number(bucket.monthlyAmount) || 0;
   const mio = myBucketShare(bucket);
   const compartido = (bucket.shares || []).length > 0;
@@ -40,19 +46,27 @@ function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar, nombreDe
 
   /*
    * Una reserva no tiene aportes: se llena con los gastos que apuntan a ella.
-   * Un colchón de verdad sí, y ahí el saldo es lo que hay en el pote.
+   * Un colchón de verdad sí, y lo acumulado es lo que TÚ llevas puesto.
    */
   const saldo = reserva ? gastadoEnMes(bucket.id) : acumulado(bucket);
 
   /* Del pote sale lo de todos; de tu cuenta, tu fracción. */
   const factor = total > 0 ? mio / total : 1;
+  /*
+   * Lo que habría en el pote si el otro va al día. Es una estimación y se
+   * muestra como tal: la app no puede ver la cuenta de Sofi.
+   */
+  const enElPote = factor > 0 ? saldo / factor : saldo;
   /* Se lee en cada render y no al cargar el módulo: con la app abierta toda
      la noche, un valor congelado seguiría hablando del mes pasado. */
   const esteMes = reserva
     ? gastadoEnMes(bucket.id)
-    : movidoEnMes(bucket, currentMonthKey()) * factor;
-  /* Lo del mes se compara contra TU parte: es lo que sale de tu cuenta. */
-  const planeado = mio;
+    : movidoEnMes(bucket, currentMonthKey());
+  /*
+   * Lo del mes se compara contra TU parte: es lo que sale de tu cuenta. Salvo
+   * que este mes esté ajustado, y entonces se compara contra lo que decidiste.
+   */
+  const planeado = ajuste ? Number(ajuste.amount) || 0 : mio;
   const falta = planeado - esteMes;
   const conObjetivo = bucket.kind === 'meta' && bucket.targetAmount > 0;
   const pct = conObjetivo ? Math.min(100, (Math.max(0, saldo) / bucket.targetAmount) * 100) : null;
@@ -128,7 +142,7 @@ function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar, nombreDe
             <strong className="cc-mono">{fmtCOP(saldo)}</strong>
             {!reserva && compartido && (
               <span style={{ color: COLORS.inkSoft }}>
-                {' '}· tu parte, {fmtCOP(saldo * factor)}
+                {' '}· en el pote irían {fmtCOP(enElPote)} si cada uno va al día
               </span>
             )}
             {reserva && planeado > 0 && (
@@ -144,9 +158,11 @@ function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar, nombreDe
         * Lo del mes va aparte del acumulado a propósito: son dos preguntas
         * distintas. "¿Ya aparté lo de este mes?" y "¿alcanza si pasa algo?".
         */}
-      {planeado > 0 && !reserva && (
-        <div className="cc-goal-nums" style={{ justifyContent: 'flex-start', gap: 8 }}>
-          {falta <= 0 ? (
+      {!reserva && (
+        <div className="cc-goal-nums" style={{ justifyContent: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+          {planeado <= 0 ? (
+            <span style={{ color: COLORS.inkSoft }}>Este mes te lo saltas</span>
+          ) : falta <= 0 ? (
             <span style={{ color: COLORS.income, display: 'flex', alignItems: 'center', gap: 6 }}>
               <Check size={13} /> Este mes ya apartaste {fmtCOP(esteMes)}
             </span>
@@ -154,6 +170,51 @@ function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar, nombreDe
             <span style={{ color: COLORS.inkSoft }}>
               Este mes llevas {fmtCOP(esteMes)} de {fmtCOP(planeado)} — faltan {fmtCOP(falta)}
             </span>
+          )}
+
+          {/*
+            * Ajustar cambia SOLO este mes. Es la diferencia con editar el
+            * bucket, que cambia el monto de aquí en adelante — y era la única
+            * opción que había, así que un mes flojo se volvía un recorte
+            * permanente por olvido.
+            */}
+          {ajustando ? (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                className="cc-input" type="number" min="0" step="any"
+                style={{ maxWidth: 130 }} placeholder={String(Math.round(mio))}
+                value={montoAjuste} onChange={(e) => setMontoAjuste(e.target.value)}
+              />
+              <button
+                type="button" className="cc-btn cc-btn-primary cc-btn-sm"
+                onClick={() => { onAjustar(bucket.id, montoAjuste); setAjustando(false); }}
+              >
+                Solo este mes
+              </button>
+              <button
+                type="button" className="cc-btn cc-btn-outline cc-btn-sm"
+                onClick={() => setAjustando(false)}
+              >
+                Cancelar
+              </button>
+            </span>
+          ) : ajuste ? (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: COLORS.inkSoft }}>
+              <span>· ajustado desde {fmtCOP(mio)}</span>
+              <button
+                type="button" className="cc-btn cc-btn-outline cc-btn-sm"
+                onClick={() => onAjustar(bucket.id, '')}
+              >
+                Volver a lo normal
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button" className="cc-btn cc-btn-outline cc-btn-sm"
+              onClick={() => { setMontoAjuste(String(Math.round(mio))); setAjustando(true); }}
+            >
+              <SlidersHorizontal size={13} /> Ajustar este mes
+            </button>
           )}
         </div>
       )}
@@ -164,19 +225,31 @@ function Tarjeta({ bucket, input, onInput, onMover, onBorrar, onEditar, nombreDe
           etiquetes con ella. Registra la tanqueada como un movimiento normal y escógela.
         </p>
       ) : (
-      <div className="cc-inline-form">
-        <input
-          className="cc-input" type="number" min="0" step="any" placeholder="Monto"
-          value={input || ''}
-          onChange={(e) => onInput(bucket.id, e.target.value)}
-        />
-        <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => onMover(bucket.id, 1)}>
-          Aportar
-        </button>
-        <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => onMover(bucket.id, -1)}>
-          {bucket.kind === 'colchon' ? 'Usar' : 'Retirar'}
-        </button>
-      </div>
+      <>
+        <div className="cc-inline-form">
+          <input
+            className="cc-input" type="number" min="0" step="any" placeholder="Monto"
+            value={input || ''}
+            onChange={(e) => onInput(bucket.id, e.target.value)}
+          />
+          <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => onMover(bucket.id, 1)}>
+            Aportar
+          </button>
+          <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => onMover(bucket.id, -1)}>
+            {bucket.kind === 'colchon' ? 'Usar' : 'Retirar'}
+          </button>
+        </div>
+        {/*
+          * En un pote compartido los dos botones hablan de plata distinta, y
+          * sin decirlo uno teclea el mismo número para las dos cosas.
+          */}
+        {compartido && (
+          <p className="cc-page-sub" style={{ marginTop: 6, marginBottom: 0 }}>
+            Aportas lo TUYO; usas del pote. Sacar {fmtCOP(10_000)} del pote te
+            cuesta {fmtCOP(10_000 * factor)}.
+          </p>
+        )}
+      </>
       )}
     </div>
   );
@@ -186,7 +259,13 @@ export default function Buckets() {
   const {
     buckets, people, transactions, bucketInputs, setBucketInputs,     setShowBucketForm,     handleBucketMovement, handleDeleteBucket,
     handleEditBucket, handleCancelBucketForm,
+    bucketAdjustments, handleAdjustBucketMonth,
   } = useFinance();
+
+  /* Esta pantalla siempre habla del mes en curso, así que el ajuste también. */
+  const mesEnCurso = currentMonthKey();
+  const ajusteDe = (id) => (bucketAdjustments || [])
+    .find((a) => a.month === mesEnCurso && a.bucketId === id) || null;
 
   const metas = buckets.filter((b) => b.kind !== 'colchon');
   const colchones = buckets.filter((b) => b.kind === 'colchon');
@@ -216,6 +295,8 @@ export default function Buckets() {
     onEditar: handleEditBucket,
     nombreDe,
     gastadoEnMes,
+    ajuste: ajusteDe(b.id),
+    onAjustar: (id, monto) => handleAdjustBucketMonth(id, monto, mesEnCurso),
   });
 
   return (

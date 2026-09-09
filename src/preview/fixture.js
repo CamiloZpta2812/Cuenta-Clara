@@ -1,6 +1,6 @@
 import { monthSummary, targetDebt, simulatePlanChange } from '../lib/month.js';
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
-import { buildCashFlow } from '../lib/cashflow.js';
+import { buildCashFlow, currentBalance } from '../lib/cashflow.js';
 import { upcomingCharges } from '../lib/upcoming.js';
 import { buildRecommendations, getStatus } from '../lib/insights.js';
 import { COLORS } from '../lib/constants.js';
@@ -79,10 +79,16 @@ export const estado = {
   debts: [
     { id: 'debt-li', name: 'Libre inversión Bancolombia', totalAmount: 14_000_000,
       interestRate: 1.67, monthlyPayment: 446_413, fixedPayment: 446_413,
-      payoffMode: 'reducir-plazo', currentBalance: 13_100_800, startDate: '2026-09-01',
+      payoffMode: 'reducir-plazo', currentBalance: 13_100_800, startDate: '2026-09-08',
       currency: 'COP',
       // Cuota + abono extra, con el saldo que quedó según el modelo.
       payments: [{ id: 'pd-1', amount: 1_133_000, date: '2026-09-10' }] },
+  ],
+  /* El día del desembolso: de ahí arranca el saldo. */
+  balanceAnchor: { date: '2026-09-08', amount: 357_000 },
+  /* Septiembre viene apretado: el colchón de seguridad va a la mitad. */
+  bucketAdjustments: [
+    { id: 'aj-seg', month: MES, bucketId: 'bkt-seg', amount: 150_000 },
   ],
   monthlyPlans: [
     { month: MES, expectedIncome: 3_600_000, fixedExpenses: 746_000, debtPayment: 446_413,
@@ -143,6 +149,11 @@ export function buildValue(overrides = {}) {
     simulatePlan: (cambios) => simulatePlanChange(estado, cambios, MES, overrides.selectedDebtId),
     selectedDebtId: overrides.selectedDebtId || null,
     cashFlow: buildCashFlow(estado, ['2026-07', '2026-08', '2026-09']),
+    saldoReal: currentBalance(estado, '2026-09-30'),
+    bucketAdjustments: estado.bucketAdjustments,
+    handleAdjustBucketMonth: () => {},
+    balanceAnchor: estado.balanceAnchor,
+    handleAnchorBalance: () => {},
     planDistribution: (() => {
       const p = monthSummary(estado, MES).plan;
       return [

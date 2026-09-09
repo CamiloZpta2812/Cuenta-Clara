@@ -38,6 +38,7 @@ export const TABLES = [
   'buckets',
   'bucket_shares',
   'bucket_contributions',
+  'bucket_adjustments',
   'monthly_plans',
   'transactions',
 ];
@@ -173,6 +174,20 @@ export function incomeSourceToRow(i) {
   };
 }
 
+/*
+ * "Este mes este bucket va por tanto". Ver schema-v5-ajustes-del-mes.sql: el
+ * monto es TU parte para ese mes, no la del pote, porque es la cifra contra la
+ * que se juzga el mes.
+ */
+export function bucketAdjustmentToRow(a) {
+  return {
+    id: a.id,
+    month: a.month,
+    bucket_id: a.bucketId,
+    amount: num(a.amount) || 0,
+  };
+}
+
 export function collectionToRow(c) {
   return {
     id: c.id,
@@ -225,10 +240,19 @@ export function customCategoryToRow(c) {
   };
 }
 
+/*
+ * El ancla del saldo viaja en dos columnas y no en un jsonb porque es un dato
+ * que se consulta —"¿desde cuándo sé cuánto tengo?"— y no una bolsa de
+ * preferencias. Sin fecha no hay ancla, así que las dos se guardan o ninguna:
+ * un monto suelto no diría de qué día es.
+ */
 export function settingsToRow(state) {
+  const ancla = state.balanceAnchor;
   return {
     category_labels: state.categoryLabels || {},
     setup_completed_at: state.setupCompletedAt || null,
+    balance_anchor_date: ancla && ancla.date ? date(ancla.date) : null,
+    balance_anchor_amount: ancla && ancla.date ? num(ancla.amount) || 0 : null,
   };
 }
 
@@ -285,6 +309,7 @@ export function stateToRows(state) {
     income_sources: (state.incomeSources || []).map(incomeSourceToRow),
     fixed_expenses: (state.fixedExpenses || []).map(fixedExpenseToRow),
     fixed_expense_shares: shares,
+    bucket_adjustments: (state.bucketAdjustments || []).map(bucketAdjustmentToRow),
     collections: (state.collections || []).map(collectionToRow),
     debts: (state.debts || []).map(debtToRow),
     debt_payments: debtPayments,
@@ -383,6 +408,9 @@ export function rowsToState(rows) {
     collections: (rows.collections || []).map((c) => ({
       id: c.id, month: c.month, shareId: c.share_id, collectedAt: date(c.collected_at),
     })),
+    bucketAdjustments: (rows.bucket_adjustments || []).map((a) => ({
+      id: a.id, month: a.month, bucketId: a.bucket_id, amount: num(a.amount) || 0,
+    })),
     debts: (rows.debts || []).map((d) => ({
       id: d.id, name: d.name, totalAmount: num(d.total_amount),
       interestRate: num(d.interest_rate) || 0, monthlyPayment: num(d.monthly_payment) || 0,
@@ -418,6 +446,9 @@ export function rowsToState(rows) {
     })),
     categoryLabels: settings.category_labels || {},
     setupCompletedAt: settings.setup_completed_at || null,
+    balanceAnchor: settings.balance_anchor_date
+      ? { date: date(settings.balance_anchor_date), amount: num(settings.balance_anchor_amount) || 0 }
+      : null,
   };
 }
 

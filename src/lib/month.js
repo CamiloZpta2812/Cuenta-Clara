@@ -22,7 +22,7 @@
  * Todo es puro: recibe el estado, devuelve números. Ver mes.test.js.
  */
 
-import { monthKeyFromDate } from './dates.js';
+import { monthKeyFromDate, addMonths } from './dates.js';
 import { simulate, monthlyRateOf } from './amortization.js';
 
 const num = (v) => Number(v) || 0;
@@ -50,6 +50,23 @@ export function myShare(gastoFijo) {
  */
 export function myBucketShare(bucket) {
   return num(bucket.monthlyAmount) - sum(bucket.shares, (r) => r.amount);
+}
+
+/*
+ * Lo que TE toca poner en un bucket en un mes concreto.
+ *
+ * Casi siempre es tu parte de siempre. Pero un mes se puede ajustar —"este mes
+ * el colchón de seguridad va por 150.000 y no por 300.000"— y entonces manda
+ * el ajuste.
+ *
+ * Sin esto, bajarle a un colchón un mes obligaba a cambiar su monto mensual, y
+ * el recorte se quedaba puesto en octubre y en todos los que siguen. Un mes
+ * apretado se volvía un recorte permanente por olvido.
+ */
+export function plannedBucketShare(estado, bucket, month) {
+  const ajuste = (estado.bucketAdjustments || [])
+    .find((a) => a.month === month && a.bucketId === bucket.id);
+  return ajuste ? num(ajuste.amount) : myBucketShare(bucket);
 }
 
 /* Lo que te deben en total por un gasto fijo compartido. */
@@ -83,6 +100,37 @@ export function monthCollections(fixedExpenses, collections, month) {
   return filas;
 }
 
+/*
+ * El mes de la primera cuota de una deuda: el siguiente al del desembolso.
+ *
+ * Sin fecha de desembolso no hay forma de saberlo, y se devuelve null — que
+ * las que llaman leen como "lleva cobrándose desde siempre". Es la lectura
+ * segura: una deuda vieja sin fecha registrada sí tiene cuota este mes.
+ */
+export function firstInstallmentMonth(debt) {
+  if (!debt || !debt.startDate) return null;
+  return addMonths(monthKeyFromDate(debt.startDate), 1);
+}
+
+/*
+ * Si a esta deuda le toca cuota en `month`.
+ *
+ * Dos razones para que no: que el crédito se haya desembolsado este mes —la
+ * primera cuota es la del mes entrante— o que ya esté pago.
+ *
+ * Sin esto, un crédito desembolsado el 8 de septiembre le restaba su cuota al
+ * plan de septiembre: un mes que el banco no cobró. El plan se cobraba a sí
+ * mismo una cuota inexistente y el disponible salía 446.413 más pobre de lo
+ * que era.
+ */
+export function debtDueIn(debt, month) {
+  if (!debt) return false;
+  if (debt.currentBalance != null && num(debt.currentBalance) <= 0) return false;
+  if (!month) return true;
+  const primera = firstInstallmentMonth(debt);
+  return !primera || month >= primera;
+}
+
 /* ------------------------------------------------------------- planeado -- */
 
 /*
@@ -91,6 +139,27 @@ export function monthCollections(fixedExpenses, collections, month) {
  */
 export function storedPlan(estado, month) {
   return (estado.monthlyPlans || []).find((p) => p.month === month) || null;
+}
+
+/*
+ * El estimado de gasto variable que rige en un mes sin plan propio.
+ *
+ * Nadie crea la fila del mes nuevo: la de septiembre la puso la siembra y la
+ * de octubre no existe. Sin esto, `variableEstimate` de octubre era 0, y el
+ * plan decía que había 830.000 más disponibles para abonarle a la deuda de los
+ * que hay. El 1 de octubre la app iba a abrir con un número inventado, más
+ * alto que el de septiembre a pesar de que octubre trae la primera cuota.
+ *
+ * Se hereda del último mes planeado hasta esa fecha, no del último que exista:
+ * lo que gastas no se reinicia cada 1, pero un mes de julio tampoco debería
+ * juzgarse con un estimado que solo se fijó en septiembre.
+ */
+function inheritedVariable(estado, month) {
+  const previos = (estado.monthlyPlans || [])
+    .filter((p) => p.month && (!month || p.month <= month))
+    .sort((a, b) => (a.month < b.month ? -1 : a.month > b.month ? 1 : 0));
+  const ultimo = previos[previos.length - 1];
+  return ultimo ? num(ultimo.variableEstimate) : 0;
 }
 
 export function monthPlan(estado, month) {
@@ -118,14 +187,17 @@ export function monthPlan(estado, month) {
 
   const income = sum(fuentes, (f) => f.expected);
   const fixedExpenses = sum(fijos, myShare);
-  const debtPayment = sum(debts, (d) => d.fixedPayment);
+  const debtPayment = sum(debts.filter((d) => debtDueIn(d, month)), (d) => d.fixedPayment);
   /*
    * Solo tu parte, igual que en los gastos fijos: de un fondo común de 600.000
    * entre dos, lo que sale de tu cuenta son 300.000.
    */
-  const savings = sum(metas, myBucketShare);
-  const variable = num(guardado && guardado.variableEstimate);
-  const cushion = sum(colchones, myBucketShare);
+  const porMes = (b) => plannedBucketShare(estado, b, month);
+  const savings = sum(metas, porMes);
+  const variable = guardado
+    ? num(guardado.variableEstimate)
+    : inheritedVariable(estado, month);
+  const cushion = sum(colchones, porMes);
 
   const grossSurplus = income - fixedExpenses - debtPayment - savings - variable;
 
@@ -171,19 +243,24 @@ function frozenPlan(p) {
 const debtPayments = (estado) => (estado.debts || []).flatMap((d) => d.payments || []);
 
 /*
- * Cada aporte se lleva el tipo de su bucket, si mueve plata, y qué fracción del
- * pote es tuya. Un aporte de 130.000 a un colchón compartido a medias son
- * 65.000 saliendo de tu cuenta.
+ * Cada aporte se lleva el tipo de su bucket y si mueve plata.
+ *
+ * Un aporte guarda TU plata, no la del pote. Antes guardaba la del pote y aquí
+ * se multiplicaba por tu fracción, lo cual solo funcionaba si los dos metían
+ * lo suyo el mismo día y por partes iguales. En cuanto uno paga su mitad en
+ * dos quincenas —150.000 el 15 y 150.000 el 30— la cuenta se partía: la app
+ * leía cada depósito como si fuera del pote y te acreditaba la mitad, o sea
+ * 150.000 de los 300.000 que de verdad pusiste.
+ *
+ * La conversión sigue existiendo, pero se hace al RETIRAR y en la pantalla,
+ * donde se puede ver: sacar 200.000 del pote de los gatos te cuesta 100.000.
+ * Aportar no necesita conversión porque lo que aportas ya es tuyo.
  */
-const bucketContributions = (estado) => (estado.buckets || []).flatMap((b) => {
-  const total = num(b.monthlyAmount);
-  const mio = myBucketShare(b);
-  /* Sin monto mensual no hay proporción que sacar: el aporte es todo tuyo. */
-  const factor = total > 0 ? mio / total : 1;
-  return (b.contributions || []).map((c) => ({
-    ...c, kind: b.kind, movesCash: b.movesCash !== false, factor,
-  }));
-});
+const bucketContributions = (estado) => (estado.buckets || []).flatMap((b) => (
+  (b.contributions || []).map((c) => ({
+    ...c, kind: b.kind, movesCash: b.movesCash !== false,
+  }))
+));
 
 /* De qué tipo es la reserva a la que apunta un gasto, si es que apunta a una. */
 function reservaKind(estado, bucketId) {
@@ -244,7 +321,7 @@ export function monthActual(estado, month) {
   const porBucket = (kind) => {
     const deAportes = sum(
       aportes.filter((a) => a.kind === kind && a.movesCash !== false),
-      (a) => a.amount * a.factor,
+      (a) => a.amount,
     );
     const deGastos = sum(
       gastosDeReserva.filter((t) => reservaKind(estado, t.bucketId) === kind),

@@ -14,7 +14,7 @@ import { buildRecommendations, getStatus } from '../lib/insights.js';
 import { buildCardStatements, nextStatement, buildCommitments, activeInstallmentGroups } from '../lib/projections.js';
 import { monthSummary, targetDebt, simulatePlanChange, myBucketShare } from '../lib/month.js';
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
-import { buildCashFlow } from '../lib/cashflow.js';
+import { buildCashFlow, currentBalance } from '../lib/cashflow.js';
 import { upcomingCharges } from '../lib/upcoming.js';
 
 /*
@@ -66,8 +66,16 @@ export function FinanceProvider({ children }) {
   const [incomeSources, setIncomeSources] = useState([]);
   const [collections, setCollections] = useState([]);
   const [buckets, setBuckets] = useState([]);
+  /* "Este mes este bucket va por tanto". Ver lib/month.js. */
+  const [bucketAdjustments, setBucketAdjustments] = useState([]);
   const [monthlyPlans, setMonthlyPlans] = useState([]);
   const [setupCompletedAt, setSetupCompletedAt] = useState(null);
+
+  /*
+   * Desde cuándo la app sabe cuánto tienes: { date, amount }, o null si nadie
+   * lo ha dicho todavía. Ver lib/cashflow.js.
+   */
+  const [balanceAnchor, setBalanceAnchor] = useState(null);
 
   /*
    * Estos setters dejan userConfig sincronizado ANTES de pedir el re-render,
@@ -141,9 +149,11 @@ export function FinanceProvider({ children }) {
     transactions, debts, creditCards, fixedExpenses,
     customCategories, categoryLabels,
     people, incomeSources, collections, buckets, monthlyPlans, setupCompletedAt,
+    balanceAnchor, bucketAdjustments,
   }), [transactions, debts, creditCards, fixedExpenses,
        customCategories, categoryLabels,
-       people, incomeSources, collections, buckets, monthlyPlans, setupCompletedAt]);
+       people, incomeSources, collections, buckets, monthlyPlans, setupCompletedAt,
+       balanceAnchor, bucketAdjustments]);
 
   /*
    * persistedRef guarda la última foto que sabemos que está en la base. El
@@ -175,6 +185,8 @@ export function FinanceProvider({ children }) {
         setBuckets((state.buckets || []).map((b) => ({ ...b, contributions: b.contributions || [] })));
         setMonthlyPlans(state.monthlyPlans || []);
         setSetupCompletedAt(state.setupCompletedAt || null);
+        setBalanceAnchor(state.balanceAnchor || null);
+        setBucketAdjustments(state.bucketAdjustments || []);
         setSelectedMonth(monthKeyFromDate(todayStr()));
       }
 
@@ -333,11 +345,8 @@ export function FinanceProvider({ children }) {
    */
   const totalSavings = useMemo(() => buckets
     .filter((b) => b.movesCash !== false)
-    .reduce((s, b) => {
-      const total = Number(b.monthlyAmount) || 0;
-      const factor = total > 0 ? myBucketShare(b) / total : 1;
-      return s + (b.contributions || []).reduce((a, c) => a + (Number(c.amount) || 0), 0) * factor;
-    }, 0), [buckets]);
+    .reduce((s, b) => s + (b.contributions || [])
+      .reduce((a, c) => a + (Number(c.amount) || 0), 0), 0), [buckets]);
   function debtRemainingCOP(d) {
     const paid = d.payments.reduce((a, p) => a + p.amount, 0);
     const remaining = Math.max(0, parseFloat(d.totalAmount) - paid);
@@ -895,15 +904,61 @@ export function FinanceProvider({ children }) {
    * —plata que entra o sale del bucket— y separarlos obligaría a sumar dos
    * listas para saber cuánto hay.
    */
+  /*
+   * Aportar y retirar no son la misma operación al revés.
+   *
+   * Lo que aportas es TUYO y entra tal cual: si pones 150.000 al fondo con
+   * Sofi, saliste de 150.000, sin importar que el pote sean 600.000 al mes.
+   *
+   * Lo que retiras sale del POTE y te cuesta tu fracción: sacar 200.000 para
+   * el veterinario de los gatos —que van a medias— te cuesta 100.000. Por eso
+   * el retiro se convierte y el aporte no.
+   */
   function handleBucketMovement(bucketId, sign) {
     const amt = parseFloat(bucketInputs[bucketId]);
     if (!amt || amt <= 0) return;
+    const bucket = buckets.find((b) => b.id === bucketId);
+    const total = Number(bucket && bucket.monthlyAmount) || 0;
+    /* Sin monto mensual no hay proporción que sacar: el pote es todo tuyo. */
+    const factor = total > 0 ? myBucketShare(bucket) / total : 1;
+    const monto = sign < 0 ? -amt * factor : amt;
     const hoy = todayStr();
     setBuckets((prev) => prev.map((b) => (b.id === bucketId
       ? { ...b, contributions: [...(b.contributions || []),
-          { id: uid(), amount: amt * sign, date: hoy, month: monthKeyFromDate(hoy) }] }
+          { id: uid(), amount: monto, date: hoy, month: monthKeyFromDate(hoy) }] }
       : b)));
     setBucketInputs((prev) => ({ ...prev, [bucketId]: '' }));
+  }
+
+  /*
+   * Ajustar un bucket solo para el mes que se está mirando.
+   *
+   * Un monto vacío quita el ajuste en vez de guardar un cero: son cosas
+   * distintas. Cero es "este mes no le meto nada" —una decisión— y quitar el
+   * ajuste es "vuelve a lo de siempre". Guardar el vacío como cero convertiría
+   * un arrepentimiento en un mes saltado.
+   */
+  function handleAdjustBucketMonth(bucketId, monto, month) {
+    /*
+     * El mes lo pone quien llama. Buckets no tiene selector de mes —siempre
+     * habla del mes en curso— y tomar `selectedMonth`, que se mueve desde
+     * Resumen, guardaría el ajuste en un mes que la pantalla no está mostrando.
+     */
+    const mes = month || currentMonthKey();
+    const previo = bucketAdjustments.find(
+      (a) => a.month === mes && a.bucketId === bucketId,
+    );
+    if (monto === '' || monto === null || monto === undefined) {
+      if (previo) setBucketAdjustments((prev) => prev.filter((a) => a.id !== previo.id));
+      return;
+    }
+    const n = Number(monto);
+    if (Number.isNaN(n)) return;
+    if (previo) {
+      setBucketAdjustments((prev) => prev.map((a) => (a.id === previo.id ? { ...a, amount: n } : a)));
+    } else {
+      setBucketAdjustments((prev) => [...prev, { id: uid(), month: mes, bucketId, amount: n }]);
+    }
   }
 
   /*
@@ -1046,9 +1101,30 @@ export function FinanceProvider({ children }) {
     [snapshot, selectedMonth],
   );
 
+  /*
+   * Lo que hay en la cuenta hoy, o null mientras nadie haya anclado el saldo.
+   * Null y cero son cosas distintas y las pantallas tienen que poder
+   * distinguirlas: una dice "todavía no sé", la otra dice "no tienes nada".
+   */
+  const saldoReal = useMemo(() => currentBalance(snapshot()), [snapshot]);
+
+  /*
+   * Anclar es decir "hoy cerré con tanto". No crea un movimiento: los
+   * movimientos son cosas que pasaron, y esto es una medición del resultado.
+   * Escribir el saldo otra vez vuelve a anclar, que es como se corrige.
+   */
+  const handleAnchorBalance = useCallback((monto, fecha) => {
+    const n = Number(monto);
+    if (monto === '' || monto === null || Number.isNaN(n)) { setBalanceAnchor(null); return; }
+    setBalanceAnchor({ date: (fecha || todayStr()).slice(0, 10), amount: n });
+  }, []);
+
   const value = {
     activeTab,
     cashFlow,
+    saldoReal,
+    balanceAnchor,
+    handleAnchorBalance,
     debtOutlook,
     planDistribution,
     selectedDebtId,
@@ -1065,6 +1141,8 @@ export function FinanceProvider({ children }) {
     handleAddBucket,
     handleCancelDebtForm,
     handleBucketMovement,
+    handleAdjustBucketMonth,
+    bucketAdjustments,
     handleCancelBucketForm,
     handleEditBucket,
     handleDeleteBucket,

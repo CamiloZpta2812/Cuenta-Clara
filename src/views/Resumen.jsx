@@ -2,11 +2,12 @@ import {
   AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
 } from 'recharts';
+import { useState } from 'react';
 import {
-  TrendingUp, TrendingDown, ShoppingBag, Check, Landmark, Sheet, AlertTriangle, Activity,
+  TrendingUp, TrendingDown, ShoppingBag, Check, Landmark, Sheet, AlertTriangle, Activity, Wallet,
 } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
-import { monthLabel } from '../lib/dates.js';
+import { monthLabel, todayStr } from '../lib/dates.js';
 import { fmtCOP, fmtShort } from '../lib/money.js';
 import StatCard from '../components/StatCard';
 import RecCard from '../components/RecCard';
@@ -30,6 +31,12 @@ import { useFinance } from '../state/financeStore';
  *              los porcentajes se leen sin hacer cuentas.
  */
 
+/* "9 de septiembre" — la fecha del ancla se lee, no se descifra. */
+const diaLargo = (d) => {
+  const [y, m, dia] = String(d).split('-').map(Number);
+  return new Date(y, m - 1, dia).toLocaleDateString('es-CO', { day: 'numeric', month: 'long' });
+};
+
 const ejeFecha = (d) => {
   const [, m, dia] = String(d).split('-');
   return `${parseInt(dia, 10)}/${parseInt(m, 10)}`;
@@ -39,6 +46,21 @@ const tooltipStyle = {
   fontFamily: 'Poppins', fontSize: 13, borderRadius: 8, border: `1px solid ${COLORS.line}`,
 };
 
+/*
+ * Qué está mirando el usuario cambia según si hay ancla: con ella la línea es
+ * el saldo, sin ella es la variación. Decirlo mal es peor que no decir nada.
+ */
+function PieDeLaGrafica() {
+  const { balanceAnchor } = useFinance();
+  return (
+    <p className="cc-page-sub" style={{ marginTop: 6 }}>
+      {balanceAnchor
+        ? 'Es el saldo de la cuenta día a día. Lo apartado en colchones ya está descontado, aunque siga siendo tuyo.'
+        : 'Es cuánto te has movido en la ventana, no el saldo del banco: arranca en cero porque todavía no le has dicho con cuánto cuentas.'}
+    </p>
+  );
+}
+
 function PulsoTooltip({ active, payload }) {
   if (!active || !payload || !payload.length) return null;
   const p = payload[0].payload;
@@ -47,6 +69,101 @@ function PulsoTooltip({ active, payload }) {
       <div style={{ fontWeight: 600 }}>{p.date}</div>
       <div className="cc-mono">{fmtCOP(p.saldo)}</div>
       {p.label && <div style={{ color: COLORS.inkSoft }}>{p.label}</div>}
+    </div>
+  );
+}
+
+
+/*
+ * El saldo en cuenta, y de dónde sabe la app que es ese.
+ *
+ * La gráfica de abajo dibujaba la variación desde el primer movimiento
+ * registrado, y decía "arranca en cero porque no sabemos con cuánto
+ * empezaste". Era honesto pero inútil: la pregunta de la mañana no es "cuánto
+ * me he movido", es "cuánto tengo".
+ *
+ * Anclar es escribir una vez el saldo que muestra el banco. De ahí en adelante
+ * la app lo sigue sola, y cuando se desfase —una transferencia que no
+ * registraste— se vuelve a anclar. Por eso el botón no dice "editar" sino
+ * "cuadrar con el banco": no estás corrigiendo la app, estás volviendo a
+ * medir.
+ */
+function SaldoEnCuenta() {
+  const { saldoReal, balanceAnchor, handleAnchorBalance } = useFinance();
+  const [editando, setEditando] = useState(false);
+  const [monto, setMonto] = useState('');
+
+  const guardar = (e) => {
+    e.preventDefault();
+    handleAnchorBalance(monto, todayStr());
+    setEditando(false);
+    setMonto('');
+  };
+
+  const abrir = () => {
+    setMonto(saldoReal === null ? '' : String(Math.round(saldoReal)));
+    setEditando(true);
+  };
+
+  if (editando) {
+    return (
+      <form className="cc-saldo" onSubmit={guardar}>
+        <label className="cc-saldo-label" htmlFor="cc-saldo-input">
+          ¿Cuánto tienes en la cuenta ahora mismo?
+        </label>
+        <div className="cc-saldo-fila">
+          <input
+            id="cc-saldo-input" className="cc-input" type="number" step="any"
+            /* El foco entra solo: se abrió esto para escribir un número. */
+            autoFocus placeholder="0" value={monto}
+            onChange={(e) => setMonto(e.target.value)}
+          />
+          <button type="submit" className="cc-btn cc-btn-primary cc-btn-sm">Guardar</button>
+          <button
+            type="button" className="cc-btn cc-btn-outline cc-btn-sm"
+            onClick={() => setEditando(false)}
+          >
+            Cancelar
+          </button>
+        </div>
+        <span className="cc-stat-sub">
+          El que ves en el banco, con lo de hoy ya contado. A partir de ahí la app lo sigue sola.
+        </span>
+      </form>
+    );
+  }
+
+  if (saldoReal === null) {
+    return (
+      <div className="cc-saldo">
+        <span className="cc-saldo-label">Saldo en cuenta</span>
+        <button type="button" className="cc-btn cc-btn-primary cc-btn-sm" onClick={abrir}>
+          <Wallet size={14} /> Dile a la app cuánto tienes
+        </button>
+        <span className="cc-stat-sub">
+          Sin esto la gráfica muestra cuánto te has movido, no cuánto tienes.
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="cc-saldo">
+      <span className="cc-saldo-label">Saldo en cuenta</span>
+      <div className="cc-saldo-fila">
+        <span
+          className="cc-saldo-monto cc-mono"
+          style={{ color: saldoReal < 0 ? COLORS.expense : COLORS.ink }}
+        >
+          {fmtCOP(saldoReal)}
+        </span>
+        <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={abrir}>
+          Cuadrar con el banco
+        </button>
+      </div>
+      <span className="cc-stat-sub">
+        Contado desde los {fmtCOP(balanceAnchor.amount)} del {diaLargo(balanceAnchor.date)}.
+      </span>
     </div>
   );
 }
@@ -100,7 +217,8 @@ export default function Resumen() {
 
       {/* ----------------------------------------------------------- el pulso */}
       <div className="cc-card" style={{ marginTop: 18 }}>
-        <p className="cc-chart-title">El pulso de tu plata</p>
+        <SaldoEnCuenta />
+        <p className="cc-chart-title" style={{ marginTop: 16 }}>El pulso de tu plata</p>
         <p className="cc-chart-sub">
           Sube con cada ingreso y baja con cada gasto, aporte y abono · últimos 3 meses
         </p>
@@ -138,10 +256,7 @@ export default function Resumen() {
                 />
               </AreaChart>
             </ResponsiveContainer>
-            <p className="cc-page-sub" style={{ marginTop: 6 }}>
-              Es cuánto has ganado o perdido en la ventana, no el saldo del banco: arranca
-              en cero porque todavía no le hemos dicho con cuánto empezaste.
-            </p>
+            <PieDeLaGrafica />
           </>
         )}
       </div>

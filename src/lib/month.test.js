@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   myShare, othersShare, monthCollections, monthPlan, monthActual,
   monthCashOut, monthSummary, simulatePlanChange, targetDebt,
+  firstInstallmentMonth, debtDueIn,
 } from './month.js';
 
 /*
@@ -339,10 +340,16 @@ test('un mes cerrado se juzga contra el plan que tenía, no contra el de hoy', (
   assert.equal(sept.fixedExpenses, 695_000);
 });
 
-test('sin plan guardado, el gasto variable estimado es cero', () => {
+test('sin plan guardado, el estimado se hereda del último mes planeado', () => {
+  /*
+   * Esto antes daba cero, con el argumento de no heredar números de otro mes.
+   * Sonaba prudente y era peor: cero también es un número inventado, y encima
+   * es el que infla el disponible. Como nadie crea la fila del mes nuevo,
+   * TODOS los meses futuros salían con 830.000 de más para abonar a la deuda.
+   */
   const p = monthPlan(estado, '2026-12');
-  assert.equal(p.variable, 0, 'no se hereda el estimado de otro mes');
-  assert.equal(p.fixedExpenses, 695_000, 'lo demás sí se calcula igual');
+  assert.equal(p.variable, 830_000);
+  assert.equal(p.fixedExpenses, 695_000, 'lo demás se calcula igual');
 });
 
 
@@ -534,15 +541,46 @@ test('una reserva resta en el plan igual que un colchón', () => {
   );
 });
 
-test('un aporte al pote cuenta solo por tu fracción', () => {
+test('un aporte guarda tu plata, no la del pote', () => {
   const conAporte = {
     ...compartido,
     buckets: compartido.buckets.map((b) => (b.id === 'gatos'
-      ? { ...b, contributions: [{ id: 'a1', amount: 130_000, date: '2026-09-05' }] }
+      ? { ...b, contributions: [{ id: 'a1', amount: 65_000, date: '2026-09-05' }] }
       : b)),
   };
-  // Al pote entraron 130.000, pero de tu cuenta salieron 65.000.
   assert.equal(monthActual(conAporte, MES).cushion, 65_000);
+});
+
+test('tu mitad pagada en dos quincenas suma tu mitad, no la mitad de tu mitad', () => {
+  /*
+   * El caso que rompía el modelo viejo. Camilo pone sus 300.000 del fondo con
+   * Sofi en dos: 150.000 el 15 y 150.000 el 30. Antes cada depósito se leía
+   * como si fuera del pote y se le acreditaba la mitad, así que sus 300.000
+   * aparecían como 150.000 y el mes salía en rojo sin estarlo.
+   */
+  const enDosQuincenas = {
+    ...compartido,
+    buckets: compartido.buckets.map((b) => (b.id === 'fondo'
+      ? { ...b,
+        contributions: [
+          { id: 'q1', amount: 150_000, date: '2026-09-15' },
+          { id: 'q2', amount: 150_000, date: '2026-09-30' },
+        ] }
+      : b)),
+  };
+  const real = monthActual(enDosQuincenas, MES);
+  assert.equal(real.savings, 300_000);
+  assert.equal(real.savings, monthPlan(compartido, MES).savings, 'el mes cierra parejo');
+});
+
+test('media quincena aportada es media quincena, no un cuarto', () => {
+  const soloLaPrimera = {
+    ...compartido,
+    buckets: compartido.buckets.map((b) => (b.id === 'fondo'
+      ? { ...b, contributions: [{ id: 'q1', amount: 150_000, date: '2026-09-15' }] }
+      : b)),
+  };
+  assert.equal(monthActual(soloLaPrimera, MES).savings, 150_000);
 });
 
 test('una reserva se mide por lo gastado, no por lo aportado', () => {
@@ -564,7 +602,7 @@ test('un colchón real no cuenta doble el aporte y el gasto', () => {
   const gatosConVet = {
     ...compartido,
     buckets: compartido.buckets.map((b) => (b.id === 'gatos'
-      ? { ...b, contributions: [{ id: 'a1', amount: 130_000, date: '2026-09-05' }] }
+      ? { ...b, contributions: [{ id: 'a1', amount: 65_000, date: '2026-09-05' }] }
       : b)),
     transactions: [
       { id: 'vet', type: 'gasto', amount: 200_000, category: 'salud', date: '2026-09-12', bucketId: 'gatos' },
@@ -580,4 +618,172 @@ test('sin reparto, todo el bucket es tuyo', () => {
                 movesCash: true, shares: [], contributions: [] }],
   };
   assert.equal(monthPlan(solo, MES).cushion, 100_000);
+});
+
+/* ------------------------------------------------ cuándo empieza a cobrar --- */
+
+/*
+ * El crédito de Camilo se desembolsó el 8 de septiembre y la primera cuota es
+ * la de octubre. El plan de septiembre le restaba igual los 446.413: un mes
+ * que el banco nunca cobró.
+ */
+const desembolsadoEnSeptiembre = {
+  ...estado,
+  debts: estado.debts.map((d) => ({ ...d, startDate: '2026-09-08' })),
+  /* Los dos meses con el mismo estimado, para que la única diferencia sea la cuota. */
+  monthlyPlans: [
+    { month: '2026-09', variableEstimate: 830_000 },
+    { month: '2026-10', variableEstimate: 830_000 },
+  ],
+};
+
+test('la primera cuota es la del mes siguiente al desembolso', () => {
+  assert.equal(firstInstallmentMonth({ startDate: '2026-09-08' }), '2026-10');
+  assert.equal(firstInstallmentMonth({ startDate: '2026-12-20' }), '2027-01', 'y cruza el año');
+});
+
+test('el mes del desembolso no lleva cuota; el siguiente sí', () => {
+  assert.equal(monthPlan(desembolsadoEnSeptiembre, '2026-09').debtPayment, 0);
+  assert.equal(monthPlan(desembolsadoEnSeptiembre, '2026-10').debtPayment, 446_413);
+});
+
+test('no cobrar la cuota que no existe deja más disponible, no menos', () => {
+  const sept = monthPlan(desembolsadoEnSeptiembre, '2026-09');
+  const oct = monthPlan(desembolsadoEnSeptiembre, '2026-10');
+  assert.equal(sept.availableForExtra - oct.availableForExtra, 446_413);
+});
+
+test('una deuda sin fecha de desembolso se sigue cobrando', () => {
+  // Es la lectura segura: una deuda vieja sin fecha registrada sí tiene cuota.
+  assert.equal(firstInstallmentMonth({ id: 'x' }), null);
+  assert.equal(monthPlan(estado, '2026-09').debtPayment, 446_413);
+});
+
+test('una deuda ya pagada deja de restar del plan', () => {
+  const saldada = { ...estado, debts: estado.debts.map((d) => ({ ...d, currentBalance: 0 })) };
+  assert.equal(debtDueIn({ currentBalance: 0, startDate: '2020-01-01' }, '2026-09'), false);
+  assert.equal(monthPlan(saldada, '2026-09').debtPayment, 0);
+});
+
+test('un saldo sin reportar no se lee como deuda pagada', () => {
+  // currentBalance null es "el banco no me lo ha dicho", no "ya no debo nada".
+  assert.equal(debtDueIn({ currentBalance: null, fixedPayment: 100 }, '2026-09'), true);
+  assert.equal(debtDueIn({ fixedPayment: 100 }, '2026-09'), true);
+});
+
+/* --------------------------------------------- ajustes de un solo mes --- */
+
+/* "Este mes el colchón de seguridad va por 150.000 y no por 300.000." */
+const conAjuste = {
+  ...compartido,
+  buckets: [...compartido.buckets,
+    { id: 'seguridad', name: 'Colchón de seguridad', kind: 'colchon', liquid: true,
+      monthlyAmount: 300_000, movesCash: true, shares: [], contributions: [] }],
+  bucketAdjustments: [{ id: 'aj1', month: MES, bucketId: 'seguridad', amount: 150_000 }],
+  monthlyPlans: [
+    { month: MES, variableEstimate: 830_000 },
+    { month: '2026-10', variableEstimate: 830_000 },
+  ],
+};
+
+test('el ajuste del mes le gana al monto de siempre', () => {
+  assert.equal(monthPlan(conAjuste, MES).cushion, 65_000 + 160_000 + 150_000);
+});
+
+test('el mes siguiente vuelve solo al monto normal', () => {
+  // El ajuste no tocó el bucket, así que no hay nada que devolver a su sitio.
+  assert.equal(monthPlan(conAjuste, '2026-10').cushion, 65_000 + 160_000 + 300_000);
+});
+
+test('bajarle al colchón un mes deja ese mismo dinero libre, no lo desaparece', () => {
+  const sinAjuste = { ...conAjuste, bucketAdjustments: [] };
+  assert.equal(
+    monthPlan(conAjuste, MES).availableForExtra - monthPlan(sinAjuste, MES).availableForExtra,
+    150_000,
+  );
+});
+
+test('un ajuste también sirve para poner de MÁS', () => {
+  const deMas = {
+    ...conAjuste,
+    bucketAdjustments: [{ id: 'aj2', month: MES, bucketId: 'seguridad', amount: 500_000 }],
+  };
+  assert.equal(monthPlan(deMas, MES).cushion, 65_000 + 160_000 + 500_000);
+});
+
+test('un ajuste en cero es saltarse el mes, no la falta de ajuste', () => {
+  const enCero = {
+    ...conAjuste,
+    bucketAdjustments: [{ id: 'aj3', month: MES, bucketId: 'seguridad', amount: 0 }],
+  };
+  assert.equal(monthPlan(enCero, MES).cushion, 65_000 + 160_000);
+});
+
+test('un ajuste sobre una meta ajusta el ahorro, no el colchón', () => {
+  const enElFondo = {
+    ...conAjuste,
+    bucketAdjustments: [{ id: 'aj4', month: MES, bucketId: 'fondo', amount: 150_000 }],
+  };
+  const p = monthPlan(enElFondo, MES);
+  assert.equal(p.savings, 150_000, 'la mitad del fondo con Sofi, ajustada');
+  assert.equal(p.cushion, 65_000 + 160_000 + 300_000, 'el colchón queda intacto');
+});
+
+test('el ajuste de otro mes no se cuela en este', () => {
+  const deOctubre = {
+    ...conAjuste,
+    bucketAdjustments: [{ id: 'aj5', month: '2026-10', bucketId: 'seguridad', amount: 0 }],
+  };
+  assert.equal(monthPlan(deOctubre, MES).cushion, 65_000 + 160_000 + 300_000);
+  assert.equal(monthPlan(deOctubre, '2026-10').cushion, 65_000 + 160_000);
+});
+
+/* --------------------------------- el estimado de un mes sin plan --- */
+
+test('un mes sin plan hereda el estimado del último planeado', () => {
+  /*
+   * Nadie crea la fila del mes nuevo. Sin herencia, octubre arrancaba con
+   * variable = 0 y decía que había 830.000 más para abonar de los que hay —
+   * más disponible que septiembre, a pesar de traer la primera cuota.
+   */
+  assert.equal(monthPlan(estado, '2026-10').variable, 830_000);
+  assert.equal(monthPlan(estado, '2027-03').variable, 830_000, 'y sigue rigiendo');
+});
+
+test('el mes con plan propio manda sobre lo heredado', () => {
+  const conOctubre = {
+    ...estado,
+    monthlyPlans: [
+      { month: '2026-09', variableEstimate: 830_000 },
+      { month: '2026-10', variableEstimate: 600_000 },
+    ],
+  };
+  assert.equal(monthPlan(conOctubre, '2026-10').variable, 600_000);
+});
+
+test('un cero puesto a mano es un cero, no un mes sin plan', () => {
+  const enCero = {
+    ...estado,
+    monthlyPlans: [
+      { month: '2026-09', variableEstimate: 830_000 },
+      { month: '2026-10', variableEstimate: 0 },
+    ],
+  };
+  assert.equal(monthPlan(enCero, '2026-10').variable, 0);
+});
+
+test('un mes anterior a todo plan no hereda hacia atrás', () => {
+  // Julio no debería juzgarse con un estimado que solo se fijó en septiembre.
+  assert.equal(monthPlan(estado, '2026-07').variable, 0);
+});
+
+test('octubre trae la cuota, así que deja MENOS libre que septiembre', () => {
+  const conDesembolso = {
+    ...estado,
+    debts: estado.debts.map((d) => ({ ...d, startDate: '2026-09-08' })),
+  };
+  const sept = monthPlan(conDesembolso, '2026-09');
+  const oct = monthPlan(conDesembolso, '2026-10');
+  assert.equal(sept.variable, oct.variable, 'el mismo estimado en los dos');
+  assert.equal(sept.availableForExtra - oct.availableForExtra, 446_413);
 });
