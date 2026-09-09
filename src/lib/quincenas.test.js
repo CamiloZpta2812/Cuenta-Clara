@@ -331,3 +331,29 @@ test('un mes sin días de pago igual arma la cuadrícula', () => {
   assert.equal(dias.length, 31);
   assert.ok(dias.every((d) => d.periodIndex === null));
 });
+
+test('lo que no tiene fecha sale aunque su mes no sea el que estás mirando', () => {
+  /*
+   * El agujero que dejó la cuota invisible. Mirando septiembre: el crédito no
+   * cobra cuota en septiembre —la primera es de octubre— así que no salía en
+   * "sin fecha"; y sin día de cobro tampoco caía en ningún tramo. Faltaba en
+   * las dos listas a la vez, sin rastro de que faltaba.
+   */
+  const sinDiaDeCobro = {
+    ...estado,
+    debts: estado.debts.map((d) => ({ ...d, dueDay: null })),
+  };
+  const sept = buildQuincenas(sinDiaDeCobro, '2026-09');
+
+  assert.ok(!sept.periods.some((p) => p.items.some((i) => i.kind === 'deuda')),
+    'sin día no se puede ubicar en ningún tramo');
+  assert.ok(sept.unscheduled.some((e) => e.kind === 'deuda'),
+    'pero tiene que verse en "sin fecha", porque octubre entra en la ventana');
+});
+
+test('un gasto sin día no se lista una vez por mes', () => {
+  // HBO no tiene día y los tramos tocan tres meses: sigue siendo un solo HBO.
+  const { unscheduled } = buildQuincenas(estado, MES);
+  const ids = unscheduled.map((e) => e.id);
+  assert.equal(ids.length, new Set(ids).size);
+});

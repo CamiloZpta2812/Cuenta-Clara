@@ -211,9 +211,28 @@ export function buildQuincenas(estado, month) {
     };
   });
 
+  /*
+   * Lo que no se pudo ubicar, de TODOS los meses que tocan los tramos.
+   *
+   * Antes se buscaba solo en el mes seleccionado, y ahí se abría un hueco por
+   * el que se cayó justo la cuota del crédito: en septiembre no hay cuota
+   * —la primera es de octubre— así que no salía en "sin fecha"; y como no
+   * tenía día de cobro, tampoco caía en ningún tramo. Invisible en las dos
+   * listas a la vez, que es la peor forma de faltar: sin rastro de que falta.
+   *
+   * Se deduplica por id porque un gasto sin día es el mismo gasto en los tres
+   * meses; listarlo tres veces sería ruido, no información.
+   */
+  const sueltos = new Map();
+  tramos.flatMap(mesesDe).forEach((mes) => {
+    monthEvents(estado, mes)
+      .filter((e) => !e.day)
+      .forEach((e) => { if (!sueltos.has(e.id)) sueltos.set(e.id, e); });
+  });
+
   return {
     periods: periodos,
-    unscheduled: monthEvents(estado, month).filter((e) => !e.day),
+    unscheduled: [...sueltos.values()],
     daily: porDia,
   };
 }
