@@ -41,6 +41,25 @@ begin
   end if;
   perform set_config('aldia.uid', uid::text, false);
 
+  /*
+   * Los requisitos, revisados antes de tocar nada.
+   *
+   * Sin esto, faltar un schema se manifestaba a mitad del script como un
+   * "relation does not exist" de Postgres: cierto, pero no dice cuál archivo
+   * falta ni en qué orden van. El bloque es transaccional, así que fallar no
+   * deja nada a medias — pero sí deja al que lo corre adivinando.
+   */
+  if to_regclass('public.user_settings') is null
+     or not exists (select 1 from information_schema.columns
+                     where table_schema = 'public' and table_name = 'user_settings'
+                       and column_name = 'balance_anchor_date') then
+    raise exception 'Falta correr schema-v4-saldo.sql antes que este.';
+  end if;
+
+  if to_regclass('public.bucket_adjustments') is null then
+    raise exception 'Falta correr schema-v5-ajustes-del-mes.sql antes que este.';
+  end if;
+
   -- ===========================================================================
   -- 1. El saldo en cuenta
   --
