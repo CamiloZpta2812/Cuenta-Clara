@@ -752,4 +752,79 @@ export const STYLES = `
   .cc-kpi { padding: 12px 14px; }
   .cc-kpi-valor { font-size: 18px; }
 }
+
+/* ============================ El mes ============================ */
+
+.cc-mes-ritmo { margin-top: 16px; padding: 20px 22px 14px; }
+.cc-veredicto { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600;
+  padding: 10px 14px; border-radius: 10px; }
+.cc-veredicto.bien { background: var(--income-soft); color: var(--income); }
+.cc-veredicto.ojo { background: var(--savings-soft); color: var(--savings); }
+.cc-veredicto.mal { background: var(--expense-soft); color: var(--expense); }
+.cc-veredicto.neutro { background: var(--paper); color: var(--ink-soft); }
+
+.cc-mes-cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px; margin: 14px 0 6px; }
+.cc-mes-cifras > div { display: flex; flex-direction: column; gap: 2px; }
+.cc-mes-cifras span { font-size: 12px; color: var(--ink-soft); }
+.cc-mes-cifras strong { font-size: 20px; font-weight: 700; }
+
+.cc-leyenda-ritmo { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px;
+  color: var(--ink-soft); margin-top: 4px; }
+.cc-leyenda-ritmo span { display: inline-flex; align-items: center; gap: 6px; }
+.cc-leyenda-ritmo i { width: 18px; height: 0; display: inline-block; }
+.cc-leyenda-ritmo i.solida { height: 3px; border-radius: 2px; }
+.cc-leyenda-ritmo i.punteada { border-top: 2px dashed var(--ink-soft); }
+
+.cc-mes-fila { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+
+.cc-ingreso-mes { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px;
+  align-items: baseline; padding: 10px 12px; background: var(--income-soft);
+  border-radius: 10px; margin-bottom: 12px; font-size: 13px; }
+.cc-ingreso-mes > span:first-child { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.cc-ingreso-mes strong { font-size: 17px; }
+.cc-ingreso-mes .cc-stat-sub { grid-column: 1 / -1; margin-top: 0; }
+
+/* La barra de plan: el relleno es lo real, la raya vertical lo planeado. */
+.cc-barra-plan { margin-bottom: 14px; }
+.cc-barra-cab { display: flex; justify-content: space-between; align-items: center;
+  font-size: 13px; margin-bottom: 5px; gap: 8px; }
+.cc-barra-cab > span:first-child { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.cc-barra-estado { color: var(--ink-soft); font-size: 12px; }
+.cc-barra-mal { color: var(--expense); font-size: 12px; font-weight: 700; }
+.cc-barra-pista { position: relative; height: 10px; background: var(--paper);
+  border-radius: 999px; overflow: visible; }
+.cc-barra-relleno { height: 100%; border-radius: 999px; }
+.cc-barra-marca { position: absolute; top: -4px; width: 2px; height: 18px;
+  background: var(--ink); border-radius: 1px; transform: translateX(-1px); }
+.cc-barra-cifras { display: flex; gap: 6px; font-size: 12px; margin-top: 4px; color: var(--ink-soft); }
+.cc-barra-cifras strong { color: var(--ink); }
+
+/* Categorías del variable: barra de este mes, y debajo la del pasado en gris. */
+.cc-cats { display: flex; flex-direction: column; gap: 12px; }
+.cc-cat-cab { display: flex; justify-content: space-between; font-size: 13px; gap: 8px; }
+.cc-cat-cab > span:first-child { display: inline-flex; align-items: center; gap: 6px; }
+.cc-cat-pistas { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.cc-cat-ahora { height: 8px; border-radius: 999px; min-width: 2px; }
+.cc-cat-antes { height: 4px; border-radius: 999px; background: #CFC8BA; min-width: 0; }
+.cc-cat-cambio { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; margin-top: 2px; }
+.cc-cat-cambio.sube { color: var(--expense); }
+.cc-cat-cambio.baja { color: var(--income); }
+
+/* La deuda, en una línea al final: sigue ahí, pero ya no es lo que se viene a mirar. */
+.cc-mes-deuda { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 14px;
+  padding: 12px 16px; border-radius: 12px; border: 1px solid var(--paper-line);
+  background: var(--card); font: inherit; font-size: 13px; color: var(--ink-soft);
+  text-align: left; cursor: pointer; }
+.cc-mes-deuda span { flex: 1; }
+.cc-mes-deuda strong { color: var(--ink); }
+.cc-mes-deuda:hover { background: var(--paper); }
+
+@media (max-width: 900px) { .cc-mes-fila { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .cc-mes-ritmo { padding: 16px 14px 10px; }
+  .cc-veredicto { font-size: 14px; }
+  .cc-mes-cifras { grid-template-columns: 1fr 1fr; }
+  .cc-mes-cifras strong { font-size: 17px; }
+}
 `;

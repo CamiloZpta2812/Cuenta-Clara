@@ -1,6 +1,7 @@
 import {
   monthSummary, targetDebt, simulatePlanChange, pendingSplits,
 } from '../lib/month.js';
+import { monthPace, variableByCategory } from '../lib/analisis.js';
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
 import { buildCashFlow, currentBalance } from '../lib/cashflow.js';
 import { buildQuincenas, monthGrid } from '../lib/quincenas.js';
@@ -175,6 +176,8 @@ export function buildValue(overrides = {}) {
     cashFlow: buildCashFlow(estado, ['2026-07', '2026-08', '2026-09']),
     saldoReal: currentBalance(estado, '2026-09-30'),
     cashFlowTodo: buildCashFlow(estado, []),
+    ritmoDelMes: monthPace(estado, MES, '2026-09-18'),
+    variablePorCategoria: variableByCategory(estado, MES),
     pendingSplits: pendingSplits(estado),
     expectedIncomes: estado.expectedIncomes,
     balanceAnchors: estado.balanceAnchors,

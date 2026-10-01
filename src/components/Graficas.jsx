@@ -1,5 +1,5 @@
 import {
-  AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
+  AreaChart, Area, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { COLORS } from '../lib/constants.js';
@@ -98,6 +98,55 @@ export function Pulso({ data, subio = true, largo = false }) {
           isAnimationActive={false}
         />
       </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+/*
+ * El ritmo del gasto variable: lo que llevas contra la recta del plan.
+ *
+ * Dos series, así que no basta el color para distinguirlas: lo real es una
+ * línea sólida y gruesa, el plan una punteada y gris. El color de lo real
+ * dice el veredicto —rojo si vas por encima de la recta, verde si no—, igual
+ * que en el saldo.
+ */
+function RitmoTooltip({ active, payload }) {
+  if (!active || !payload || !payload.length) return null;
+  const p = payload[0].payload;
+  return (
+    <div className="cc-card" style={{ padding: '8px 12px', fontSize: 12.5 }}>
+      <div style={{ color: COLORS.inkSoft }}>Día {p.day}</div>
+      {p.real !== null && <div><strong className="cc-mono">{fmtCOP(p.real)}</strong> gastado</div>}
+      <div style={{ color: COLORS.inkSoft }}>{fmtCOP(p.plan)} si fueras parejo</div>
+    </div>
+  );
+}
+
+export function Ritmo({ data, pasado = false, hoyDia }) {
+  const color = pasado ? COLORS.expense : COLORS.income;
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <LineChart data={data} margin={{ top: 8, right: 10, left: -12, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={COLORS.line} vertical={false} />
+        <XAxis
+          dataKey="day" tick={{ fontSize: 11, fill: COLORS.inkSoft }} interval="preserveStartEnd"
+          axisLine={{ stroke: COLORS.line }} tickLine={false} minTickGap={20}
+        />
+        <YAxis
+          tick={{ fontSize: 11, fill: COLORS.inkSoft }} axisLine={false}
+          tickLine={false} tickFormatter={fmtShort} width={48}
+        />
+        {hoyDia > 0 && hoyDia < data.length && (
+          <ReferenceLine x={hoyDia} stroke={COLORS.ink} strokeDasharray="2 3"
+            label={{ value: 'hoy', position: 'insideTopRight', fontSize: 11, fill: COLORS.inkSoft }} />
+        )}
+        <Tooltip content={<RitmoTooltip />} cursor={{ stroke: COLORS.inkSoft, strokeDasharray: '3 3' }} />
+        <Line type="linear" dataKey="plan" stroke={COLORS.inkSoft} strokeWidth={1.5}
+          strokeDasharray="5 4" dot={false} isAnimationActive={false} />
+        <Line type="monotone" dataKey="real" stroke={color} strokeWidth={2.5}
+          dot={false} activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }}
+          connectNulls={false} isAnimationActive={false} />
+      </LineChart>
     </ResponsiveContainer>
   );
 }

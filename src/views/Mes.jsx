@@ -1,57 +1,79 @@
-import { useState } from 'react';
+import { Suspense, lazy } from 'react';
 import {
-  TrendingUp, Landmark, PiggyBank, ShoppingBag, Shield, CreditCard,
-  HandCoins, Check, ChevronDown, Wallet, ArrowRight,
+  TrendingUp, TrendingDown, Landmark, PiggyBank, ShoppingBag, Shield, CreditCard,
+  HandCoins, Check, Wallet, ArrowRight, Briefcase, Gauge,
 } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
 import { monthLabel } from '../lib/dates.js';
 import { fmtCOP } from '../lib/money.js';
+import { getCategory } from '../lib/categories.js';
 import { useFinance } from '../state/financeStore';
 
 /*
- * El mes: plan contra realidad.
+ * El mes: el análisis, no la deuda.
  *
- * La primera versión ponía cinco bloques del mismo tamaño —número, alertas,
- * cascada, salida de caja, cobros— y la cascada era una tabla de cuatro
- * columnas. Todo gritaba al mismo volumen y no había dónde mirar primero. Da
- * pereza abrir una pantalla así, y una app de finanzas que da pereza no se usa.
+ * Giraba alrededor de un número —cuánto puedes abonarle de más al crédito— y
+ * eso responde una pregunta que uno se hace una vez al mes. Era de las
+ * pantallas que menos se abrían. La pregunta de todos los días es otra:
+ * "¿voy bien, o voy gastando de más?", y se contesta con tres cosas:
  *
- * Ahora hay tres niveles:
+ *   El ritmo      lo que llevas de variable contra lo que deberías llevar.
+ *                 Ir por encima de la recta el día 10 es llegar al 30 sin
+ *                 plata para comer, y eso no se ve en un total.
  *
- *   1. Un número, el que importa.
- *   2. Solo lo que necesita tu atención. Si no hay nada, lo dice y ya.
- *   3. El detalle completo, plegado hasta que lo pidas.
+ *   Línea a línea cada parte del plan como una barra, con una marca donde
+ *                 está lo planeado. Se lee de un vistazo qué va al día.
  *
- * Todo el cálculo viene de lib/month.js. Aquí no se hace ni una resta.
+ *   El variable   en qué se fue, comparado con el mes pasado. "180.000 en
+ *                 comida" no dice nada hasta que sabes cuánto fue antes.
+ *
+ * La deuda queda al final, en una línea. Sigue importando, pero no es lo que
+ * se viene a mirar.
  */
 
+const Ritmo = lazy(() => import('../components/Graficas').then((m) => ({ default: m.Ritmo })));
+
+/* Las líneas del plan que se pintan como barra. El ingreso va aparte, arriba. */
 const LINEAS = [
-  { key: 'income',        label: 'Ingresos',          Icon: TrendingUp,  clase: 'rendimiento', masEsMejor: true },
-  { key: 'fixedExpenses', label: 'Gastos fijos',      Icon: Landmark,    clase: 'compromiso' },
-  { key: 'debtPayment',   label: 'Cuota de la deuda', Icon: CreditCard,  clase: 'compromiso' },
-  { key: 'savings',       label: 'Metas de ahorro',   Icon: PiggyBank,   clase: 'compromiso' },
-  { key: 'variable',      label: 'Gasto variable',    Icon: ShoppingBag, clase: 'rendimiento', masEsMejor: false },
-  { key: 'cushion',       label: 'Colchones',         Icon: Shield,      clase: 'compromiso' },
+  { key: 'fixedExpenses', label: 'Gastos fijos', Icon: Landmark, color: '#6B5199', compromiso: true },
+  { key: 'savings', label: 'Ahorro', Icon: PiggyBank, color: '#3E7FB0', compromiso: true },
+  { key: 'cushion', label: 'Colchones', Icon: Shield, color: '#2F8F8F', compromiso: true },
+  { key: 'variable', label: 'Gasto variable', Icon: ShoppingBag, color: '#BB4B34', compromiso: false },
 ];
 
 /*
- * Cómo se lee un desvío. Los compromisos —fijos, cuota, ahorro, colchones— son
- * plata que ya prometiste: quedarte corto ahí no es un logro, es que todavía no
- * ha salido. Solo ingresos y gasto variable se pintan como algo que te fue bien
- * o mal.
+ * Una barra con su marca de plan. En un compromiso —fijos, ahorro, colchones—
+ * quedarse corto no es un logro, es que todavía no ha salido: se pinta neutro.
+ * Solo el variable se pinta como algo que te fue bien o mal.
  */
-function leerDesvio(linea, desvio) {
-  if (Math.abs(desvio) < 1) return { texto: 'Al día', color: COLORS.inkSoft };
-  if (linea.clase === 'compromiso') {
-    return desvio < 0
-      ? { texto: `Faltan ${fmtCOP(-desvio)}`, color: COLORS.inkSoft }
-      : { texto: `${fmtCOP(desvio)} de más`, color: COLORS.expense };
+function BarraPlan({ linea, real, plan }) {
+  const tope = Math.max(real, plan, 1);
+  const anchoReal = Math.min(100, (real / tope) * 100);
+  const marca = (plan / tope) * 100;
+  const pasado = !linea.compromiso && real > plan && plan > 0;
+  let estado;
+  if (plan <= 0 && real <= 0) estado = 'Sin plan';
+  else if (linea.compromiso) {
+    estado = real >= plan - 1 ? 'Al día' : `Faltan ${fmtCOP(plan - real)}`;
+  } else {
+    estado = pasado ? `${fmtCOP(real - plan)} de más` : `Quedan ${fmtCOP(plan - real)}`;
   }
-  const bueno = linea.masEsMejor ? desvio > 0 : desvio < 0;
-  return {
-    texto: `${desvio > 0 ? '+' : ''}${fmtCOP(desvio)}`,
-    color: bueno ? COLORS.income : COLORS.expense,
-  };
+  return (
+    <div className="cc-barra-plan">
+      <div className="cc-barra-cab">
+        <span><linea.Icon size={14} color={linea.color} /> {linea.label}</span>
+        <span className={pasado ? 'cc-barra-mal' : 'cc-barra-estado'}>{estado}</span>
+      </div>
+      <div className="cc-barra-pista" title={`${fmtCOP(real)} de ${fmtCOP(plan)}`}>
+        <div className="cc-barra-relleno" style={{ width: `${anchoReal}%`, background: pasado ? COLORS.expense : linea.color }} />
+        {plan > 0 && <div className="cc-barra-marca" style={{ left: `${marca}%` }} />}
+      </div>
+      <div className="cc-barra-cifras">
+        <strong className="cc-mono">{fmtCOP(real)}</strong>
+        <span className="cc-mono">de {fmtCOP(plan)}</span>
+      </div>
+    </div>
+  );
 }
 
 function Aviso({ Icon, tono, titulo, detalle, accion, onAccion }) {
@@ -72,44 +94,51 @@ function Aviso({ Icon, tono, titulo, detalle, accion, onAccion }) {
   );
 }
 
+/* El veredicto en una frase, que es lo primero que se quiere leer. */
+function veredicto(r) {
+  if (r.hoyDia === 0) return { tono: 'neutro', texto: 'Este mes todavía no empieza.' };
+  if (r.planMes <= 0) return { tono: 'neutro', texto: 'No hay estimado de gasto variable para este mes.' };
+  const pctMes = Math.round((r.hoyDia / r.totalDias) * 100);
+  const pctGasto = Math.round((r.gastado / r.planMes) * 100);
+  if (r.cerrado) {
+    return r.gastado <= r.planMes
+      ? { tono: 'bien', texto: `Cerraste el mes ${fmtCOP(r.planMes - r.gastado)} por debajo de lo estimado.` }
+      : { tono: 'mal', texto: `Cerraste el mes ${fmtCOP(r.gastado - r.planMes)} por encima de lo estimado.` };
+  }
+  if (r.adelanto > r.planMes * 0.1) {
+    return { tono: 'mal', texto: `Va el ${pctMes}% del mes y ya gastaste el ${pctGasto}% del variable.` };
+  }
+  if (r.adelanto > 0) {
+    return { tono: 'ojo', texto: `Va el ${pctMes}% del mes y llevas el ${pctGasto}% del variable: un poco adelantado.` };
+  }
+  return { tono: 'bien', texto: `Va el ${pctMes}% del mes y llevas el ${pctGasto}% del variable. Vas bien.` };
+}
+
 export default function Mes() {
   const {
-    availableMonths, selectedMonth, setSelectedMonth, monthReport, cardOutlook,
-    setActiveTab,
+    availableMonths, selectedMonth, setSelectedMonth, monthReport,
+    ritmoDelMes: r, variablePorCategoria, setActiveTab,
   } = useFinance();
-  const [verDetalle, setVerDetalle] = useState(false);
 
-  const { plan, real, deviations, salidas, collections, alerts } = monthReport;
+  const { plan, real, collections } = monthReport;
   const pendientes = collections.filter((c) => !c.collected);
   const porCobrar = pendientes.reduce((s, c) => s + c.amount, 0);
-
   const meses = availableMonths.includes(selectedMonth)
     ? availableMonths
     : [selectedMonth, ...availableMonths];
 
-  const enRojo = plan.availableForExtra < 0;
-
-  /*
-   * Lo que falta por salir de todo lo comprometido, en una sola cifra. Seis
-   * líneas diciendo "faltan tantos" cada una no es información: es ruido con
-   * el que hay que hacer la suma uno mismo.
-   */
-  const porSalir = LINEAS
-    .filter((l) => l.clase === 'compromiso')
-    .reduce((s, l) => s + Math.max(0, -(deviations[l.key] || 0)), 0);
-
-  const alertaVariable = alerts.find((a) => a.type === 'variable');
-  const alertaIngreso = alerts.find((a) => a.type === 'ingreso');
-  const todoEnOrden = !alertaVariable && !alertaIngreso && porCobrar === 0 && !enRojo && porSalir === 0;
+  const v = veredicto(r);
+  const diaRestantes = r.totalDias - r.hoyDia;
+  const quedaVariable = r.planMes - r.gastado;
+  const porDiaQueda = diaRestantes > 0 ? quedaVariable / diaRestantes : 0;
+  const maxCat = Math.max(1, ...variablePorCategoria.map((c) => Math.max(c.amount, c.previous)));
 
   return (
     <>
       <div className="cc-section-head" style={{ marginTop: 0 }}>
         <div style={{ flex: 1 }}>
           <div className="cc-page-title">El mes</div>
-          <p className="cc-page-sub" style={{ marginBottom: 0 }}>
-            Cómo vas contra lo que planeaste.
-          </p>
+          <p className="cc-page-sub" style={{ marginBottom: 0 }}>Cómo va, contra lo que planeaste.</p>
         </div>
         <select
           className="cc-select" style={{ maxWidth: 150 }}
@@ -119,135 +148,154 @@ export default function Mes() {
         </select>
       </div>
 
-      {/* ------------------------------------------------------- 1. el número */}
-      <div className={`cc-hero ${enRojo ? 'cc-hero-alerta' : ''}`}>
-        <p className="cc-hero-label">
-          {enRojo ? 'Este mes el plan no cierra' : 'Puedes abonarle de más a la deuda'}
-        </p>
-        <div className="cc-hero-num">{fmtCOP(plan.availableForExtra)}</div>
-        <p className="cc-hero-sub">
-          {enRojo
-            ? 'No alcanza ni para la cuota mínima. No es que no abones extra: falta plata para lo que ya está comprometido.'
-            /*
-             * Sin cuota este mes la frase quedaba en "encima de la cuota de $0",
-             * que suena a error. Pasa de verdad el mes del desembolso: el
-             * crédito ya existe pero el banco todavía no cobra nada.
-             */
-            : (plan.debtPayment > 0
-              ? `Encima de la cuota de ${fmtCOP(plan.debtPayment)}, sin tocar nada de lo demás.`
-              : 'Este mes no hay cuota que pagar, así que es todo tuyo para abonar.')}
-          {plan.locked && ' Mes cerrado: se juzga contra el plan que tenía entonces.'}
-        </p>
+      {/* ---------------------------------------------------------- el ritmo */}
+      <div className="cc-card cc-mes-ritmo">
+        <div className={`cc-veredicto ${v.tono}`}>
+          <Gauge size={18} /> {v.texto}
+        </div>
+
+        <div className="cc-mes-cifras">
+          <div>
+            <span>Llevas</span>
+            <strong className="cc-mono">{fmtCOP(r.gastado)}</strong>
+          </div>
+          <div>
+            <span>Deberías llevar</span>
+            <strong className="cc-mono">{fmtCOP(r.deberias)}</strong>
+          </div>
+          {!r.cerrado && r.hoyDia > 0 && (
+            <div>
+              <span>Si sigues así, terminas en</span>
+              <strong className="cc-mono" style={{ color: r.proyeccion > r.planMes ? COLORS.expense : COLORS.ink }}>
+                {fmtCOP(r.proyeccion)}
+              </strong>
+            </div>
+          )}
+          {!r.cerrado && r.hoyDia > 0 && (
+            <div>
+              <span>Te quedan por día</span>
+              <strong className="cc-mono" style={{ color: porDiaQueda < 0 ? COLORS.expense : COLORS.ink }}>
+                {fmtCOP(porDiaQueda)}
+              </strong>
+            </div>
+          )}
+        </div>
+
+        <Suspense fallback={<div style={{ height: 220 }} />}>
+          <Ritmo data={r.dias} pasado={r.adelanto > 0} hoyDia={r.hoyDia} />
+        </Suspense>
+
+        <div className="cc-leyenda-ritmo">
+          <span><i className="solida" style={{ background: r.adelanto > 0 ? COLORS.expense : COLORS.income }} /> Lo que llevas de gasto variable</span>
+          <span><i className="punteada" /> Si gastaras parejo hasta {fmtCOP(r.planMes)}</span>
+        </div>
       </div>
 
-      {/* --------------------------------------------------- 2. tu atención */}
-      <div style={{ marginTop: 16 }}>
-        {todoEnOrden ? (
-          <Aviso
-            Icon={Check} tono="bien"
-            titulo="Vas al día"
-            detalle="Nada pendiente por cobrar y ninguna línea desviada."
-          />
-        ) : (
-          <>
-            {porCobrar > 0 && (
-              <Aviso
-                Icon={HandCoins} tono="ojo"
-                titulo={`Te deben ${fmtCOP(porCobrar)}`}
-                detalle={`${pendientes.length} cobro${pendientes.length === 1 ? '' : 's'} sin marcar. Si se te pasa todos los meses son ${fmtCOP(porCobrar * 12)} al año.`}
-                accion="Cobrar" onAccion={() => setActiveTab('cobros')}
-              />
-            )}
-            {alertaVariable && (
-              <Aviso
-                Icon={ShoppingBag} tono={alertaVariable.severity === 'alerta' ? 'mal' : 'ojo'}
-                titulo={alertaVariable.title} detalle={alertaVariable.detail}
-              />
-            )}
-            {alertaIngreso && (
-              <Aviso
-                Icon={TrendingUp} tono="ojo"
-                titulo={alertaIngreso.title} detalle={alertaIngreso.detail}
-              />
-            )}
-            {porSalir > 0 && (
-              <Aviso
-                Icon={Wallet} tono="ojo"
-                titulo={`Faltan ${fmtCOP(porSalir)} por salir`}
-                detalle="Gastos fijos, cuota, ahorro y colchones que este mes todavía no has registrado."
-              />
-            )}
-          </>
-        )}
-      </div>
+      {/* --------------------------------------------------- lo que pide atención */}
+      {(porCobrar > 0 || plan.projectIncome > 0) && (
+        <div style={{ marginTop: 14 }}>
+          {porCobrar > 0 && (
+            <Aviso
+              Icon={HandCoins} tono="ojo"
+              titulo={`Te deben ${fmtCOP(porCobrar)} de gastos compartidos`}
+              detalle={`${pendientes.length} cobro${pendientes.length === 1 ? '' : 's'} sin marcar.`}
+              accion="Cobrar" onAccion={() => setActiveTab('cobros')}
+            />
+          )}
+          {plan.projectIncome > 0 && (
+            <Aviso
+              Icon={Briefcase} tono="ojo"
+              titulo={`${fmtCOP(plan.projectIncome)} del plan son pagos de proyecto`}
+              detalle="Es plata prometida, no segura. Si el cliente se atrasa, el mes se queda corto en esa cifra: no la gastes antes de que llegue."
+            />
+          )}
+        </div>
+      )}
 
-      {/* ---------------------------------------------------- 3. el detalle */}
-      <div className="cc-card" style={{ marginTop: 14 }}>
-        <button
-          type="button" className="cc-disclosure"
-          onClick={() => setVerDetalle((v) => !v)}
-          aria-expanded={verDetalle}
-        >
-          <span className="cc-chart-title" style={{ marginBottom: 0 }}>Línea por línea</span>
-          <ChevronDown
-            size={16}
-            style={{ transform: verDetalle ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}
-          />
-        </button>
+      <div className="cc-mes-fila">
+        {/* --------------------------------------------------- línea a línea */}
+        <div className="cc-card">
+          <p className="cc-chart-title">El plan, línea a línea</p>
+          <p className="cc-chart-sub">La barra es lo que va; la raya, lo planeado.</p>
 
-        {verDetalle && (
-          <div style={{ marginTop: 12 }}>
-            <div className="cc-commit-list">
-              <div className="cc-plan-row cc-plan-head">
-                <span>Concepto</span>
-                <span>Planeado</span>
-                <span>Vas</span>
-                <span>Diferencia</span>
-              </div>
-              {LINEAS.map((linea) => {
-                const { key, label, Icon } = linea;
-                const d = leerDesvio(linea, deviations[key] || 0);
+          <div className="cc-ingreso-mes">
+            <span><TrendingUp size={14} color={COLORS.income} /> Entró</span>
+            <strong className="cc-mono">{fmtCOP(real.income)}</strong>
+            <span className="cc-stat-sub">
+              de {fmtCOP(plan.income)}
+              {plan.projectIncome > 0 && ` (${fmtCOP(plan.projectIncome)} de proyecto)`}
+            </span>
+          </div>
+
+          {LINEAS.map((l) => (
+            <BarraPlan key={l.key} linea={l} real={real[l.key] || 0} plan={plan[l.key] || 0} />
+          ))}
+        </div>
+
+        {/* ------------------------------------------------------ el variable */}
+        <div className="cc-card">
+          <p className="cc-chart-title">En qué se fue el variable</p>
+          <p className="cc-chart-sub">Contra el mes pasado, en gris.</p>
+          {variablePorCategoria.length === 0 ? (
+            <p className="cc-stat-sub">Todavía no hay gastos variables este mes.</p>
+          ) : (
+            <div className="cc-cats">
+              {variablePorCategoria.slice(0, 7).map((c) => {
+                const cat = getCategory(c.category);
+                const cambio = c.previous > 0 ? (c.amount - c.previous) / c.previous : null;
                 return (
-                  <div key={key} className="cc-plan-row">
-                    <span className="cc-plan-concept"><Icon size={14} /> {label}</span>
-                    <span className="cc-mono" style={{ opacity: 0.65 }}>{fmtCOP(plan[key] || 0)}</span>
-                    <span className="cc-mono">{fmtCOP(real[key] || 0)}</span>
-                    <span className="cc-mono" style={{ color: d.color }}>{d.texto}</span>
+                  <div key={c.category} className="cc-cat">
+                    <div className="cc-cat-cab">
+                      <span><cat.icon size={13} color={cat.color} /> {cat.label}</span>
+                      <span className="cc-mono">{fmtCOP(c.amount)}</span>
+                    </div>
+                    <div className="cc-cat-pistas">
+                      <div className="cc-cat-ahora" style={{ width: `${(c.amount / maxCat) * 100}%`, background: cat.color }} />
+                      <div className="cc-cat-antes" style={{ width: `${(c.previous / maxCat) * 100}%` }} />
+                    </div>
+                    {cambio !== null && Math.abs(cambio) >= 0.05 && (
+                      <span className={`cc-cat-cambio ${cambio > 0 ? 'sube' : 'baja'}`}>
+                        {cambio > 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                        {Math.abs(Math.round(cambio * 100))}% {cambio > 0 ? 'más' : 'menos'} que el mes pasado
+                      </span>
+                    )}
                   </div>
                 );
               })}
             </div>
-
-            <p className="cc-chart-title" style={{ marginTop: 18 }}>Lo que sale de tu cuenta</p>
-            <div className="cc-commit-list">
-              <div className="cc-plan-row" style={{ gridTemplateColumns: '1fr 132px' }}>
-                <span className="cc-plan-concept"><ShoppingBag size={14} /> Gastaste este mes</span>
-                <span className="cc-mono">{fmtCOP(real.fixedExpenses + real.variable)}</span>
-              </div>
-              <div className="cc-plan-row" style={{ gridTemplateColumns: '1fr 132px' }}>
-                <span className="cc-plan-concept"><Wallet size={14} /> Salió de la cuenta</span>
-                <span className="cc-mono">{fmtCOP(salidas.total)}</span>
-              </div>
-              {salidas.conTarjeta > 0 && (
-                <div className="cc-plan-row" style={{ gridTemplateColumns: '1fr 132px' }}>
-                  <span className="cc-plan-concept"><CreditCard size={14} /> De eso, factura de tarjeta</span>
-                  <span className="cc-mono">{fmtCOP(salidas.conTarjeta)}</span>
-                </div>
-              )}
-              {cardOutlook.committed > 0 && (
-                <div className="cc-plan-row" style={{ gridTemplateColumns: '1fr 132px' }}>
-                  <span className="cc-plan-concept"><CreditCard size={14} /> Comprometido en cuotas</span>
-                  <span className="cc-mono" style={{ color: COLORS.debt }}>{fmtCOP(cardOutlook.committed)}</span>
-                </div>
-              )}
-            </div>
-            <p className="cc-page-sub" style={{ marginTop: 10 }}>
-              Gastar y que salga la plata no son lo mismo: una compra con tarjeta es gasto
-              del mes en que la hiciste, pero sale cuando llega la factura.
-            </p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
+
+      {/* --------------------------------------------- la deuda, en una línea */}
+      <button type="button" className="cc-mes-deuda" onClick={() => setActiveTab('deuda')}>
+        <CreditCard size={15} />
+        {plan.availableForExtra >= 0 ? (
+          <span>
+            Si el mes cierra como está planeado, te quedan
+            <strong className="cc-mono"> {fmtCOP(plan.availableForExtra)} </strong>
+            para abonarle de más a la deuda.
+          </span>
+        ) : (
+          <span>
+            El plan no cierra: faltan <strong className="cc-mono">{fmtCOP(-plan.availableForExtra)}</strong> para
+            cubrir lo comprometido.
+          </span>
+        )}
+        <ArrowRight size={14} />
+      </button>
+
+      {plan.locked && (
+        <p className="cc-page-sub" style={{ marginTop: 8 }}>
+          <Check size={13} /> Mes cerrado: se juzga contra el plan que tenía entonces.
+        </p>
+      )}
+      {r.cerrado || r.hoyDia === 0 ? null : (
+        <p className="cc-stat-sub" style={{ marginTop: 8 }}>
+          <Wallet size={12} style={{ verticalAlign: '-1px' }} /> "Te quedan por día" es lo que te queda del
+          variable estimado, repartido entre los {diaRestantes} días que faltan.
+        </p>
+      )}
     </>
   );
 }

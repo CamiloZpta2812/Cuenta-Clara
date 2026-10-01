@@ -20,6 +20,7 @@ import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization
 import { buildCashFlow, currentBalance } from '../lib/cashflow.js';
 import { buildQuincenas, monthGrid } from '../lib/quincenas.js';
 import { buildSplitShares, splitFromShares } from '../lib/split.js';
+import { monthPace, variableByCategory } from '../lib/analisis.js';
 import { accionDeNavegacion, tabDeRuta, TAB_INICIAL } from '../lib/rutas.js';
 import { upcomingCharges } from '../lib/upcoming.js';
 
@@ -1387,6 +1388,13 @@ export function FinanceProvider({ children }) {
   /* Lo que te deben de cuentas divididas, sin importar de qué mes sean. */
   const pendingSplitsList = useMemo(() => pendingSplits(snapshot()), [snapshot]);
 
+  /* El análisis del mes: el ritmo del variable y en qué se fue. Ver lib/analisis.js. */
+  const ritmoDelMes = useMemo(() => monthPace(snapshot(), selectedMonth), [snapshot, selectedMonth]);
+  const variablePorCategoria = useMemo(
+    () => variableByCategory(snapshot(), selectedMonth),
+    [snapshot, selectedMonth],
+  );
+
   /* Lo mismo, en cuadrícula de calendario. */
   const calendarioRejilla = useMemo(
     () => monthGrid(snapshot(), selectedMonth),
@@ -1420,6 +1428,8 @@ export function FinanceProvider({ children }) {
     activeTab,
     cashFlow,
     cashFlowTodo,
+    ritmoDelMes,
+    variablePorCategoria,
     saldoReal,
     quincenas,
     calendarioRejilla,
