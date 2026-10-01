@@ -16,6 +16,9 @@ export const STYLES = `
   --debt-soft: #EDE7F5;
   --brand: #BB4B34;
   --card: #FFFFFF;
+  /* Varias reglas usaban var(--line) sin que existiera, y esos bordes no se
+     dibujaban. Es la misma línea del papel. */
+  --line: #E4DDCE;
 }
 .cc-app {
   font-family: 'Poppins', sans-serif;
@@ -670,5 +673,83 @@ export const STYLES = `
   .cc-print-report h1 { font-family: 'Poppins', sans-serif; font-size: 22px; margin: 0 0 4px 0; }
   .cc-print-report h2 { font-family: 'Poppins', sans-serif; font-size: 15px; margin: 22px 0 8px 0; }
 }
-`;
 
+/* ======================== Resumen como tablero ======================== */
+
+.cc-cabecera-acciones { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cc-select-sm { padding: 6px 10px; font-size: 13px; }
+/* El sello del estado, en chico: antes era un timbre girado que competía con
+   el saldo por ser lo primero que se mira. */
+.cc-sello { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px;
+  font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  border: 1.5px solid; border-radius: 999px; padding: 4px 10px; }
+
+.cc-hero-saldo { margin-top: 16px; padding: 22px 24px 16px; }
+.cc-hero-saldo .cc-saldo-monto { font-size: 38px; letter-spacing: -0.02em; }
+.cc-cambio { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px;
+  font-size: 13.5px; }
+.cc-cambio.sube { color: var(--income); }
+.cc-cambio.baja { color: var(--expense); }
+.cc-cambio span { color: var(--ink-soft); }
+
+.cc-rangos { display: flex; gap: 4px; margin: 14px 0 6px; flex-wrap: wrap; }
+.cc-rango { border: none; background: transparent; font: inherit; font-size: 12.5px;
+  font-weight: 600; color: var(--ink-soft); padding: 5px 12px; border-radius: 999px;
+  cursor: pointer; }
+.cc-rango:hover { background: var(--paper); color: var(--ink); }
+.cc-rango.on { background: var(--ink); color: #fff; }
+
+/* Los cuatro números del mes: fondo de color entero, número grande. */
+.cc-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 14px 0; }
+.cc-kpi { border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column;
+  gap: 4px; min-width: 0; }
+.cc-kpi-label { display: flex; align-items: center; gap: 6px; font-size: 12.5px;
+  font-weight: 600; }
+.cc-kpi-valor { font-size: 23px; font-weight: 700; line-height: 1.15; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-kpi-sub { font-size: 11.5px; color: var(--ink-soft); }
+.cc-kpi-verde { background: var(--income-soft); }
+.cc-kpi-verde .cc-kpi-label { color: var(--income); }
+.cc-kpi-rojo { background: var(--expense-soft); }
+.cc-kpi-rojo .cc-kpi-label { color: var(--expense); }
+.cc-kpi-azul { background: #E1ECF5; }
+.cc-kpi-azul .cc-kpi-label { color: #3E7FB0; }
+.cc-kpi-ambar { background: var(--savings-soft); }
+.cc-kpi-ambar .cc-kpi-label { color: var(--savings); }
+
+.cc-resumen-fila { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; }
+
+.cc-leyenda-reparto { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+.cc-leyenda-reparto > div { display: grid; grid-template-columns: 10px 1fr 40px 96px;
+  gap: 8px; align-items: center; font-size: 12.5px; }
+.cc-leyenda-reparto i { width: 10px; height: 10px; border-radius: 3px; }
+.cc-leyenda-reparto span:nth-child(3) { color: var(--ink-soft); text-align: right; }
+.cc-leyenda-reparto span:nth-child(4) { text-align: right; }
+
+/* El mini calendario: un mapa de calor de un solo tono. */
+.cc-mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cc-mini-cab { text-align: center; font-size: 10.5px; font-weight: 600; color: var(--ink-soft); }
+.cc-mini-dia { position: relative; aspect-ratio: 1.15; border: none; border-radius: 7px;
+  background: var(--paper); font: inherit; font-size: 12px; font-weight: 600; color: var(--ink);
+  cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.cc-mini-dia.oscuro { color: #fff; }
+.cc-mini-dia.hoy { box-shadow: 0 0 0 2px var(--ink); }
+.cc-mini-dia:hover { filter: brightness(0.95); }
+.cc-mini-entra { position: absolute; top: 4px; right: 4px; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--income); display: inline-block; }
+.cc-mini-pie { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  margin-top: 10px; font-size: 11px; color: var(--ink-soft); }
+.cc-mini-pie > span { display: inline-flex; align-items: center; gap: 4px; }
+.cc-mini-escala i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+@media (max-width: 900px) {
+  .cc-kpis { grid-template-columns: repeat(2, 1fr); }
+  .cc-resumen-fila { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .cc-hero-saldo { padding: 18px 16px 12px; }
+  .cc-hero-saldo .cc-saldo-monto { font-size: 30px; }
+  .cc-kpi { padding: 12px 14px; }
+  .cc-kpi-valor { font-size: 18px; }
+}
+`;

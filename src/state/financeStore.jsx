@@ -1359,6 +1359,13 @@ export function FinanceProvider({ children }) {
   }, [monthReport]);
 
   /* El pulso del mes, movimiento a movimiento. Ver lib/cashflow.js. */
+  /*
+   * La curva entera, sin ventana: el Resumen la recorta con el selector de
+   * rango (semana, mes, año…), y recortar algo ya recortado mentiría en el
+   * borde izquierdo.
+   */
+  const cashFlowTodo = useMemo(() => buildCashFlow(snapshot(), []), [snapshot]);
+
   const cashFlow = useMemo(
     () => buildCashFlow(snapshot(), getLastMonthKeys(3, selectedMonth)),
     [snapshot, selectedMonth],
@@ -1412,6 +1419,7 @@ export function FinanceProvider({ children }) {
   const value = {
     activeTab,
     cashFlow,
+    cashFlowTodo,
     saldoReal,
     quincenas,
     calendarioRejilla,

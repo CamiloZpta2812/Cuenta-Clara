@@ -16,9 +16,17 @@ import { fmtCOP, fmtShort } from '../lib/money.js';
  * Ver App.jsx y Resumen.jsx: las dos se cargan con lazy().
  */
 
-const ejeFecha = (d) => {
-  const [, m, dia] = String(d).split('-');
-  return `${parseInt(dia, 10)}/${parseInt(m, 10)}`;
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+/* En rangos cortos el eje dice el día; en uno largo, el mes. */
+const ejeFecha = (largo) => (d) => {
+  const [, m, dia] = String(d).split('-').map(Number);
+  return largo ? `${MESES[m - 1]}` : `${dia} ${MESES[m - 1]}`;
+};
+
+const fechaTooltip = (d) => {
+  const [y, m, x] = String(d).split('-').map(Number);
+  return new Date(y, m - 1, x).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' });
 };
 
 const tooltipStyle = {
@@ -30,51 +38,77 @@ function PulsoTooltip({ active, payload }) {
   const p = payload[0].payload;
   return (
     <div className="cc-card" style={{ padding: '8px 12px', fontSize: 12.5 }}>
-      <div style={{ fontWeight: 600 }}>{p.date}</div>
-      <div className="cc-mono">{fmtCOP(p.saldo)}</div>
-      {p.label && <div style={{ color: COLORS.inkSoft }}>{p.label}</div>}
+      <div style={{ color: COLORS.inkSoft }}>{fechaTooltip(p.date)}</div>
+      <div className="cc-mono" style={{ fontWeight: 700, fontSize: 15 }}>{fmtCOP(p.saldo)}</div>
+      {p.ajuste ? (
+        <div style={{ color: COLORS.inkSoft }}>
+          Cuadraste con el banco: {p.ajuste > 0 ? '+' : ''}{fmtCOP(p.ajuste)} que no estaban registrados
+        </div>
+      ) : (p.label && p.kind !== 'borde' && <div style={{ color: COLORS.inkSoft }}>{p.label}</div>)}
     </div>
   );
 }
 
-export function Pulso({ data }) {
+/*
+ * Un ajuste se marca con un punto: es el brinco de la línea, y sin el punto
+ * parecería un gasto o un ingreso que nunca existió.
+ */
+function PuntoAjuste({ cx, cy, payload }) {
+  if (!payload || !payload.ajuste) return null;
   return (
-    <ResponsiveContainer width="100%" height={230}>
-      <AreaChart data={data} margin={{ top: 6, right: 6, left: -14, bottom: 0 }}>
+    <circle cx={cx} cy={cy} r={5} fill={COLORS.card || '#fff'} stroke={COLORS.ink} strokeWidth={2} />
+  );
+}
+
+/*
+ * El saldo en el rango elegido. Como la del dólar: la línea es verde si en el
+ * rango subiste y roja si bajaste, para que el veredicto se lea antes que los
+ * números. La línea del cero solo aparece si la curva se le acerca: si siempre
+ * estás en positivo, una raya punteada abajo es ruido.
+ */
+export function Pulso({ data, subio = true, largo = false }) {
+  const color = subio ? COLORS.income : COLORS.expense;
+  const min = Math.min(...data.map((p) => p.saldo));
+  const id = subio ? 'pulso-sube' : 'pulso-baja';
+  return (
+    <ResponsiveContainer width="100%" height={240}>
+      <AreaChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
         <defs>
-          <linearGradient id="pulso" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={COLORS.income} stopOpacity={0.28} />
-            <stop offset="100%" stopColor={COLORS.income} stopOpacity={0.02} />
+          <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.24} />
+            <stop offset="100%" stopColor={color} stopOpacity={0.02} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke={COLORS.line} vertical={false} />
         <XAxis
-          dataKey="date" tickFormatter={ejeFecha} minTickGap={28}
+          dataKey="date" tickFormatter={ejeFecha(largo)} minTickGap={36}
           tick={{ fontSize: 11, fill: COLORS.inkSoft }}
           axisLine={{ stroke: COLORS.line }} tickLine={false}
         />
         <YAxis
           tick={{ fontSize: 11, fill: COLORS.inkSoft }} axisLine={false}
-          tickLine={false} tickFormatter={fmtShort} width={46}
+          tickLine={false} tickFormatter={fmtShort} width={48} domain={['auto', 'auto']}
         />
-        <ReferenceLine y={0} stroke={COLORS.inkSoft} strokeDasharray="4 4" />
-        <Tooltip content={<PulsoTooltip />} />
+        {min < 0 && <ReferenceLine y={0} stroke={COLORS.inkSoft} strokeDasharray="4 4" />}
+        <Tooltip content={<PulsoTooltip />} cursor={{ stroke: COLORS.inkSoft, strokeDasharray: '3 3' }} />
         <Area
-          type="monotone" dataKey="saldo" stroke={COLORS.income}
-          strokeWidth={2.5} fill="url(#pulso)" dot={false} activeDot={{ r: 4 }}
+          type="monotone" dataKey="saldo" stroke={color}
+          strokeWidth={2} fill={`url(#${id})`} dot={<PuntoAjuste />}
+          activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }}
+          isAnimationActive={false}
         />
       </AreaChart>
     </ResponsiveContainer>
   );
 }
 
-export function Reparto({ data }) {
+export function Reparto({ data, alto = 240 }) {
   return (
-    <ResponsiveContainer width="100%" height={240}>
+    <ResponsiveContainer width="100%" height={alto}>
       <PieChart>
         <Pie
           data={data} dataKey="value" nameKey="name"
-          innerRadius={60} outerRadius={98} paddingAngle={2}
+          innerRadius={alto * 0.27} outerRadius={alto * 0.42} paddingAngle={2}
         >
           {data.map((e) => <Cell key={e.name} fill={e.color} />)}
         </Pie>

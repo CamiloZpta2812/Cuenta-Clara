@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  cashEvents, buildCashFlow, balanceAnchor, currentBalance,
+  cashEvents, buildCashFlow, balanceAnchor, currentBalance, pulseRange,
 } from './cashflow.js';
 
 const estado = {
@@ -231,4 +231,47 @@ test('un aporte a un pote compartido baja el saldo por lo tuyo, no por el pote',
     balanceAnchor: { date: '2026-09-08', amount: 357_000 },
   };
   assert.equal(currentBalance(conPote, '2026-09-30'), 292_000);
+});
+
+/* ------------------------------------------------------- los rangos -- */
+
+const curva = [
+  { date: '2026-09-01', saldo: 100_000 },
+  { date: '2026-09-20', saldo: 400_000 },
+  { date: '2026-09-28', saldo: 300_000 },
+];
+
+test('la semana arranca en el borde con el saldo que traías', () => {
+  const r = pulseRange(curva, '1S', '2026-09-30');
+  assert.equal(r.puntos[0].date, '2026-09-23');
+  assert.equal(r.puntos[0].saldo, 400_000, 'lo que había antes del rango');
+  assert.equal(r.cambio, -100_000, 'se mide desde el borde, no desde el primer gasto');
+  assert.equal(r.pct, -0.25);
+});
+
+test('la línea llega hasta hoy aunque hoy no haya pasado nada', () => {
+  const r = pulseRange(curva, '1M', '2026-09-30');
+  const ultimo = r.puntos[r.puntos.length - 1];
+  assert.equal(ultimo.date, '2026-09-30');
+  assert.equal(ultimo.saldo, 300_000);
+});
+
+test('todo arranca en el primer punto', () => {
+  const r = pulseRange(curva, 'todo', '2026-09-30');
+  assert.equal(r.desde, '2026-09-01');
+  assert.equal(r.cambio, 200_000);
+});
+
+test('sin porcentaje cuando se parte de cero o de rojo', () => {
+  const r = pulseRange([{ date: '2026-09-01', saldo: 0 }, { date: '2026-09-05', saldo: 50_000 }], 'todo', '2026-09-06');
+  assert.equal(r.pct, null);
+});
+
+test('lo del futuro no se dibuja', () => {
+  const r = pulseRange([...curva, { date: '2026-10-15', saldo: 2_000_000 }], 'todo', '2026-09-30');
+  assert.ok(r.puntos.every((p) => p.date <= '2026-09-30'));
+});
+
+test('sin puntos no revienta', () => {
+  assert.deepEqual(pulseRange([], '1M', '2026-09-30').puntos, []);
 });

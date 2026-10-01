@@ -1,4 +1,6 @@
-import { monthSummary, targetDebt, simulatePlanChange } from '../lib/month.js';
+import {
+  monthSummary, targetDebt, simulatePlanChange, pendingSplits,
+} from '../lib/month.js';
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
 import { buildCashFlow, currentBalance } from '../lib/cashflow.js';
 import { buildQuincenas, monthGrid } from '../lib/quincenas.js';
@@ -92,7 +94,15 @@ export const estado = {
       payments: [{ id: 'pd-1', amount: 1_133_000, date: '2026-09-10' }] },
   ],
   /* El día del desembolso: de ahí arranca el saldo. */
-  balanceAnchor: { date: '2026-09-08', amount: 357_000 },
+  /* Dos ajustes: el del desembolso y uno el 20, con un brinco de lo no registrado. */
+  balanceAnchors: [
+    { id: 'a1', date: '2026-09-08', amount: 357_000 },
+    { id: 'a2', date: '2026-09-20', amount: 1_350_000 },
+  ],
+  expectedIncomes: [
+    { id: 'x1', project: 'Web Solenium', name: 'Anticipo', amount: 2_000_000, expectedDate: '2026-09-22', transactionId: null },
+    { id: 'x2', project: 'Web Solenium', name: 'Entrega final', amount: 3_000_000, expectedDate: '2026-11-05', transactionId: null },
+  ],
   /* Septiembre viene apretado: el colchón de seguridad va a la mitad. */
   bucketAdjustments: [
     { id: 'aj-seg', month: MES, bucketId: 'bkt-seg', amount: 150_000 },
@@ -105,6 +115,13 @@ export const estado = {
     { id: 'card-1', name: 'Visa Bancolombia', lastFour: '4417', currency: 'COP', cutDay: 15, paymentDay: 5 },
   ],
   transactions: [
+    { id: 't-cena', type: 'gasto', amount: 160_000, category: 'alimentacion', date: '2026-09-19',
+      note: 'Cena cumpleaños', paymentMethod: 'debito',
+      shares: [
+        { id: 'r1', personId: 'p-juanjo', amount: 40_000, collectedAt: '2026-09-21' },
+        { id: 'r2', personId: 'p-yeison', amount: 40_000, collectedAt: null },
+        { id: 'r3', personId: 'p-sofi', amount: 40_000, collectedAt: null },
+      ] },
     { id: 't1', type: 'ingreso', amount: 3_400_000, category: 'salario', date: '2026-09-30', paymentMethod: 'debito' },
     { id: 't2', type: 'ingreso', amount: 200_000, category: 'otros_ingreso', date: '2026-09-15', paymentMethod: 'debito' },
     { id: 't3', type: 'gasto', amount: 300_000, category: 'vivienda', date: '2026-09-01', fixedExpenseId: 'fix-casa', paymentMethod: 'debito' },
@@ -157,6 +174,15 @@ export function buildValue(overrides = {}) {
     selectedDebtId: overrides.selectedDebtId || null,
     cashFlow: buildCashFlow(estado, ['2026-07', '2026-08', '2026-09']),
     saldoReal: currentBalance(estado, '2026-09-30'),
+    cashFlowTodo: buildCashFlow(estado, []),
+    pendingSplits: pendingSplits(estado),
+    expectedIncomes: estado.expectedIncomes,
+    balanceAnchors: estado.balanceAnchors,
+    handleToggleSplitCollected: () => {},
+    handleAddExpectedIncome: () => {},
+    handleUpdateExpectedIncome: () => {},
+    handleDeleteExpectedIncome: () => {},
+    handleToggleExpectedIncomeReceived: () => {},
     bucketAdjustments: estado.bucketAdjustments,
     quincenas: buildQuincenas(estado, MES),
     calendarioRejilla: monthGrid(estado, MES, '2026-09-09'),
@@ -174,7 +200,7 @@ export function buildValue(overrides = {}) {
     configTab: 'ingresos',
     setConfigTab: () => {},
     handleAdjustBucketMonth: () => {},
-    balanceAnchor: estado.balanceAnchor,
+    balanceAnchor: estado.balanceAnchors[estado.balanceAnchors.length - 1],
     handleAnchorBalance: () => {},
     planDistribution: (() => {
       const p = monthSummary(estado, MES).plan;

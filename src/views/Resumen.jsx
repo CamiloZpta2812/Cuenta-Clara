@@ -1,11 +1,13 @@
 import { Suspense, lazy, useState } from 'react';
 import {
   TrendingUp, TrendingDown, ShoppingBag, Check, Landmark, Sheet, AlertTriangle, Activity, Wallet,
+  PiggyBank, HandCoins,
 } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
 import { monthLabel, todayStr } from '../lib/dates.js';
 import { fmtCOP } from '../lib/money.js';
-import StatCard from '../components/StatCard';
+import MiniCalendario from '../components/MiniCalendario';
+import { RANGOS, pulseRange } from '../lib/cashflow.js';
 import RecCard from '../components/RecCard';
 import EmptyState from '../components/EmptyState';
 import { useFinance } from '../state/financeStore';
@@ -46,22 +48,6 @@ const diaLargo = (d) => {
   const [y, m, dia] = String(d).split('-').map(Number);
   return new Date(y, m - 1, dia).toLocaleDateString('es-CO', { day: 'numeric', month: 'long' });
 };
-
-/*
- * Qué está mirando el usuario cambia según si hay ancla: con ella la línea es
- * el saldo, sin ella es la variación. Decirlo mal es peor que no decir nada.
- */
-function PieDeLaGrafica() {
-  const { balanceAnchor } = useFinance();
-  return (
-    <p className="cc-page-sub" style={{ marginTop: 6 }}>
-      {balanceAnchor
-        ? 'Es el saldo de la cuenta día a día. Lo apartado en colchones ya está descontado, aunque siga siendo tuyo.'
-        : 'Es cuánto te has movido en la ventana, no el saldo del banco: arranca en cero porque todavía no le has dicho con cuánto cuentas.'}
-    </p>
-  );
-}
-
 
 /*
  * El saldo en cuenta, y de dónde sabe la app que es ese.
@@ -157,116 +143,205 @@ function SaldoEnCuenta() {
   );
 }
 
+/*
+ * El saldo, como la gráfica del dólar.
+ *
+ * Arriba el número grande y cuánto cambió en el rango elegido; debajo la
+ * curva, verde si subiste y roja si bajaste. El rango es lo que le da sentido
+ * a la pregunta: "¿voy bien?" no se responde igual mirando la semana que el
+ * año.
+ */
+const TEXTO_RANGO = {
+  '1S': 'en la última semana',
+  '1M': 'en el último mes',
+  '3M': 'en los últimos 3 meses',
+  '1A': 'en el último año',
+  todo: 'desde que empezaste',
+};
+
+function leerRango() {
+  try { return localStorage.getItem('aldia-rango') || '1M'; } catch { return '1M'; }
+}
+
+function Saldo() {
+  const { cashFlowTodo, saldoReal, balanceAnchor } = useFinance();
+  const [rango, setRango] = useState(leerRango);
+  const elegir = (id) => {
+    setRango(id);
+    try { localStorage.setItem('aldia-rango', id); } catch { /* sin almacenamiento */ }
+  };
+
+  const r = pulseRange(cashFlowTodo, rango, todayStr());
+  const subio = r.cambio >= 0;
+  const largo = rango === '1A' || rango === 'todo';
+
+  return (
+    <div className="cc-card cc-hero-saldo">
+      <SaldoEnCuenta />
+
+      {r.puntos.length > 1 && (
+        <div className={`cc-cambio ${subio ? 'sube' : 'baja'}`}>
+          {subio ? <TrendingUp size={15} /> : <TrendingDown size={15} />}
+          <strong className="cc-mono">
+            {subio ? '+' : '−'}{fmtCOP(Math.abs(r.cambio))}
+            {r.pct !== null && ` (${subio ? '+' : '−'}${Math.abs(Math.round(r.pct * 100))}%)`}
+          </strong>
+          <span>{TEXTO_RANGO[rango]}</span>
+        </div>
+      )}
+
+      {/* El rango va en una sola fila arriba de la curva, como en Google. */}
+      <div className="cc-rangos" role="tablist" aria-label="Rango de la gráfica">
+        {RANGOS.map((x) => (
+          <button
+            key={x.id} type="button" role="tab" aria-selected={rango === x.id}
+            className={`cc-rango ${rango === x.id ? 'on' : ''}`}
+            onClick={() => elegir(x.id)}
+          >
+            {x.label}
+          </button>
+        ))}
+      </div>
+
+      {r.puntos.length < 2 ? (
+        <EmptyState
+          Icon={Activity}
+          title="Todavía no hay con qué dibujar"
+          text="Registra un ingreso o un gasto y aquí verás cómo se mueve tu plata."
+        />
+      ) : (
+        <Suspense fallback={<HuecoGrafica alto={240} />}>
+          <Pulso data={r.puntos} subio={subio} largo={largo} />
+        </Suspense>
+      )}
+
+      <p className="cc-stat-sub" style={{ marginTop: 4 }}>
+        {balanceAnchor
+          ? 'Los puntos con borde son los días en que cuadraste con el banco: el brinco es lo que no estaba registrado.'
+          : 'Sin cuadrar con el banco, la línea muestra cuánto te has movido, no cuánto tienes.'}
+        {saldoReal !== null && saldoReal < 0 && ' Ojo: según lo registrado, la cuenta está en rojo.'}
+      </p>
+    </div>
+  );
+}
+
+/* Un número grande con su fondo de color: se lee de lejos, como un tablero. */
+function Kpi({ label, value, sub, Icon, tono }) {
+  return (
+    <div className={`cc-kpi cc-kpi-${tono}`}>
+      <div className="cc-kpi-label"><Icon size={15} /> {label}</div>
+      <div className="cc-kpi-valor cc-mono">{value}</div>
+      {sub && <div className="cc-kpi-sub">{sub}</div>}
+    </div>
+  );
+}
+
 export default function Resumen() {
   const {
     availableMonths, exporting, handleExportExcel,
-    cashFlow, planDistribution,
-    selMonthExpense, selMonthFixed, selMonthIncome, selMonthVariable,
+    planDistribution, monthReport, pendingSplits, expectedIncomes,
+    selMonthExpense, selMonthIncome,
     selectedMonth, setSelectedMonth, status, recommendations,
   } = useFinance();
 
   const totalPlan = planDistribution.reduce((s, x) => s + x.value, 0);
+  const { plan, real, collections } = monthReport;
+
+  const teDebenCobros = collections.filter((c) => !c.collected).reduce((s, c) => s + c.amount, 0);
+  const teDebenCuentas = (pendingSplits || []).reduce((s, x) => s + x.amount, 0);
+  const porCobrarProyecto = (expectedIncomes || [])
+    .filter((x) => !x.transactionId).reduce((s, x) => s + (Number(x.amount) || 0), 0);
+  const apartado = real.savings + real.cushion;
+  const planApartar = plan.savings + plan.cushion;
 
   return (
     <>
-      <div className="cc-page-title">Resumen</div>
-      <p className="cc-page-sub">Cómo se ha movido tu plata y a dónde se va.</p>
-
-      <div className="cc-section-head">
-        <div className="cc-stamp" style={{ color: status.color }}>
-          <status.Icon size={16} /> {status.label}
+      <div className="cc-section-head" style={{ marginTop: 0 }}>
+        <div>
+          <div className="cc-page-title">Resumen</div>
+          <p className="cc-page-sub" style={{ marginBottom: 0 }}>Cómo se ha movido tu plata y a dónde se va.</p>
         </div>
-        <select
-          className="cc-select" style={{ maxWidth: 160 }}
-          value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}
-        >
-          {availableMonths.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
-        </select>
-        <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => window.print()}>
-          <Landmark size={13} /> Reporte del mes (PDF)
-        </button>
-        <button
-          type="button" className="cc-btn cc-btn-outline cc-btn-sm"
-          onClick={handleExportExcel} disabled={exporting === 'trabajando'}
-        >
-          <Sheet size={13} /> {exporting === 'trabajando' ? 'Generando…' : 'Todo en Excel'}
-        </button>
+        <div className="cc-cabecera-acciones">
+          <span className="cc-sello" style={{ color: status.color, borderColor: status.color }}>
+            <status.Icon size={13} /> {status.label}
+          </span>
+          <select
+            className="cc-select cc-select-sm" style={{ maxWidth: 140 }}
+            value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}
+          >
+            {availableMonths.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
+          </select>
+          <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => window.print()} title="Reporte del mes en PDF">
+            <Landmark size={13} /> PDF
+          </button>
+          <button
+            type="button" className="cc-btn cc-btn-outline cc-btn-sm"
+            onClick={handleExportExcel} disabled={exporting === 'trabajando'}
+          >
+            <Sheet size={13} /> {exporting === 'trabajando' ? 'Generando…' : 'Excel'}
+          </button>
+        </div>
       </div>
 
       {exporting && exporting !== 'trabajando' && (
         <div className="cc-banner"><AlertTriangle size={15} /> No se pudo generar el Excel: {exporting}</div>
       )}
 
-      <div className="cc-stats-grid">
-        <StatCard label="Ingresos del mes" value={fmtCOP(selMonthIncome)} Icon={TrendingUp} color={COLORS.income} bg="var(--income-soft)" />
-        <StatCard label="Gastos del mes" value={fmtCOP(selMonthExpense)} Icon={TrendingDown} color={COLORS.expense} bg="var(--expense-soft)" />
-        <StatCard label="Gastos fijos" value={fmtCOP(selMonthFixed)} Icon={Landmark} color={COLORS.debt} bg="var(--debt-soft)" />
-        <StatCard label="Gastos variables" value={fmtCOP(selMonthVariable)} Icon={ShoppingBag} color={COLORS.savings} bg="var(--savings-soft)" />
+      <Saldo />
+
+      <div className="cc-kpis">
+        <Kpi
+          tono="verde" Icon={TrendingUp} label={`Entró en ${monthLabel(selectedMonth)}`}
+          value={fmtCOP(selMonthIncome)}
+          sub={plan.income > 0 ? `de ${fmtCOP(plan.income)} esperados` : null}
+        />
+        <Kpi
+          tono="rojo" Icon={ShoppingBag} label="Gastaste"
+          value={fmtCOP(selMonthExpense)}
+          sub={teDebenCuentas > 0 ? 'solo tu parte de las cuentas divididas' : null}
+        />
+        <Kpi
+          tono="azul" Icon={PiggyBank} label="Apartaste"
+          value={fmtCOP(apartado)}
+          sub={planApartar > 0 ? `de ${fmtCOP(planApartar)} planeados` : null}
+        />
+        <Kpi
+          tono="ambar" Icon={HandCoins} label="Te deben"
+          value={fmtCOP(teDebenCobros + teDebenCuentas)}
+          sub={porCobrarProyecto > 0 ? `+ ${fmtCOP(porCobrarProyecto)} de proyectos por cobrar` : null}
+        />
       </div>
 
-      {/* ----------------------------------------------------------- el pulso */}
-      <div className="cc-card" style={{ marginTop: 18 }}>
-        <SaldoEnCuenta />
-        <p className="cc-chart-title" style={{ marginTop: 16 }}>El pulso de tu plata</p>
-        <p className="cc-chart-sub">
-          Sube con cada ingreso y baja con cada gasto, aporte y abono · últimos 3 meses
-        </p>
-        {cashFlow.length === 0 ? (
-          <EmptyState
-            Icon={Activity}
-            title="Todavía no hay movimientos"
-            text="Registra un ingreso o un gasto y aquí verás la forma que va tomando el mes."
-          />
-        ) : (
-          <>
-            <Suspense fallback={<HuecoGrafica alto={230} />}>
-              <Pulso data={cashFlow} />
-            </Suspense>
-            <PieDeLaGrafica />
-          </>
-        )}
-      </div>
+      <div className="cc-resumen-fila">
+        <MiniCalendario />
 
-      {/* ---------------------------------------------------------- el reparto */}
-      <div className="cc-card" style={{ marginTop: 14 }}>
-        <p className="cc-chart-title">A dónde va cada peso</p>
-        <p className="cc-chart-sub">Según el plan de {monthLabel(selectedMonth)}</p>
-        {planDistribution.length === 0 ? (
-          <EmptyState
-            Icon={ShoppingBag}
-            title="Todavía no hay un plan"
-            text="Cuando tengas ingresos y gastos fijos registrados, aquí verás cómo se reparte lo que entra."
-          />
-        ) : (
-          <div className="cc-split">
-            <Suspense fallback={<HuecoGrafica alto={240} />}>
-              <Reparto data={planDistribution} />
-            </Suspense>
-
-            {/*
-              La leyenda va como lista y no dentro de la gráfica: con seis
-              porciones, los rótulos de recharts se pisan entre sí y el
-              porcentaje —que es lo que se vino a leer— queda ilegible.
-            */}
-            <div className="cc-commit-list" style={{ alignSelf: 'center' }}>
-              {planDistribution.map((x) => (
-                <div key={x.name} className="cc-plan-row" style={{ gridTemplateColumns: '1fr 96px 52px' }}>
-                  <span className="cc-plan-concept">
-                    <span style={{
-                      width: 10, height: 10, borderRadius: 3, background: x.color, flexShrink: 0,
-                    }}
-                    />
-                    {x.name}
-                  </span>
-                  <span className="cc-mono">{fmtCOP(x.value)}</span>
-                  <span className="cc-mono" style={{ color: COLORS.inkSoft }}>
-                    {totalPlan > 0 ? `${Math.round((x.value / totalPlan) * 100)}%` : '—'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="cc-card">
+          <p className="cc-chart-title">A dónde va cada peso</p>
+          <p className="cc-chart-sub">Según el plan de {monthLabel(selectedMonth)}</p>
+          {planDistribution.length === 0 ? (
+            <EmptyState
+              Icon={ShoppingBag}
+              title="Todavía no hay un plan"
+              text="Cuando tengas ingresos y gastos fijos registrados, aquí verás cómo se reparte lo que entra."
+            />
+          ) : (
+            <>
+              <Suspense fallback={<HuecoGrafica alto={200} />}>
+                <Reparto data={planDistribution} alto={200} />
+              </Suspense>
+              <div className="cc-leyenda-reparto">
+                {planDistribution.map((x) => (
+                  <div key={x.name}>
+                    <i style={{ background: x.color }} />
+                    <span>{x.name}</span>
+                    <span className="cc-mono">{totalPlan > 0 ? `${Math.round((x.value / totalPlan) * 100)}%` : '—'}</span>
+                    <span className="cc-mono">{fmtCOP(x.value)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="cc-card" style={{ marginTop: 14 }}>

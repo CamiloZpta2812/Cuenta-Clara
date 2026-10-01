@@ -202,3 +202,67 @@ export function currentBalance(estado, hasta) {
     .filter((e) => e.date > ancla.date && e.date <= tope)
     .reduce((s, e) => s + e.delta, ancla.amount);
 }
+
+/*
+ * Los rangos del pulso, como la gráfica del dólar en Google: semana, mes, tres
+ * meses, año, todo. Los días son hacia atrás desde hoy, no meses calendario:
+ * "el último mes" el 3 de octubre incluye septiembre casi entero, que es lo
+ * que uno espera ver.
+ */
+export const RANGOS = [
+  { id: '1S', label: '1S', dias: 7 },
+  { id: '1M', label: '1M', dias: 30 },
+  { id: '3M', label: '3M', dias: 90 },
+  { id: '1A', label: '1A', dias: 365 },
+  { id: 'todo', label: 'Todo', dias: null },
+];
+
+const restarDias = (iso, n) => {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+/*
+ * Recorta la curva a un rango y dice cuánto cambió en él.
+ *
+ * Dos detalles que hacen que se lea como la del dólar y no como un recorte:
+ *
+ *   La línea arranca en el borde izquierdo con el saldo que traías, aunque ese
+ *   día no haya pasado nada. Sin ese punto, la semana empezaría en el primer
+ *   movimiento y el cambio se mediría desde ahí, no desde el inicio del rango.
+ *
+ *   Y llega hasta hoy con el último saldo, para que la línea no se corte en el
+ *   último gasto y parezca que la historia termina ahí.
+ */
+export function pulseRange(puntos, rangoId, hoy = todayStr()) {
+  const rango = RANGOS.find((r) => r.id === rangoId) || RANGOS[1];
+  const todos = (puntos || []).filter((p) => p.date <= hoy);
+  if (todos.length === 0) return { puntos: [], cambio: 0, pct: null, desde: null, base: null };
+
+  const desde = rango.dias === null ? todos[0].date : restarDias(hoy, rango.dias);
+  const previos = todos.filter((p) => p.date < desde);
+  const adentro = todos.filter((p) => p.date >= desde);
+  const traido = previos.length ? previos[previos.length - 1].saldo : null;
+
+  const out = [];
+  if (traido !== null && (!adentro.length || adentro[0].date !== desde)) {
+    out.push({ date: desde, saldo: traido, delta: 0, kind: 'borde', label: '', ajuste: 0 });
+  }
+  out.push(...adentro);
+  const ultimo = out.length ? out[out.length - 1] : previos[previos.length - 1];
+  if (ultimo && ultimo.date !== hoy) {
+    out.push({ date: hoy, saldo: ultimo.saldo, delta: 0, kind: 'hoy', label: 'Hoy', ajuste: 0 });
+  }
+
+  const base = out[0].saldo;
+  const cambio = out[out.length - 1].saldo - base;
+  return {
+    puntos: out,
+    cambio,
+    /* Sin porcentaje si se parte de cero o de rojo: "subió 300%" desde 0 no dice nada. */
+    pct: base > 0 ? cambio / base : null,
+    desde: out[0].date,
+    base,
+  };
+}
