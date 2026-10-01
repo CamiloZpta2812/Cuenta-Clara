@@ -40,7 +40,11 @@ export const TABLES = [
   'bucket_contributions',
   'bucket_adjustments',
   'monthly_plans',
+  'balance_anchors',
+  'expected_incomes',
   'transactions',
+  /* Apunta a transactions, así que va después: al borrar, se recorre al revés. */
+  'transaction_shares',
 ];
 
 export const WRITE_ORDER = TABLES;
@@ -251,8 +255,14 @@ export function customCategoryToRow(c) {
  * preferencias. Sin fecha no hay ancla, así que las dos se guardan o ninguna:
  * un monto suelto no diría de qué día es.
  */
+/* El ajuste más reciente: es el que mandan las columnas viejas de user_settings. */
+function ultimoAjuste(anclas) {
+  return [...(anclas || [])].filter((a) => a && a.date)
+    .sort((a, b) => (a.date < b.date ? -1 : 1)).pop() || null;
+}
+
 export function settingsToRow(state) {
-  const ancla = state.balanceAnchor;
+  const ancla = ultimoAjuste(state.balanceAnchors);
   return {
     category_labels: state.categoryLabels || {},
     setup_completed_at: state.setupCompletedAt || null,
@@ -306,8 +316,28 @@ export function stateToRows(state) {
     });
   });
 
+  /* El reparto de una cuenta dividida vive dentro de su movimiento. */
+  const transactionShares = [];
+  (state.transactions || []).forEach((t) => {
+    (t.shares || []).forEach((r) => {
+      transactionShares.push({
+        id: r.id, transaction_id: t.id, person_id: r.personId,
+        amount: num(r.amount) || 0, collected_at: date(r.collectedAt),
+      });
+    });
+  });
+
   return {
     user_settings: [settingsToRow(state)],
+    balance_anchors: (state.balanceAnchors || []).map((a) => ({
+      id: a.id, date: date(a.date), amount: num(a.amount) || 0,
+    })),
+    expected_incomes: (state.expectedIncomes || []).map((x) => ({
+      id: x.id, project: x.project || '', name: x.name || '',
+      amount: num(x.amount) || 0, expected_date: date(x.expectedDate),
+      transaction_id: str(x.transactionId) || null,
+    })),
+    transaction_shares: transactionShares,
     custom_categories: (state.customCategories || []).map(customCategoryToRow),
     credit_cards: (state.creditCards || []).map(cardToRow),
     people: (state.people || []).map(personToRow),
@@ -385,8 +415,34 @@ export function rowsToState(rows) {
     month: c.month || monthKeyFromDate(c.date) || null,
   }));
 
+  const sharesByTransaction = groupBy(rows.transaction_shares, 'transaction_id', (r) => ({
+    id: r.id, personId: r.person_id, amount: num(r.amount) || 0,
+    collectedAt: date(r.collected_at),
+  }));
+
+  /*
+   * Si todavía no hay historial pero sí el ancla vieja de user_settings, esa
+   * ancla es el primer ajuste. Así nadie pierde su saldo por correr la app
+   * antes que la migración.
+   */
+  let anclas = (rows.balance_anchors || []).map((a) => ({
+    id: a.id, date: date(a.date), amount: num(a.amount) || 0,
+  }));
+  if (anclas.length === 0 && settings.balance_anchor_date) {
+    const d = date(settings.balance_anchor_date);
+    anclas = [{ id: `ancla-${d}`, date: d, amount: num(settings.balance_anchor_amount) || 0 }];
+  }
+
   return {
-    transactions: (rows.transactions || []).map(rowToTransaction),
+    transactions: (rows.transactions || []).map((r) => ({
+      ...rowToTransaction(r), shares: sharesByTransaction[r.id] || [],
+    })),
+    balanceAnchors: anclas.sort((a, b) => (a.date < b.date ? -1 : 1)),
+    expectedIncomes: (rows.expected_incomes || []).map((x) => ({
+      id: x.id, project: x.project || '', name: x.name || '',
+      amount: num(x.amount) || 0, expectedDate: date(x.expected_date),
+      transactionId: x.transaction_id || null,
+    })),
     creditCards: (rows.credit_cards || []).map((c) => ({
       id: c.id, name: c.name, lastFour: c.last_four,
       currency: c.currency === 'USD' ? 'USD' : 'COP',
@@ -453,9 +509,6 @@ export function rowsToState(rows) {
     })),
     categoryLabels: settings.category_labels || {},
     setupCompletedAt: settings.setup_completed_at || null,
-    balanceAnchor: settings.balance_anchor_date
-      ? { date: date(settings.balance_anchor_date), amount: num(settings.balance_anchor_amount) || 0 }
-      : null,
   };
 }
 

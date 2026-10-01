@@ -30,10 +30,19 @@ const num = (v) => Number(v) || 0;
  * Un ancla en cero es un ancla válida: "hoy no tengo nada" es un dato, no la
  * ausencia de uno. Por eso se pregunta por la fecha, no por el monto.
  */
+export function balanceAnchors(estado) {
+  const lista = (estado && estado.balanceAnchors)
+    || (estado && estado.balanceAnchor ? [estado.balanceAnchor] : []);
+  return lista
+    .filter((a) => a && a.date)
+    .map((a) => ({ date: String(a.date).slice(0, 10), amount: num(a.amount) }))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+/* El ajuste más reciente, que es el que manda sobre el saldo de hoy. */
 export function balanceAnchor(estado) {
-  const a = estado && estado.balanceAnchor;
-  if (!a || !a.date) return null;
-  return { date: String(a.date).slice(0, 10), amount: num(a.amount) };
+  const lista = balanceAnchors(estado);
+  return lista.length ? lista[lista.length - 1] : null;
 }
 
 /*
@@ -58,6 +67,22 @@ export function cashEvents(estado) {
       delta: t.type === 'ingreso' ? monto : -monto,
       kind: t.type === 'ingreso' ? 'ingreso' : 'gasto',
       label: t.note || '',
+    });
+  });
+
+  /*
+   * Una cuenta dividida sale completa de tu cuenta —pagaste tú— y lo de cada
+   * amigo vuelve a entrar el día en que te lo transfiere. Mientras no te
+   * pague, no entra nada: esa plata está en la calle, no en el banco.
+   */
+  (estado.transactions || []).forEach((t) => {
+    (t.shares || []).forEach((r) => {
+      const monto = num(r.amount);
+      if (!r.collectedAt || monto === 0) return;
+      eventos.push({
+        date: r.collectedAt, delta: monto, kind: 'reintegro',
+        label: t.note ? `Te pagaron: ${t.note}` : 'Te pagaron tu parte',
+      });
     });
   });
 
@@ -95,41 +120,71 @@ export function cashEvents(estado) {
  */
 export function buildCashFlow(estado, months) {
   const ventana = new Set(months || []);
-  const ancla = balanceAnchor(estado);
+  const anclas = balanceAnchors(estado);
+  const eventos = cashEvents(estado);
 
   /*
-   * Lo anterior al ancla no se suma ni se dibuja: ya está contado dentro de
-   * ella. Y lo del mismo día tampoco, porque el ancla es el saldo con el que
-   * CERRÓ ese día — el que lees en el banco, que ya trae lo de hoy.
+   * Por tramos, no desde un solo punto.
+   *
+   * Con un ancla sola, cuadrar con el banco reiniciaba la gráfica: lo de antes
+   * del ajuste desaparecía y la línea arrancaba de nuevo desde ese día. Se
+   * perdía la historia justo cuando más sentido tenía mirarla.
+   *
+   * Ahora cada ajuste vale desde su día hasta el siguiente. Se lleva la suma
+   * cruda de todo lo registrado, y a cada tramo se le suma la diferencia entre
+   * lo que dijo el banco y lo que decía esa suma. En el día de un ajuste la
+   * línea pega el brinco, y ese brinco es justo lo que no habías registrado.
+   *
+   * Lo anterior al primer ajuste se reconstruye hacia atrás desde él. Un ajuste
+   * es el saldo con el que CERRÓ el día, así que lo de ese día ya viene adentro.
    */
-  const eventos = cashEvents(estado).filter((e) => !ancla || e.date > ancla.date);
+  const deltaPorDia = new Map();
+  const ultimoDelDia = new Map();
+  eventos.forEach((e) => {
+    deltaPorDia.set(e.date, (deltaPorDia.get(e.date) || 0) + e.delta);
+    ultimoDelDia.set(e.date, e);
+  });
+  const anclaPorDia = new Map(anclas.map((a) => [a.date, a]));
+  const fechas = [...new Set([...deltaPorDia.keys(), ...anclaPorDia.keys()])].sort();
 
-  let saldo = ancla ? ancla.amount : 0;
+  /* La suma cruda al cierre de cada día, para sacar el desfase de cada ajuste. */
+  let crudo = 0;
+  const crudoAl = new Map();
+  fechas.forEach((d) => { crudo += deltaPorDia.get(d) || 0; crudoAl.set(d, crudo); });
+  const desfases = anclas.map((a) => ({ date: a.date, valor: a.amount - crudoAl.get(a.date) }));
+
+  /* El desfase que manda en una fecha: el del último ajuste hasta ese día. */
+  const desfaseEn = (d) => {
+    if (desfases.length === 0) return 0;
+    let actual = desfases[0].valor;
+    desfases.forEach((x) => { if (x.date <= d) actual = x.valor; });
+    return actual;
+  };
+
+  let desfasePrevio = desfases.length ? desfases[0].valor : 0;
   const puntos = [];
 
-  /*
-   * Con ancla, la línea nace en ella: sin ese punto la gráfica arrancaría en el
-   * primer movimiento posterior y el salto de la quincena parecería el saldo.
-   */
-  if (ancla && (ventana.size === 0 || ventana.has(monthKeyFromDate(ancla.date)))) {
-    puntos.push({ date: ancla.date, saldo, delta: 0, kind: 'ancla', label: 'Saldo en cuenta' });
-  }
+  fechas.forEach((d) => {
+    const ancla = anclaPorDia.get(d);
+    const desfase = desfaseEn(d);
+    const saldo = crudoAl.get(d) + desfase;
+    /* Cuánto corrigió el banco lo que tenías registrado. El primero no corrige nada. */
+    const ajuste = ancla ? desfase - desfasePrevio : 0;
+    desfasePrevio = desfase;
 
-  eventos.forEach((e) => {
-    saldo += e.delta;
-    if (ventana.size > 0 && !ventana.has(monthKeyFromDate(e.date))) return;
-    puntos.push({ date: e.date, saldo, delta: e.delta, kind: e.kind, label: e.label });
+    if (ventana.size > 0 && !ventana.has(monthKeyFromDate(d))) return;
+    const ev = ultimoDelDia.get(d);
+    puntos.push({
+      date: d,
+      saldo,
+      delta: deltaPorDia.get(d) || 0,
+      kind: ancla ? 'ancla' : ev.kind,
+      label: ancla ? 'Cuadraste con el banco' : ev.label,
+      ajuste: Math.round(ajuste),
+    });
   });
 
-  /*
-   * Varios movimientos del mismo día se colapsan en un punto: la gráfica es de
-   * días, y dibujar cinco puntos sobre la misma vertical solo la ensucia. Se
-   * conserva el último saldo del día, que es con el que te acuestas.
-   */
-  const porDia = new Map();
-  puntos.forEach((p) => porDia.set(p.date, p));
-
-  return [...porDia.values()];
+  return puntos;
 }
 
 /*

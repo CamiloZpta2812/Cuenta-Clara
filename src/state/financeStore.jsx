@@ -12,10 +12,14 @@ import { userConfig } from '../lib/userConfig.js';
 import { uid } from '../lib/id.js';
 import { buildRecommendations, getStatus } from '../lib/insights.js';
 import { buildCardStatements, nextStatement, buildCommitments, activeInstallmentGroups } from '../lib/projections.js';
-import { monthSummary, targetDebt, simulatePlanChange, myBucketShare } from '../lib/month.js';
+import {
+  monthSummary, targetDebt, simulatePlanChange, myBucketShare, pendingSplits,
+  myTransactionShare,
+} from '../lib/month.js';
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
 import { buildCashFlow, currentBalance } from '../lib/cashflow.js';
 import { buildQuincenas, monthGrid } from '../lib/quincenas.js';
+import { buildSplitShares, splitFromShares } from '../lib/split.js';
 import { accionDeNavegacion, tabDeRuta, TAB_INICIAL } from '../lib/rutas.js';
 import { upcomingCharges } from '../lib/upcoming.js';
 
@@ -84,7 +88,9 @@ export function FinanceProvider({ children }) {
    * Desde cuándo la app sabe cuánto tienes: { date, amount }, o null si nadie
    * lo ha dicho todavía. Ver lib/cashflow.js.
    */
-  const [balanceAnchor, setBalanceAnchor] = useState(null);
+  const [balanceAnchors, setBalanceAnchors] = useState([]);
+  /* Pagos de proyecto: ingresos con fecha propia, que no se repiten. */
+  const [expectedIncomes, setExpectedIncomes] = useState([]);
 
   /*
    * Estos setters dejan userConfig sincronizado ANTES de pedir el re-render,
@@ -98,7 +104,13 @@ export function FinanceProvider({ children }) {
 
   const [showTxForm, setShowTxForm] = useState(false);
   const [editingTxId, setEditingTxId] = useState(null);
-  const [txForm, setTxForm] = useState({ type: 'gasto', amount: '', category: 'alimentacion', date: todayStr(), note: '', paymentMethod: 'debito', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '' });
+  /*
+   * `split` es la cuenta dividida: con quién, y si por partes iguales o con
+   * montos a mano. `includeMe` dice si tú también comes de la cuenta —casi
+   * siempre sí— y entra en la división por partes iguales.
+   */
+  const SPLIT_VACIO = { personIds: [], mode: 'iguales', includeMe: true, amounts: {} };
+  const [txForm, setTxForm] = useState({ type: 'gasto', amount: '', category: 'alimentacion', date: todayStr(), note: '', paymentMethod: 'debito', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '', split: SPLIT_VACIO });
   const [txFilters, setTxFilters] = useState({ type: 'todos', month: 'todos', category: 'todas', paymentMethod: 'todos', fixed: 'todos', day: '' });
   const [txFormError, setTxFormError] = useState('');
 
@@ -164,11 +176,11 @@ export function FinanceProvider({ children }) {
     transactions, debts, creditCards, fixedExpenses,
     customCategories, categoryLabels,
     people, incomeSources, collections, buckets, monthlyPlans, setupCompletedAt,
-    balanceAnchor, bucketAdjustments,
+    balanceAnchors, expectedIncomes, bucketAdjustments,
   }), [transactions, debts, creditCards, fixedExpenses,
        customCategories, categoryLabels,
        people, incomeSources, collections, buckets, monthlyPlans, setupCompletedAt,
-       balanceAnchor, bucketAdjustments]);
+       balanceAnchors, expectedIncomes, bucketAdjustments]);
 
   /*
    * persistedRef guarda la última foto que sabemos que está en la base. El
@@ -200,7 +212,8 @@ export function FinanceProvider({ children }) {
         setBuckets((state.buckets || []).map((b) => ({ ...b, contributions: b.contributions || [] })));
         setMonthlyPlans(state.monthlyPlans || []);
         setSetupCompletedAt(state.setupCompletedAt || null);
-        setBalanceAnchor(state.balanceAnchor || null);
+        setBalanceAnchors(state.balanceAnchors || []);
+        setExpectedIncomes(state.expectedIncomes || []);
         setBucketAdjustments(state.bucketAdjustments || []);
         setSelectedMonth(monthKeyFromDate(todayStr()));
       }
@@ -375,8 +388,8 @@ export function FinanceProvider({ children }) {
   const netWorth = cashBalance + totalSavings - totalDebtRemaining;
 
   const selMonthIncome = useMemo(() => transactions.filter((t) => t.type === 'ingreso' && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth]);
-  const selMonthExpense = useMemo(() => transactions.filter((t) => t.type === 'gasto' && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth]);
-  const selMonthFixed = useMemo(() => transactions.filter((t) => t.type === 'gasto' && t.isFixed && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth]);
+  const selMonthExpense = useMemo(() => transactions.filter((t) => t.type === 'gasto' && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + myTransactionShare(t), 0), [transactions, selectedMonth]);
+  const selMonthFixed = useMemo(() => transactions.filter((t) => t.type === 'gasto' && t.isFixed && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + myTransactionShare(t), 0), [transactions, selectedMonth]);
   const selMonthVariable = Math.max(0, selMonthExpense - selMonthFixed);
   function cardLabel(cardId) {
     const c = creditCards.find((card) => card.id === cardId);
@@ -388,14 +401,14 @@ export function FinanceProvider({ children }) {
     return {
       label: monthLabel(key),
       Ingresos: txs.filter((t) => t.type === 'ingreso').reduce((s, t) => s + t.amount, 0),
-      Gastos: txs.filter((t) => t.type === 'gasto').reduce((s, t) => s + t.amount, 0),
+      Gastos: txs.filter((t) => t.type === 'gasto').reduce((s, t) => s + myTransactionShare(t), 0),
     };
   }), [transactions, monthsWindow]);
 
   const pieData = useMemo(() => {
     const map = {};
     transactions.filter((t) => t.type === 'gasto' && monthKeyFromDate(t.date) === selectedMonth).forEach((t) => {
-      map[t.category] = (map[t.category] || 0) + t.amount;
+      map[t.category] = (map[t.category] || 0) + myTransactionShare(t);
     });
     return Object.entries(map).map(([id, value]) => {
       const c = getCategory(id);
@@ -474,13 +487,28 @@ export function FinanceProvider({ children }) {
       originalAmount: isUSD ? enteredAmount : null,
       exchangeRateUsed: isUSD ? rate : null,
     };
+    /*
+     * El reparto de la cuenta. Al editar se conserva lo ya cobrado: si Sofi
+     * te pagó su parte y corriges el monto de la cena, que te haya pagado no
+     * se borra.
+     */
+    const previo = editingTxId ? transactions.find((t) => t.id === editingTxId) : null;
+    const shares = isGasto && !isCreditoConCuotas
+      ? buildSplitShares(totalCOP, txForm.split, previo ? previo.shares : [])
+      : [];
+    if (shares === null) {
+      setTxFormError('El reparto suma más que la cuenta. Revisa los montos.');
+      return;
+    }
+    built.shares = shares;
+
     if (editingTxId) {
       setTransactions((prev) => prev.map((t) => (t.id === editingTxId ? { ...t, ...built } : t)));
       setEditingTxId(null);
     } else {
       setTransactions((prev) => [...prev, { id: uid(), ...built }]);
     }
-    setTxForm({ type: txForm.type, amount: '', category: txForm.type === 'gasto' ? EXPENSE_CATEGORIES[0].id : INCOME_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'debito', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '' });
+    setTxForm({ type: txForm.type, amount: '', category: txForm.type === 'gasto' ? EXPENSE_CATEGORIES[0].id : INCOME_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'debito', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '', split: SPLIT_VACIO });
     setShowTxForm(false);
   }
   function handleEditTransaction(t) {
@@ -501,6 +529,7 @@ export function FinanceProvider({ children }) {
       currentInstallment: t.currentInstallment != null ? String(t.currentInstallment) : '1',
       interestRate: t.interestRate != null ? String(t.interestRate) : '',
       exchangeRate: t.exchangeRateUsed != null ? String(t.exchangeRateUsed) : '',
+      split: splitFromShares(t),
     });
     setEditingTxId(t.id);
     setShowTxForm(true);
@@ -509,7 +538,7 @@ export function FinanceProvider({ children }) {
     setEditingTxId(null);
     setShowTxForm(false);
     setTxFormError('');
-    setTxForm({ type: 'gasto', amount: '', category: EXPENSE_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'debito', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '' });
+    setTxForm({ type: 'gasto', amount: '', category: EXPENSE_CATEGORIES[0].id, date: todayStr(), note: '', paymentMethod: 'debito', cardId: '', isFixed: false, isInstallment: false, totalInstallments: '', currentInstallment: '1', interestRate: '', exchangeRate: '', split: SPLIT_VACIO });
   }
   function handleDeleteTransaction(id) {
     const tx = transactions.find((t) => t.id === id);
@@ -1070,6 +1099,69 @@ export function FinanceProvider({ children }) {
     return () => window.removeEventListener('popstate', alVolver);
   }, []);
 
+
+  /* ---------- Cuentas divididas ---------- */
+
+  /*
+   * Marcar que alguien ya te pagó su parte de una cuenta. Guarda la fecha de
+   * hoy, que es el día en que la plata vuelve a entrar a la gráfica del saldo.
+   * Volver a tocarlo lo deshace.
+   */
+  function handleToggleSplitCollected(transactionId, shareId) {
+    setTransactions((prev) => prev.map((t) => (t.id !== transactionId ? t : {
+      ...t,
+      shares: (t.shares || []).map((r) => (r.id !== shareId ? r
+        : { ...r, collectedAt: r.collectedAt ? null : todayStr() })),
+    })));
+  }
+
+  /* ---------- Pagos de proyecto ---------- */
+
+  function handleAddExpectedIncome(datos) {
+    setExpectedIncomes((prev) => [...prev, {
+      id: uid(), project: '', name: '', amount: 0, expectedDate: todayStr(),
+      transactionId: null, ...datos,
+    }]);
+  }
+
+  function handleUpdateExpectedIncome(id, cambios) {
+    setExpectedIncomes((prev) => prev.map((x) => (x.id === id ? { ...x, ...cambios } : x)));
+  }
+
+  /*
+   * Borrar un pago esperado borra también el ingreso que creó al recibirse:
+   * dejar el ingreso suelto contaría plata de un contrato que ya no existe.
+   */
+  function handleDeleteExpectedIncome(id) {
+    const x = expectedIncomes.find((e) => e.id === id);
+    if (x && x.transactionId) {
+      setTransactions((prev) => prev.filter((t) => t.id !== x.transactionId));
+    }
+    setExpectedIncomes((prev) => prev.filter((e) => e.id !== id));
+  }
+
+  /*
+   * "Ya me pagaron". Crea el ingreso de verdad —con la fecha de hoy, que es
+   * cuando entró la plata, no la que esperabas— y lo enlaza al pago. Volver a
+   * tocarlo borra ese ingreso: es el deshacer, no un segundo pago.
+   */
+  function handleToggleExpectedIncomeReceived(id) {
+    const x = expectedIncomes.find((e) => e.id === id);
+    if (!x) return;
+    if (x.transactionId) {
+      setTransactions((prev) => prev.filter((t) => t.id !== x.transactionId));
+      handleUpdateExpectedIncome(id, { transactionId: null });
+      return;
+    }
+    const txId = uid();
+    setTransactions((prev) => [...prev, {
+      id: txId, type: 'ingreso', amount: Number(x.amount) || 0, category: 'freelance',
+      date: todayStr(), note: [x.project, x.name].filter(Boolean).join(' · '),
+      paymentMethod: null, shares: [],
+    }]);
+    handleUpdateExpectedIncome(id, { transactionId: txId });
+  }
+
   /* ---------- Fuentes de ingreso ---------- */
 
   /*
@@ -1285,6 +1377,9 @@ export function FinanceProvider({ children }) {
     [snapshot, selectedMonth],
   );
 
+  /* Lo que te deben de cuentas divididas, sin importar de qué mes sean. */
+  const pendingSplitsList = useMemo(() => pendingSplits(snapshot()), [snapshot]);
+
   /* Lo mismo, en cuadrícula de calendario. */
   const calendarioRejilla = useMemo(
     () => monthGrid(snapshot(), selectedMonth),
@@ -1296,11 +1391,23 @@ export function FinanceProvider({ children }) {
    * movimientos son cosas que pasaron, y esto es una medición del resultado.
    * Escribir el saldo otra vez vuelve a anclar, que es como se corrige.
    */
+  /*
+   * Cuadrar con el banco agrega un ajuste al historial, no reemplaza el
+   * anterior: así la gráfica conserva lo que pasó antes y en el día del ajuste
+   * pega el brinco. Dos veces el mismo día corrige el de ese día.
+   */
   const handleAnchorBalance = useCallback((monto, fecha) => {
     const n = Number(monto);
-    if (monto === '' || monto === null || Number.isNaN(n)) { setBalanceAnchor(null); return; }
-    setBalanceAnchor({ date: (fecha || todayStr()).slice(0, 10), amount: n });
+    if (monto === '' || monto === null || Number.isNaN(n)) return;
+    const dia = (fecha || todayStr()).slice(0, 10);
+    setBalanceAnchors((prev) => [
+      ...prev.filter((a) => a.date !== dia),
+      { id: `ancla-${dia}`, date: dia, amount: n },
+    ].sort((a, b) => (a.date < b.date ? -1 : 1)));
   }, []);
+
+  /* El último ajuste, que es el que dice desde cuándo se cuenta el saldo. */
+  const balanceAnchor = balanceAnchors.length ? balanceAnchors[balanceAnchors.length - 1] : null;
 
   const value = {
     activeTab,
@@ -1310,6 +1417,14 @@ export function FinanceProvider({ children }) {
     calendarioRejilla,
     balanceAnchor,
     handleAnchorBalance,
+    balanceAnchors,
+    expectedIncomes,
+    handleAddExpectedIncome,
+    handleUpdateExpectedIncome,
+    handleDeleteExpectedIncome,
+    handleToggleExpectedIncomeReceived,
+    handleToggleSplitCollected,
+    pendingSplits: pendingSplitsList,
     debtOutlook,
     planDistribution,
     selectedDebtId,

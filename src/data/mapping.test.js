@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { stateToRows, rowsToState, normalizeState } from './mapping.js';
+import {
+  stateToRows, rowsToState, normalizeState, TABLES,
+} from './mapping.js';
 
 /* Un blob como los que guardaba kv_store, con todos los casos raros metidos. */
 const blob = {
@@ -317,7 +319,7 @@ test('normalizeState del estado v2 es idempotente', () => {
  */
 test('el estado canónico tiene exactamente estas claves', () => {
   assert.deepEqual(Object.keys(rowsToState({})).sort(), [
-    'balanceAnchor',
+    'balanceAnchors',
     'bucketAdjustments',
     'buckets',
     'categoryLabels',
@@ -325,6 +327,7 @@ test('el estado canónico tiene exactamente estas claves', () => {
     'creditCards',
     'customCategories',
     'debts',
+    'expectedIncomes',
     'fixedExpenses',
     'incomeSources',
     'monthlyPlans',
@@ -354,18 +357,85 @@ test('una reserva se distingue de un colchón de verdad', () => {
   assert.equal(rowsToState({ buckets: [{ id: 'x', name: 'Y', kind: 'meta' }] }).buckets[0].movesCash, true);
 });
 
-test('el ancla del saldo sobrevive la ida y vuelta', () => {
-  const rows = stateToRows({ ...v2, balanceAnchor: { date: '2026-09-09', amount: 0 } });
-  assert.equal(rows.user_settings[0].balance_anchor_date, '2026-09-09');
-  assert.equal(rows.user_settings[0].balance_anchor_amount, 0, 'cero es un dato, no un vacío');
-  assert.deepEqual(rowsToState(rows).balanceAnchor, { date: '2026-09-09', amount: 0 });
+test('el historial de ajustes sobrevive la ida y vuelta, ordenado', () => {
+  const rows = stateToRows({
+    ...v2,
+    balanceAnchors: [
+      { id: 'a2', date: '2026-09-20', amount: 120_000 },
+      { id: 'a1', date: '2026-09-08', amount: 0 },
+    ],
+  });
+  assert.equal(rows.balance_anchors.length, 2);
+  assert.deepEqual(rowsToState(rows).balanceAnchors.map((a) => a.id), ['a1', 'a2']);
 });
 
-test('sin ancla las dos columnas van nulas, nunca una sola', () => {
+test('las columnas viejas guardan el ÚLTIMO ajuste', () => {
+  const fila = stateToRows({
+    ...v2,
+    balanceAnchors: [
+      { id: 'a1', date: '2026-09-08', amount: 0 },
+      { id: 'a2', date: '2026-09-20', amount: 120_000 },
+    ],
+  }).user_settings[0];
+  assert.equal(fila.balance_anchor_date, '2026-09-20');
+  assert.equal(fila.balance_anchor_amount, 120_000);
+});
+
+test('un ajuste en cero es un dato, no un vacío', () => {
+  const fila = stateToRows({ ...v2, balanceAnchors: [{ id: 'a', date: '2026-09-09', amount: 0 }] })
+    .user_settings[0];
+  assert.equal(fila.balance_anchor_amount, 0);
+});
+
+test('sin ajustes las dos columnas van nulas, nunca una sola', () => {
   const fila = stateToRows(v2).user_settings[0];
   assert.equal(fila.balance_anchor_date, null);
-  assert.equal(fila.balance_anchor_amount, null, 'un monto sin fecha no diría de qué día es');
-  assert.equal(rowsToState(stateToRows(v2)).balanceAnchor, null);
+  assert.equal(fila.balance_anchor_amount, null);
+  assert.deepEqual(rowsToState(stateToRows(v2)).balanceAnchors, []);
+});
+
+test('el ancla vieja de user_settings se vuelve el primer ajuste', () => {
+  /* Para que nadie pierda su saldo por abrir la app antes de la migración. */
+  const estado = rowsToState({
+    user_settings: [{ balance_anchor_date: '2026-09-08', balance_anchor_amount: 357_000 }],
+  });
+  assert.deepEqual(estado.balanceAnchors,
+    [{ id: 'ancla-2026-09-08', date: '2026-09-08', amount: 357_000 }]);
+});
+
+test('el reparto de una cuenta dividida vuelve a su movimiento', () => {
+  const rows = stateToRows({
+    ...v2,
+    transactions: [{
+      id: 'cena', type: 'gasto', amount: 120_000, category: 'alimentacion', date: '2026-09-25',
+      shares: [
+        { id: 'r1', personId: 'p6', amount: 30_000, collectedAt: '2026-09-26' },
+        { id: 'r2', personId: 'p6', amount: 30_000, collectedAt: null },
+      ],
+    }],
+  });
+  assert.equal(rows.transaction_shares.length, 2);
+  assert.equal(rows.transaction_shares[0].transaction_id, 'cena');
+  const back = rowsToState(rows).transactions[0].shares;
+  assert.deepEqual(back.map((r) => r.collectedAt), ['2026-09-26', null]);
+});
+
+test('un pago de proyecto vuelve con su fecha y su enlace', () => {
+  const rows = stateToRows({
+    ...v2,
+    expectedIncomes: [{ id: 'x1', project: 'Web Solenium', name: 'Anticipo', amount: 2_000_000,
+      expectedDate: '2026-10-10', transactionId: null }],
+  });
+  assert.equal(rows.expected_incomes[0].expected_date, '2026-10-10');
+  assert.deepEqual(rowsToState(rows).expectedIncomes[0], {
+    id: 'x1', project: 'Web Solenium', name: 'Anticipo', amount: 2_000_000,
+    expectedDate: '2026-10-10', transactionId: null,
+  });
+});
+
+test('el reparto se escribe después de los movimientos y se borra antes', () => {
+  // Tiene llave foránea a transactions: al revés, Postgres rechaza la fila.
+  assert.ok(TABLES.indexOf('transaction_shares') > TABLES.indexOf('transactions'));
 });
 
 test('un ajuste del mes vuelve tal cual, con su mes y su bucket', () => {

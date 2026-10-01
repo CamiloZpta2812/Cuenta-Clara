@@ -117,10 +117,70 @@ test('con ancla la línea deja de ser variación y pasa a ser el saldo', () => {
   assert.equal(porFecha['2026-09-25'], 1_226_287);
 });
 
-test('lo anterior al ancla no se dibuja ni se arrastra', () => {
-  // El arriendo del 1 y el aporte del 5 ya están dentro de "hoy tengo 0".
-  const fechas = buildCashFlow(conAncla, ['2026-09']).map((p) => p.date);
-  assert.deepEqual(fechas, ['2026-09-09', '2026-09-10', '2026-09-15', '2026-09-20', '2026-09-25']);
+test('lo anterior al primer ajuste se reconstruye hacia atrás, no se borra', () => {
+  /*
+   * Antes, cuadrar con el banco borraba lo anterior de la gráfica. Ahora se
+   * reconstruye desde el ajuste: si el 9 cerraste en 0 y el 5 aportaste 65.000
+   * al colchón, el 5 tenías 0 y el 1 tenías 65.000 — antes del arriendo.
+   */
+  const porFecha = Object.fromEntries(buildCashFlow(conAncla, ['2026-09']).map((p) => [p.date, p.saldo]));
+  assert.equal(porFecha['2026-09-01'], 65_000);
+  assert.equal(porFecha['2026-09-05'], 0);
+  assert.equal(porFecha['2026-09-09'], 0, 'el día del ajuste vale lo que dijo el banco');
+});
+
+/* Un segundo ajuste, el 20: el banco dice 1.300.000 y lo registrado daba 1.206.287. */
+const dosAjustes = {
+  ...estado,
+  balanceAnchors: [
+    { id: 'a1', date: '2026-09-09', amount: 0 },
+    { id: 'a2', date: '2026-09-20', amount: 1_300_000 },
+  ],
+};
+
+test('el segundo ajuste pega el brinco sin borrar lo de antes', () => {
+  const puntos = buildCashFlow(dosAjustes, ['2026-09']);
+  const porFecha = Object.fromEntries(puntos.map((p) => [p.date, p]));
+  assert.equal(porFecha['2026-09-15'].saldo, 1_253_587, 'lo de antes del ajuste sigue igual');
+  assert.equal(porFecha['2026-09-20'].saldo, 1_300_000, 'el día del ajuste manda el banco');
+  assert.equal(porFecha['2026-09-20'].ajuste, 93_713, 'y el brinco es lo que faltaba registrar');
+  assert.equal(porFecha['2026-09-25'].saldo, 1_320_000, 'después sigue desde el ajuste');
+});
+
+test('el primer ajuste no cuenta como brinco', () => {
+  // No hay nada antes contra qué corregir: es el punto de partida.
+  const p = buildCashFlow(dosAjustes, ['2026-09']).find((x) => x.date === '2026-09-09');
+  assert.equal(p.ajuste, 0);
+});
+
+test('el saldo de hoy sale del último ajuste', () => {
+  assert.equal(currentBalance(dosAjustes, '2026-09-30'), 1_320_000);
+});
+
+test('el orden en que se guardaron los ajustes no importa', () => {
+  const alReves = { ...dosAjustes, balanceAnchors: [...dosAjustes.balanceAnchors].reverse() };
+  assert.deepEqual(buildCashFlow(alReves, ['2026-09']), buildCashFlow(dosAjustes, ['2026-09']));
+});
+
+test('lo que te paga un amigo de una cuenta dividida vuelve a entrar ese día', () => {
+  /*
+   * Pagaste 120.000 de la cena; Sofi te transfiere sus 40.000 dos días
+   * después. Lo de Juanjo todavía no ha llegado, así que no entra nada.
+   */
+  const cena = {
+    transactions: [{
+      id: 'c', type: 'gasto', amount: 120_000, category: 'alimentacion', date: '2026-09-25',
+      note: 'Cena',
+      shares: [
+        { id: 'r1', personId: 'sofi', amount: 40_000, collectedAt: '2026-09-27' },
+        { id: 'r2', personId: 'juanjo', amount: 40_000, collectedAt: null },
+      ],
+    }],
+    buckets: [], debts: [],
+    balanceAnchors: [{ id: 'a', date: '2026-09-24', amount: 500_000 }],
+  };
+  assert.equal(currentBalance(cena, '2026-09-26'), 380_000, 'salió la cuenta completa');
+  assert.equal(currentBalance(cena, '2026-09-28'), 420_000, 'y volvió lo de Sofi');
 });
 
 test('lo del mismo día del ancla ya viene contado en ella', () => {

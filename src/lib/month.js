@@ -69,6 +69,46 @@ export function plannedBucketShare(estado, bucket, month) {
   return ajuste ? num(ajuste.amount) : myBucketShare(bucket);
 }
 
+/*
+ * Lo que TÚ gastaste de un movimiento. Si pagaste la cuenta del restaurante
+ * y los demás te devuelven su parte, el gasto tuyo es lo que te tocó, no el
+ * total: juzgar el mes con el total diría que te pasaste del variable por
+ * pagarle la comida a tres amigos.
+ */
+export function myTransactionShare(t) {
+  return num(t.amount) - sum(t.shares, (r) => r.amount);
+}
+
+/*
+ * Los pagos de proyecto que se esperan en un mes. Un contrato no es un
+ * sueldo: no se repite, así que no vive en las fuentes de ingreso sino en su
+ * propia lista, cada pago con su fecha.
+ */
+export function projectIncomeIn(estado, month) {
+  return (estado.expectedIncomes || [])
+    .filter((x) => monthKeyFromDate(x.expectedDate) === month);
+}
+
+/*
+ * Lo que te deben de cuentas divididas, todavía sin pagar. No es por mes
+ * como los cobros de gastos fijos: una cena de agosto que Juanjo no te ha
+ * pagado sigue debiéndose en octubre, y esconderla al cambiar de mes sería
+ * perdonarle la deuda sin que nadie lo decidiera.
+ */
+export function pendingSplits(estado) {
+  const filas = [];
+  (estado.transactions || []).forEach((t) => {
+    (t.shares || []).forEach((r) => {
+      if (r.collectedAt || num(r.amount) <= 0) return;
+      filas.push({
+        shareId: r.id, transactionId: t.id, personId: r.personId,
+        amount: num(r.amount), date: t.date, note: t.note || '',
+      });
+    });
+  });
+  return filas.sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
 /* Lo que te deben en total por un gasto fijo compartido. */
 export function othersShare(gastoFijo) {
   return sum(gastoFijo.shares, (r) => r.amount);
@@ -185,7 +225,15 @@ export function monthPlan(estado, month) {
   const metas = buckets.filter((b) => b.kind === 'meta');
   const colchones = buckets.filter((b) => b.kind === 'colchon');
 
-  const income = sum(fuentes, (f) => f.expected);
+  /*
+   * El ingreso fijo y el de proyecto se suman, pero se devuelven también por
+   * separado: uno es seguro y el otro depende de que el cliente pague a
+   * tiempo, y gastarse el segundo antes de que llegue es la forma clásica de
+   * quedar en rojo.
+   */
+  const fixedIncome = sum(fuentes, (f) => f.expected);
+  const projectIncome = sum(projectIncomeIn(estado, month), (x) => x.amount);
+  const income = fixedIncome + projectIncome;
   const fixedExpenses = sum(fijos, myShare);
   const debtPayment = sum(debts.filter((d) => debtDueIn(d, month)), (d) => d.fixedPayment);
   /*
@@ -211,6 +259,8 @@ export function monthPlan(estado, month) {
     cushion,
     availableForExtra: grossSurplus - cushion,
     receivable: sum(fijos, othersShare),
+    fixedIncome,
+    projectIncome,
     locked: false,
   };
 }
@@ -229,6 +279,8 @@ function frozenPlan(p) {
     cushion: num(p.cushion),
     availableForExtra: grossSurplus - num(p.cushion),
     receivable: 0,
+    fixedIncome: num(p.expectedIncome),
+    projectIncome: 0,
     locked: true,
   };
 }
@@ -280,7 +332,10 @@ export function monthActual(estado, month) {
   const transactions = (estado.transactions || []).filter((t) => monthKeyFromDate(t.date) === month);
 
   const income = sum(transactions.filter((t) => t.type === 'ingreso'), (t) => t.amount);
-  const gastos = transactions.filter((t) => t.type === 'gasto');
+  /* De una cuenta dividida, solo tu parte: el resto es plata que te devuelven. */
+  const gastos = transactions
+    .filter((t) => t.type === 'gasto')
+    .map((t) => ((t.shares || []).length ? { ...t, amount: myTransactionShare(t) } : t));
 
   const fixedExpenses = sum(gastos.filter((t) => t.fixedExpenseId), (t) => t.amount);
 

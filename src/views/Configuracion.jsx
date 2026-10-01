@@ -5,6 +5,7 @@ import IconCircle from '../components/IconCircle';
 import { supabase } from '../supabaseClient.js';
 import { fmtCOP } from '../lib/money.js';
 import { useFinance } from '../state/financeStore';
+import PagosProyecto from '../components/PagosProyecto';
 export default function Configuracion() {
   const {
     allExpenseCategories,
@@ -54,12 +55,17 @@ export default function Configuracion() {
         ))}
       </div>
 
-      {configTab === 'ingresos' && <Ingresos
-        fuentes={incomeSources}
-        onAgregar={handleAddIncomeSource}
-        onCambiar={handleUpdateIncomeSource}
-        onBorrar={handleDeleteIncomeSource}
-      />}
+      {configTab === 'ingresos' && (
+        <>
+          <Ingresos
+            fuentes={incomeSources}
+            onAgregar={handleAddIncomeSource}
+            onCambiar={handleUpdateIncomeSource}
+            onBorrar={handleDeleteIncomeSource}
+          />
+          <PagosProyecto />
+        </>
+      )}
 
       {configTab === 'categorias' && (
         <>

@@ -357,3 +357,17 @@ test('un gasto sin día no se lista una vez por mes', () => {
   const ids = unscheduled.map((e) => e.id);
   assert.equal(ids.length, new Set(ids).size);
 });
+
+test('un pago de proyecto cae en su fecha exacta y no abre quincena', () => {
+  const conProyecto = {
+    ...estado,
+    expectedIncomes: [{ id: 'x1', project: 'Web', name: 'Anticipo', amount: 2_000_000,
+      expectedDate: '2026-10-22', transactionId: null }],
+  };
+  assert.deepEqual(paydays(conProyecto), [15, 30], 'no cambia las fronteras');
+  const q = buildQuincenas(conProyecto, MES).periods.find((p) => p.start === '2026-10-15');
+  const pago = q.items.find((i) => i.id === 'x1');
+  assert.equal(pago.date, '2026-10-22');
+  assert.equal(pago.kind, 'proyecto');
+  assert.equal(q.income, 1_700_000 + 2_000_000);
+});

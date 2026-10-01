@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Users, Plus } from 'lucide-react';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAYMENT_METHODS } from '../../lib/categories.js';
 import { formatDateHuman } from '../../lib/dates.js';
 import { fmtCOP } from '../../lib/money.js';
@@ -11,12 +11,124 @@ import { useFinance } from '../../state/financeStore';
  * Ahora es una ventana y se puede abrir desde cualquier pantalla: registrar un
  * gasto es lo que uno hace diez veces al día, y no debería obligar a navegar.
  */
+
+/*
+ * Dividir la cuenta.
+ *
+ * Pagas tú la cuenta del restaurante y los demás te transfieren su parte. El
+ * movimiento guarda el total —es lo que salió de tu cuenta—, cada amigo queda
+ * debiéndote lo suyo en Cobros, y para juzgar el mes solo cuenta lo tuyo.
+ */
+function DividirCuenta({ txForm, setTxForm, people, onAgregarPersona }) {
+  const split = txForm.split || { personIds: [], mode: 'iguales', includeMe: true, amounts: {} };
+  const abierto = split.personIds.length > 0 || split.abierto;
+  const total = parseFloat(txForm.amount) || 0;
+  const set = (cambios) => setTxForm((f) => ({ ...f, split: { ...split, ...cambios } }));
+
+  const alternar = (id) => set({
+    personIds: split.personIds.includes(id)
+      ? split.personIds.filter((x) => x !== id)
+      : [...split.personIds, id],
+  });
+
+  const partes = split.personIds.length + (split.includeMe === false ? 0 : 1);
+  const cadaUno = partes > 0 ? Math.round(total / partes) : 0;
+  const deEllos = split.mode === 'montos'
+    ? split.personIds.reduce((s, id) => s + (parseFloat((split.amounts || {})[id]) || 0), 0)
+    : cadaUno * split.personIds.length;
+  const tuParte = total - deEllos;
+
+  if (!abierto) {
+    return (
+      <div className="cc-field cc-field-full">
+        <button type="button" className="cc-btn cc-btn-outline cc-btn-sm" onClick={() => set({ abierto: true })}>
+          <Users size={14} /> Dividir la cuenta
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="cc-field cc-field-full cc-dividir">
+      <label>¿Con quién la divides?</label>
+      <div className="cc-chips">
+        {people.map((p) => (
+          <button
+            key={p.id} type="button"
+            className={`cc-chip ${split.personIds.includes(p.id) ? 'on' : ''}`}
+            onClick={() => alternar(p.id)}
+          >
+            {p.name}
+          </button>
+        ))}
+        <button
+          type="button" className="cc-chip cc-chip-nueva"
+          onClick={() => {
+            // eslint-disable-next-line no-alert
+            const id = onAgregarPersona(window.prompt('¿Cómo se llama?'));
+            if (id && !split.personIds.includes(id)) set({ personIds: [...split.personIds, id] });
+          }}
+        >
+          <Plus size={12} /> Alguien más
+        </button>
+      </div>
+
+      {split.personIds.length > 0 && (
+        <>
+          <div className="cc-type-toggle" style={{ marginTop: 10 }}>
+            <button type="button" className={`cc-type-btn ${split.mode !== 'montos' ? 'active-ingreso' : ''}`}
+              onClick={() => set({ mode: 'iguales' })}>Partes iguales</button>
+            <button type="button" className={`cc-type-btn ${split.mode === 'montos' ? 'active-ingreso' : ''}`}
+              onClick={() => set({ mode: 'montos' })}>Montos a mano</button>
+          </div>
+
+          {split.mode !== 'montos' ? (
+            <>
+              <label className="cc-checkbox-field" style={{ textTransform: 'none', marginTop: 8 }}>
+                <input type="checkbox" checked={split.includeMe !== false}
+                  onChange={(e) => set({ includeMe: e.target.checked })} />
+                Yo también entro en la cuenta
+              </label>
+              <span className="cc-stat-sub">
+                {partes} parte{partes === 1 ? '' : 's'} de <strong className="cc-mono">{fmtCOP(cadaUno)}</strong>
+              </span>
+            </>
+          ) : (
+            <div className="cc-dividir-montos">
+              {split.personIds.map((id) => (
+                <div key={id} className="cc-dividir-fila">
+                  <span>{(people.find((p) => p.id === id) || {}).name}</span>
+                  <input className="cc-input" type="number" min="0" step="any" placeholder="0"
+                    value={(split.amounts || {})[id] || ''}
+                    onChange={(e) => set({ amounts: { ...split.amounts, [id]: e.target.value } })} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className={tuParte < 0 ? 'cc-reparto-mal' : 'cc-stat-sub'} style={{ marginTop: 8 }}>
+            {tuParte < 0
+              ? 'El reparto suma más que la cuenta.'
+              : <>Te deben <strong className="cc-mono">{fmtCOP(deEllos)}</strong> · tu parte, <strong className="cc-mono">{fmtCOP(tuParte)}</strong></>}
+          </div>
+        </>
+      )}
+
+      <button type="button" className="cc-icon-btn" style={{ marginTop: 6, opacity: 0.8 }}
+        onClick={() => set({ personIds: [], abierto: false })}>
+        No dividir
+      </button>
+    </div>
+  );
+}
+
 export default function FormMovimiento() {
   const {
     txForm, setTxForm, txFormError, editingTxId,
     handleAddTransaction, handleCancelTxForm,
     creditCards, usdRate,
     txFormCategories, txIsUSD, txEffectiveRate, txChargeDate,
+    people, handleAddPerson,
   } = useFinance();
 
   return (
@@ -125,6 +237,12 @@ export default function FormMovimiento() {
             </>
           )}
         </>
+      )}
+      {txForm.type === 'gasto' && !txForm.isInstallment && (
+        <DividirCuenta
+          txForm={txForm} setTxForm={setTxForm}
+          people={people || []} onAgregarPersona={handleAddPerson}
+        />
       )}
       {txFormError && (
         <div className="cc-form-error cc-field-full" role="alert">

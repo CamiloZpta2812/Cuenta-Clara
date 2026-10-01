@@ -182,6 +182,8 @@ export const STYLES = `
 .cc-cal-chip.fijo { border-left-color: #6B5199; }
 .cc-cal-chip.deuda { border-left-color: #B0524B; }
 .cc-cal-chip.bucket { border-left-color: #3E7FB0; }
+/* Un pago de proyecto es plata prometida, no segura: se ve distinto al sueldo. */
+.cc-cal-chip.proyecto { border-left-color: #B98A2E; font-style: italic; }
 .cc-cal-chip.mas { border-left-color: transparent; color: var(--ink-soft); font-style: italic; }
 
 /* Los puntos son el plan B del celular, donde no cabe texto. */
@@ -192,6 +194,7 @@ export const STYLES = `
 .cc-cal-punto.fijo { background: #6B5199; }
 .cc-cal-punto.deuda { background: #B0524B; }
 .cc-cal-punto.bucket { background: #3E7FB0; }
+.cc-cal-punto.proyecto { background: #B98A2E; }
 .cc-cal-leyenda { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px;
   font-size: 11.5px; color: var(--ink-soft); }
 .cc-cal-leyenda span { display: inline-flex; align-items: center; gap: 5px; }
@@ -212,6 +215,35 @@ export const STYLES = `
 .cc-icon-btn { border: none; background: transparent; padding: 2px; margin-left: 2px;
   color: var(--ink-soft); cursor: pointer; display: inline-flex; align-items: center;
   border-radius: 4px; opacity: .55; }
+/* Pagos de proyecto, en Configuración → Ingresos. */
+.cc-proyecto-totales { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px;
+  color: var(--ink-soft); margin-bottom: 10px; }
+.cc-proyecto-fila { display: grid; grid-template-columns: minmax(150px, 1.6fr) 120px 150px auto;
+  gap: 8px; align-items: center; padding: 8px 10px; background: var(--paper); border-radius: 8px; }
+.cc-proyecto-fila.recibido { opacity: .75; }
+.cc-proyecto-fila.recibido .cc-proyecto-que strong { color: var(--income); }
+.cc-proyecto-que { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; }
+.cc-input-plano { border: none; background: transparent; padding: 0; font-size: 12px;
+  color: var(--ink-soft); }
+.cc-proyecto-acciones { display: flex; gap: 6px; justify-content: flex-end; }
+.cc-proyecto-nota { grid-column: 1 / -1; margin-top: 0; }
+.cc-proyecto-nuevo { display: grid; grid-template-columns: 1fr 1.3fr 110px 150px auto; gap: 8px;
+  align-items: center; }
+@media (max-width: 760px) {
+  .cc-proyecto-fila, .cc-proyecto-nuevo { grid-template-columns: 1fr 1fr; }
+  .cc-proyecto-que, .cc-proyecto-acciones { grid-column: 1 / -1; }
+  .cc-proyecto-nuevo > button { grid-column: 1 / -1; }
+}
+.cc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cc-chip { border: 1px solid var(--paper-line); background: var(--card); border-radius: 999px;
+  padding: 5px 12px; font: inherit; font-size: 12.5px; cursor: pointer; color: var(--ink-soft);
+  display: inline-flex; align-items: center; gap: 4px; }
+.cc-chip.on { background: var(--income); border-color: var(--income); color: #fff; font-weight: 600; }
+.cc-chip-nueva { border-style: dashed; }
+.cc-dividir { background: var(--paper); border-radius: 10px; padding: 12px; }
+.cc-dividir-montos { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.cc-dividir-fila { display: grid; grid-template-columns: 1fr 130px; gap: 8px; align-items: center;
+  font-size: 13px; }
 .cc-icon-btn:hover { opacity: 1; background: rgba(32,43,56,0.06); }
 
 @media (max-width: 520px) {

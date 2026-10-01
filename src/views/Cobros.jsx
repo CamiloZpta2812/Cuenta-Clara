@@ -1,6 +1,6 @@
 import { HandCoins, Check, Undo2, TrendingDown, Users, Pencil } from 'lucide-react';
 import { COLORS } from '../lib/constants.js';
-import { monthLabel } from '../lib/dates.js';
+import { monthLabel, formatDateHuman } from '../lib/dates.js';
 import { fmtCOP } from '../lib/money.js';
 import StatCard from '../components/StatCard';
 import EmptyState from '../components/EmptyState';
@@ -23,7 +23,10 @@ export default function Cobros() {
     availableMonths, selectedMonth, setSelectedMonth,
     monthReport, people, handleToggleCollection,
     fixedExpenses, handleEditFixedExpense,
+    pendingSplits, handleToggleSplitCollected,
   } = useFinance();
+
+  const nombreDe = (id) => ((people || []).find((p) => p.id === id) || {}).name || 'Alguien';
 
   const editarGasto = (id) => {
     const fe = (fixedExpenses || []).find((f) => f.id === id);
@@ -57,8 +60,52 @@ export default function Cobros() {
     <>
       <div className="cc-page-title">Cobros</div>
       <p className="cc-page-sub">
-        Lo que te deben por los gastos que compartes, mes a mes.
+        Lo que te deben: por los gastos fijos que compartes, y por las cuentas que pagaste tú.
       </p>
+
+      {/*
+        * Cuentas divididas. Van arriba y sin selector de mes: una cena de agosto
+        * que no te han pagado sigue debiéndose en octubre, y esconderla al
+        * cambiar de mes sería perdonar la deuda sin que nadie lo decidiera.
+        */}
+      {(pendingSplits || []).length > 0 && (
+        <div className="cc-card" style={{ marginBottom: 14 }}>
+          <div className="cc-section-head" style={{ marginTop: 0 }}>
+            <div>
+              <p className="cc-chart-title" style={{ marginBottom: 2 }}>Cuentas divididas</p>
+              <p className="cc-chart-sub" style={{ marginBottom: 0 }}>
+                Pagaste tú y te deben su parte. Cuando te transfieran, márcalo: la plata
+                vuelve a entrar a tu saldo ese día.
+              </p>
+            </div>
+            <strong className="cc-mono" style={{ color: COLORS.expense, fontSize: 18 }}>
+              {fmtCOP(pendingSplits.reduce((a, x) => a + x.amount, 0))}
+            </strong>
+          </div>
+          <div className="cc-commit-list">
+            {pendingSplits.map((x) => (
+              <div key={x.shareId} className="cc-cobro-row">
+                <span className="cc-plan-concept">
+                  <HandCoins size={14} />
+                  <span>
+                    <strong>{nombreDe(x.personId)}</strong>
+                    <span className="cc-stat-sub" style={{ display: 'block', marginTop: 0 }}>
+                      {x.note || 'Cuenta dividida'} · {formatDateHuman(new Date(`${x.date}T12:00:00`))}
+                    </span>
+                  </span>
+                </span>
+                <span className="cc-mono">{fmtCOP(x.amount)}</span>
+                <span>
+                  <button type="button" className="cc-btn cc-btn-sm"
+                    onClick={() => handleToggleSplitCollected(x.transactionId, x.shareId)}>
+                    <Check size={13} /> Ya me pagó
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="cc-section-head">
         <select
@@ -71,12 +118,13 @@ export default function Cobros() {
         </select>
       </div>
 
-      {collections.length === 0 ? (
+      {collections.length === 0 ? ((pendingSplits || []).length === 0 && (
         <EmptyState
           Icon={Users}
           title="Todavía no compartes ningún gasto"
           text="Cuando repartas un gasto fijo entre varias personas, aquí aparece lo que te debe cada una."
         />
+        )
       ) : (
         <>
           <div className="cc-stats-grid">

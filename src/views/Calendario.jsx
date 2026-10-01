@@ -43,6 +43,7 @@ const COLOR_POR_TIPO = {
   fijo: COLORS.debt,
   deuda: COLORS.expense,
   bucket: '#3E7FB0',
+  proyecto: '#B98A2E',
 };
 
 function Tramo({ p }) {
@@ -266,7 +267,7 @@ function Rejilla({ semanas, tramos }) {
               </span>
 
               <span className="cc-cal-puntos">
-                {entra.map((x) => <i key={x.id} className="cc-cal-punto entra" />)}
+                {entra.map((x) => <i key={x.id} className={`cc-cal-punto ${x.kind === 'proyecto' ? 'proyecto' : 'entra'}`} />)}
                 {sale.map((x) => <i key={x.id} className={`cc-cal-punto ${x.kind}`} />)}
               </span>
             </button>
@@ -285,6 +286,7 @@ function Rejilla({ semanas, tramos }) {
         <span><i className="cc-cal-punto fijo" /> gasto fijo</span>
         <span><i className="cc-cal-punto deuda" /> cuota</span>
         <span><i className="cc-cal-punto bucket" /> apartas</span>
+        <span><i className="cc-cal-punto proyecto" /> pago de proyecto</span>
       </div>
 
       {/*

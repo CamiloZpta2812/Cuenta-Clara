@@ -1,5 +1,7 @@
 import { daysInMonth, addMonths, todayStr } from './dates.js';
-import { myShare, myBucketShare, plannedBucketShare, debtDueIn } from './month.js';
+import {
+  myShare, myBucketShare, plannedBucketShare, debtDueIn, projectIncomeIn,
+} from './month.js';
 
 /*
  * El mes partido en quincenas, con lo que entra y lo que sale en cada una.
@@ -116,6 +118,22 @@ export function monthEvents(estado, month) {
     .forEach((f) => eventos.push({
       kind: 'ingreso', id: f.id, name: f.name, amount: num(f.expected), day: num(f.day) || null,
     }));
+
+  /*
+   * Un pago de proyecto cae en su fecha exacta y nunca abre quincena: es plata
+   * que entra DENTRO de un tramo. Si ya llegó, se marca, porque en el
+   * calendario importa distinguir lo seguro de lo prometido.
+   */
+  projectIncomeIn(estado, month).forEach((x) => {
+    if (num(x.amount) <= 0) return;
+    eventos.push({
+      kind: 'proyecto', id: x.id,
+      name: x.transactionId ? `${x.name} (recibido)` : x.name,
+      project: x.project, amount: num(x.amount),
+      day: Number(String(x.expectedDate).slice(8, 10)) || null,
+      received: !!x.transactionId,
+    });
+  });
 
   (estado.fixedExpenses || []).forEach((f) => {
     const monto = myShare(f);

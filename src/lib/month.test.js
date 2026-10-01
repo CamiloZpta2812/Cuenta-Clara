@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   myShare, othersShare, monthCollections, monthPlan, monthActual,
   monthCashOut, monthSummary, simulatePlanChange, targetDebt,
-  firstInstallmentMonth, debtDueIn,
+  firstInstallmentMonth, debtDueIn, myTransactionShare, pendingSplits,
 } from './month.js';
 
 /*
@@ -786,4 +786,50 @@ test('octubre trae la cuota, así que deja MENOS libre que septiembre', () => {
   const oct = monthPlan(conDesembolso, '2026-10');
   assert.equal(sept.variable, oct.variable, 'el mismo estimado en los dos');
   assert.equal(sept.availableForExtra - oct.availableForExtra, 446_413);
+});
+
+/* --------------------------------------------- cuentas divididas --- */
+
+const conCena = {
+  ...estado,
+  transactions: [{
+    id: 'cena', type: 'gasto', amount: 120_000, category: 'alimentacion', date: '2026-09-25',
+    note: 'Cena', shares: [
+      { id: 'r1', personId: 'p1', amount: 40_000, collectedAt: '2026-09-27' },
+      { id: 'r2', personId: 'p2', amount: 40_000, collectedAt: null },
+    ],
+  }],
+};
+
+test('de una cuenta dividida, el gasto del mes es solo tu parte', () => {
+  // Pagar la comida de dos amigos no es gastar de más: te lo devuelven.
+  assert.equal(myTransactionShare(conCena.transactions[0]), 40_000);
+  assert.equal(monthActual(conCena, '2026-09').variable, 40_000);
+});
+
+test('lo que te deben sigue pendiente aunque cambie el mes', () => {
+  const p = pendingSplits(conCena);
+  assert.deepEqual(p.map((x) => x.shareId), ['r2'], 'lo de p1 ya se pagó');
+  assert.equal(p[0].amount, 40_000);
+});
+
+test('un movimiento sin reparto es todo tuyo', () => {
+  assert.equal(myTransactionShare({ amount: 50_000 }), 50_000);
+});
+
+/* --------------------------------------------- pagos de proyecto --- */
+
+test('un pago de proyecto cuenta en el plan del mes en que se espera', () => {
+  const conProyecto = {
+    ...estado,
+    expectedIncomes: [
+      { id: 'x1', project: 'Web', name: 'Anticipo', amount: 2_000_000, expectedDate: '2026-09-20' },
+      { id: 'x2', project: 'Web', name: 'Entrega', amount: 3_000_000, expectedDate: '2026-11-05' },
+    ],
+  };
+  const sept = monthPlan(conProyecto, '2026-09');
+  const sinProyecto = monthPlan(estado, '2026-09');
+  assert.equal(sept.projectIncome, 2_000_000, 'el de noviembre no se cuela');
+  assert.equal(sept.income, sinProyecto.income + 2_000_000);
+  assert.equal(sept.fixedIncome, sinProyecto.income, 'y el fijo se ve aparte');
 });
