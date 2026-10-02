@@ -1469,10 +1469,12 @@ export function FinanceProvider({ children }) {
      * incluido uno de hoy guardado con la regla vieja, que es justo el que
      * tenía la gráfica congelada.
      */
-    const ancla = anchorFromBank(snapshot(), n, (fecha || todayStr()).slice(0, 10));
+    const dia = (fecha || todayStr()).slice(0, 10);
+    const ancla = anchorFromBank(snapshot(), n, dia);
     setBalanceAnchors((prev) => [
       ...prev.filter((a) => a.date < ancla.date),
-      { id: `ancla-${ancla.date}`, ...ancla },
+      /* El id lleva el día en que cuadraste: ahí se pinta el punto. */
+      { id: `ancla-${dia}`, ...ancla },
     ].sort((a, b) => (a.date < b.date ? -1 : 1)));
   }, [snapshot]);
 

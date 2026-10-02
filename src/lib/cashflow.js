@@ -35,7 +35,19 @@ export function balanceAnchors(estado) {
     || (estado && estado.balanceAnchor ? [estado.balanceAnchor] : []);
   return lista
     .filter((a) => a && a.date)
-    .map((a) => ({ date: String(a.date).slice(0, 10), amount: num(a.amount) }))
+    .map((a) => {
+      const date = String(a.date).slice(0, 10);
+      /*
+       * El día en que de verdad cuadraste. Un ajuste hecho hoy se guarda como
+       * el cierre de ayer (ver anchorFromBank), pero el punto y el brinco se
+       * dibujan hoy, que es cuando pasó: verlos en la fecha de ayer confundía.
+       * El día viaja en el id —ancla-AAAA-MM-DD— para no tener que migrar la
+       * tabla por un dato que solo cambia dónde se pinta el punto.
+       */
+      const m = /^ancla-(\d{4}-\d{2}-\d{2})$/.exec(String(a.id || ''));
+      const shown = m && m[1] > date ? m[1] : date;
+      return { date, amount: num(a.amount), shown };
+    })
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
 
@@ -151,20 +163,26 @@ export function buildCashFlow(estado, months) {
     deltaPorDia.set(e.date, (deltaPorDia.get(e.date) || 0) + e.delta);
     ultimoDelDia.set(e.date, e);
   });
-  const anclaPorDia = new Map(anclas.map((a) => [a.date, a]));
+  /* El ajuste se pinta en el día en que cuadraste, no en el que vale. */
+  const anclaPorDia = new Map(anclas.map((a) => [a.shown, a]));
   const fechas = [...new Set([...deltaPorDia.keys(), ...anclaPorDia.keys()])].sort();
 
   /* La suma cruda al cierre de cada día, para sacar el desfase de cada ajuste. */
+  const todas = [...new Set([...fechas, ...anclas.map((a) => a.date)])].sort();
   let crudo = 0;
   const crudoAl = new Map();
-  fechas.forEach((d) => { crudo += deltaPorDia.get(d) || 0; crudoAl.set(d, crudo); });
-  const desfases = anclas.map((a) => ({ date: a.date, valor: a.amount - crudoAl.get(a.date) }));
+  todas.forEach((d) => { crudo += deltaPorDia.get(d) || 0; crudoAl.set(d, crudo); });
+  const desfases = anclas.map((a) => ({ shown: a.shown, valor: a.amount - crudoAl.get(a.date) }));
 
-  /* El desfase que manda en una fecha: el del último ajuste hasta ese día. */
+  /*
+   * El desfase que manda en una fecha: el del último ajuste que ya se había
+   * hecho ese día. Cambia en el día en que cuadraste, así que ahí es donde la
+   * línea pega el brinco.
+   */
   const desfaseEn = (d) => {
     if (desfases.length === 0) return 0;
     let actual = desfases[0].valor;
-    desfases.forEach((x) => { if (x.date <= d) actual = x.valor; });
+    desfases.forEach((x) => { if (x.shown <= d) actual = x.valor; });
     return actual;
   };
 
@@ -180,7 +198,7 @@ export function buildCashFlow(estado, months) {
     desfasePrevio = desfase;
 
     if (ventana.size > 0 && !ventana.has(monthKeyFromDate(d))) return;
-    const ev = ultimoDelDia.get(d);
+    const ev = ultimoDelDia.get(d) || { kind: 'ancla', label: '' };
     puntos.push({
       date: d,
       saldo,

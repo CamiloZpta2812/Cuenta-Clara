@@ -197,7 +197,7 @@ test('lo del mismo día del ancla ya viene contado en ella', () => {
 });
 
 test('un ancla en cero es un ancla, no la falta de una', () => {
-  assert.deepEqual(balanceAnchor(conAncla), { date: '2026-09-09', amount: 0 });
+  assert.deepEqual(balanceAnchor(conAncla), { date: '2026-09-09', amount: 0, shown: '2026-09-09' });
   assert.equal(currentBalance(conAncla, '2026-09-30'), 1_226_287);
 });
 
@@ -313,4 +313,30 @@ test('un reintegro con su movimiento no sube el saldo dos veces', () => {
     balanceAnchors: [{ id: 'a', date: '2026-09-24', amount: 500_000 }],
   };
   assert.equal(currentBalance(cena, '2026-09-28'), 420_000);
+});
+
+test('el brinco se pinta el día en que cuadraste, no el de ayer', () => {
+  /*
+   * Cuadrar hoy guarda el ajuste como cierre de ayer, pero verlo en la fecha
+   * de ayer confundía. El punto y el brinco van hoy; las cuentas no cambian.
+   */
+  const estadoX = {
+    transactions: [
+      { id: 'a', type: 'gasto', amount: 100_000, category: 'alimentacion', date: '2026-09-29' },
+      { id: 'b', type: 'gasto', amount: 20_000, category: 'alimentacion', date: '2026-10-02' },
+    ],
+    buckets: [], debts: [],
+    balanceAnchors: [
+      { id: 'a1', date: '2026-09-28', amount: 1_000_000 },
+      /* Cuadró el 2 diciendo 600.000; guardado como cierre del 1. */
+      { id: 'ancla-2026-10-02', date: '2026-10-01', amount: 620_000 },
+    ],
+  };
+  const puntos = buildCashFlow(estadoX, []);
+  const del1 = puntos.find((p) => p.date === '2026-10-01');
+  const del2 = puntos.find((p) => p.date === '2026-10-02');
+  assert.equal(del1, undefined, 'ayer no tiene punto propio');
+  assert.equal(del2.ajuste, -280_000, 'el brinco cae hoy');
+  assert.equal(del2.saldo, 600_000, 'y hoy vale lo que dijo el banco');
+  assert.equal(currentBalance(estadoX, '2026-10-02'), 600_000, 'el saldo de hoy no cambia');
 });
