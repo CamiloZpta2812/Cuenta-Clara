@@ -331,7 +331,14 @@ function reservaKind(estado, bucketId) {
 export function monthActual(estado, month) {
   const transactions = (estado.transactions || []).filter((t) => monthKeyFromDate(t.date) === month);
 
-  const income = sum(transactions.filter((t) => t.type === 'ingreso'), (t) => t.amount);
+  /*
+   * Lo que te devuelven no es ingreso: el gasto ya se contó como solo tu
+   * parte. Contarlo aquí también sería contar dos veces a tu favor.
+   */
+  const income = sum(
+    transactions.filter((t) => t.type === 'ingreso' && t.category !== 'reintegro'),
+    (t) => t.amount,
+  );
   /* De una cuenta dividida, solo tu parte: el resto es plata que te devuelven. */
   const gastos = transactions
     .filter((t) => t.type === 'gasto')

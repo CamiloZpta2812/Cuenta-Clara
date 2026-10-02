@@ -75,10 +75,17 @@ export function cashEvents(estado) {
    * amigo vuelve a entrar el día en que te lo transfiere. Mientras no te
    * pague, no entra nada: esa plata está en la calle, no en el banco.
    */
+  /*
+   * Desde que marcar "ya me pagó" crea su propio ingreso, ese movimiento es
+   * el que sube la línea. Este camino queda solo para lo cobrado antes de
+   * eso, que no tiene movimiento: sin él, esos pagos desaparecerían del saldo.
+   */
+  const ids = new Set((estado.transactions || []).map((t) => t.id));
   (estado.transactions || []).forEach((t) => {
     (t.shares || []).forEach((r) => {
       const monto = num(r.amount);
       if (!r.collectedAt || monto === 0) return;
+      if (ids.has(`reintegro-${r.id}`)) return;
       eventos.push({
         date: r.collectedAt, delta: monto, kind: 'reintegro',
         label: t.note ? `Te pagaron: ${t.note}` : 'Te pagaron tu parte',
@@ -265,4 +272,24 @@ export function pulseRange(puntos, rangoId, hoy = todayStr()) {
     desde: out[0].date,
     base,
   };
+}
+
+/*
+ * El ajuste que hay que guardar cuando el banco dice "tienes X" hoy.
+ *
+ * Un ajuste es el saldo con el que CERRÓ un día, así que guardarlo con la
+ * fecha de hoy congelaba el resto del día: todo lo que registraras después
+ * con fecha de hoy quedaba "absorbido" dentro del ajuste y la línea ya no se
+ * movía. Parecía que la gráfica se había bloqueado.
+ *
+ * Se guarda entonces como el cierre de AYER: lo que dice el banco menos lo que
+ * ya tenías registrado hoy. Lo de hoy que ya estaba sigue contando, y lo que
+ * registres después también.
+ */
+export function anchorFromBank(estado, monto, hoy = todayStr()) {
+  const ayer = restarDias(hoy, 1);
+  const deHoy = cashEvents(estado)
+    .filter((e) => e.date === hoy)
+    .reduce((s, e) => s + e.delta, 0);
+  return { date: ayer, amount: Number(monto) - deHoy };
 }

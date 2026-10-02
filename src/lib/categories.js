@@ -19,7 +19,16 @@ export const INCOME_CATEGORIES = [
   { id: 'freelance', label: 'Independiente', icon: Laptop, color: '#4F9A6E' },
   { id: 'inversiones', label: 'Inversiones', icon: TrendingUp, color: '#2F8F6F' },
   { id: 'otros_ingreso', label: 'Otros ingresos', icon: CircleDollarSign, color: '#6BAF8A' },
+  /*
+   * Lo que te devuelven de una cuenta dividida o de un gasto compartido. Entra
+   * a la cuenta, pero no es ingreso: el gasto ya se contó como solo tu parte,
+   * así que sumarlo también como ingreso inflaría lo que entró en el mes.
+   */
+  { id: 'reintegro', label: 'Te devolvieron', icon: Banknote, color: '#8FB9A3' },
 ];
+
+/* Ingresos que mueven la cuenta pero no son ingreso del mes. Ver arriba. */
+export const NO_ES_INGRESO = new Set(['reintegro']);
 
 export const ALL_CATEGORIES = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES];
 

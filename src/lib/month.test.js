@@ -833,3 +833,18 @@ test('un pago de proyecto cuenta en el plan del mes en que se espera', () => {
   assert.equal(sept.income, sinProyecto.income + 2_000_000);
   assert.equal(sept.fixedIncome, sinProyecto.income, 'y el fijo se ve aparte');
 });
+
+test('lo que te devuelven no cuenta como ingreso del mes', () => {
+  /*
+   * La cena ya se contó como solo tu parte. Si lo que te paga Sofi contara
+   * además como ingreso, el mes saldría a tu favor dos veces por la misma plata.
+   */
+  const conReintegro = {
+    ...estado,
+    transactions: [
+      { id: 'sueldo', type: 'ingreso', amount: 1_700_000, category: 'salario', date: '2026-09-15' },
+      { id: 'reintegro-r1', type: 'ingreso', amount: 40_000, category: 'reintegro', date: '2026-09-27' },
+    ],
+  };
+  assert.equal(monthActual(conReintegro, '2026-09').income, 1_700_000);
+});

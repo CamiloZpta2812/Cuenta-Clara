@@ -17,7 +17,7 @@ import {
   myTransactionShare,
 } from '../lib/month.js';
 import { comparePlans, monthlyRateOf, replayPayments } from '../lib/amortization.js';
-import { buildCashFlow, currentBalance } from '../lib/cashflow.js';
+import { buildCashFlow, currentBalance, anchorFromBank } from '../lib/cashflow.js';
 import { buildQuincenas, monthGrid } from '../lib/quincenas.js';
 import { buildSplitShares, splitFromShares } from '../lib/split.js';
 import { monthPace, variableByCategory } from '../lib/analisis.js';
@@ -388,7 +388,7 @@ export function FinanceProvider({ children }) {
   );
   const netWorth = cashBalance + totalSavings - totalDebtRemaining;
 
-  const selMonthIncome = useMemo(() => transactions.filter((t) => t.type === 'ingreso' && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth]);
+  const selMonthIncome = useMemo(() => transactions.filter((t) => t.type === 'ingreso' && t.category !== 'reintegro' && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + t.amount, 0), [transactions, selectedMonth]);
   const selMonthExpense = useMemo(() => transactions.filter((t) => t.type === 'gasto' && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + myTransactionShare(t), 0), [transactions, selectedMonth]);
   const selMonthFixed = useMemo(() => transactions.filter((t) => t.type === 'gasto' && t.isFixed && monthKeyFromDate(t.date) === selectedMonth).reduce((s, t) => s + myTransactionShare(t), 0), [transactions, selectedMonth]);
   const selMonthVariable = Math.max(0, selMonthExpense - selMonthFixed);
@@ -401,7 +401,7 @@ export function FinanceProvider({ children }) {
     const txs = transactions.filter((t) => monthKeyFromDate(t.date) === key);
     return {
       label: monthLabel(key),
-      Ingresos: txs.filter((t) => t.type === 'ingreso').reduce((s, t) => s + t.amount, 0),
+      Ingresos: txs.filter((t) => t.type === 'ingreso' && t.category !== 'reintegro').reduce((s, t) => s + t.amount, 0),
       Gastos: txs.filter((t) => t.type === 'gasto').reduce((s, t) => s + myTransactionShare(t), 0),
     };
   }), [transactions, monthsWindow]);
@@ -1109,11 +1109,23 @@ export function FinanceProvider({ children }) {
    * Volver a tocarlo lo deshace.
    */
   function handleToggleSplitCollected(transactionId, shareId) {
-    setTransactions((prev) => prev.map((t) => (t.id !== transactionId ? t : {
-      ...t,
-      shares: (t.shares || []).map((r) => (r.id !== shareId ? r
-        : { ...r, collectedAt: r.collectedAt ? null : todayStr() })),
+    const t = transactions.find((x) => x.id === transactionId);
+    const r = t && (t.shares || []).find((x) => x.id === shareId);
+    if (!r) return;
+    const cobrar = !r.collectedAt;
+    setTransactions((prev) => prev.map((x) => (x.id !== transactionId ? x : {
+      ...x,
+      shares: (x.shares || []).map((y) => (y.id !== shareId ? y
+        : { ...y, collectedAt: cobrar ? todayStr() : null })),
     })));
+    /* Lo que te pagan entra como movimiento: es lo que de verdad pasó en el banco. */
+    const persona = people.find((p) => p.id === r.personId);
+    if (cobrar) {
+      crearReintegro(shareId, r.amount,
+        `${persona ? persona.name : 'Alguien'} te pagó · ${t.note || 'cuenta dividida'}`);
+    } else {
+      borrarReintegro(shareId);
+    }
   }
 
   /* ---------- Pagos de proyecto ---------- */
@@ -1232,11 +1244,44 @@ export function FinanceProvider({ children }) {
    * desmarcar es borrar la fila, no ponerle un `false` — así no hay que generar
    * cinco filas cada mes ni salir a limpiarlas si entra alguien nuevo.
    */
+  /*
+   * El movimiento de lo que te devuelven. Lleva un id que sale del cobro
+   * —reintegro-<id>— para que deshacer sepa exactamente cuál borrar, sin tener
+   * que buscarlo por monto y fecha y arriesgarse a borrar otro parecido.
+   */
+  function crearReintegro(id, monto, nota) {
+    setTransactions((prev) => [
+      ...prev.filter((t) => t.id !== `reintegro-${id}`),
+      {
+        id: `reintegro-${id}`, type: 'ingreso', amount: Number(monto) || 0,
+        category: 'reintegro', date: todayStr(), note: nota, paymentMethod: null, shares: [],
+      },
+    ]);
+  }
+  function borrarReintegro(id) {
+    setTransactions((prev) => prev.filter((t) => t.id !== `reintegro-${id}`));
+  }
+
+  /*
+   * Marcar un cobro de gasto fijo. Antes solo guardaba que te pagaron, y el
+   * saldo nunca se enteraba: Juanjo te pagaba lo del HBO y la cuenta seguía
+   * igual. Ahora crea el ingreso, que es lo que de verdad pasó en el banco.
+   */
   function handleToggleCollection(shareId) {
     const ya = collections.find((c) => c.month === selectedMonth && c.shareId === shareId);
-    if (ya) setCollections((prev) => prev.filter((c) => c.id !== ya.id));
-    else setCollections((prev) => [...prev,
-      { id: uid(), month: selectedMonth, shareId, collectedAt: todayStr() }]);
+    if (ya) {
+      setCollections((prev) => prev.filter((c) => c.id !== ya.id));
+      borrarReintegro(ya.id);
+      return;
+    }
+    const id = uid();
+    const fe = fixedExpenses.find((f) => (f.shares || []).some((r) => r.id === shareId));
+    const share = fe ? fe.shares.find((r) => r.id === shareId) : null;
+    const persona = share ? people.find((p) => p.id === share.personId) : null;
+    setCollections((prev) => [...prev, { id, month: selectedMonth, shareId, collectedAt: todayStr() }]);
+    if (share) {
+      crearReintegro(id, share.amount, `${persona ? persona.name : 'Alguien'} te pagó · ${fe.name}`);
+    }
   }
 
   /*
@@ -1414,12 +1459,22 @@ export function FinanceProvider({ children }) {
   const handleAnchorBalance = useCallback((monto, fecha) => {
     const n = Number(monto);
     if (monto === '' || monto === null || Number.isNaN(n)) return;
-    const dia = (fecha || todayStr()).slice(0, 10);
+    /*
+     * Se guarda como el cierre de AYER, no de hoy: si no, lo que registraras
+     * después con fecha de hoy quedaba tragado por el ajuste y la gráfica se
+     * veía bloqueada. Ver anchorFromBank en lib/cashflow.js.
+     *
+     * Los ajustes de ese día en adelante se descartan: el banco acaba de decir
+     * cuánto hay, y eso manda sobre cualquier ajuste anterior del mismo día —
+     * incluido uno de hoy guardado con la regla vieja, que es justo el que
+     * tenía la gráfica congelada.
+     */
+    const ancla = anchorFromBank(snapshot(), n, (fecha || todayStr()).slice(0, 10));
     setBalanceAnchors((prev) => [
-      ...prev.filter((a) => a.date !== dia),
-      { id: `ancla-${dia}`, date: dia, amount: n },
+      ...prev.filter((a) => a.date < ancla.date),
+      { id: `ancla-${ancla.date}`, ...ancla },
     ].sort((a, b) => (a.date < b.date ? -1 : 1)));
-  }, []);
+  }, [snapshot]);
 
   /* El último ajuste, que es el que dice desde cuándo se cuenta el saldo. */
   const balanceAnchor = balanceAnchors.length ? balanceAnchors[balanceAnchors.length - 1] : null;

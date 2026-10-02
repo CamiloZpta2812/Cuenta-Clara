@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  cashEvents, buildCashFlow, balanceAnchor, currentBalance, pulseRange,
+  cashEvents, buildCashFlow, balanceAnchor, currentBalance, pulseRange, anchorFromBank,
 } from './cashflow.js';
 
 const estado = {
@@ -274,4 +274,43 @@ test('lo del futuro no se dibuja', () => {
 
 test('sin puntos no revienta', () => {
   assert.deepEqual(pulseRange([], '1M', '2026-09-30').puntos, []);
+});
+
+/* ------------------------------------------- cuadrar con el banco hoy -- */
+
+test('cuadrar hoy no congela lo que registres después hoy', () => {
+  /*
+   * El bug que vio Camilo: cuadró con el banco y después registró un gasto de
+   * hoy, y el saldo no se movió. El ajuste se guardaba como cierre de hoy y se
+   * tragaba todo lo de hoy, incluso lo que venía después.
+   */
+  const antes = {
+    transactions: [{ id: 'a', type: 'gasto', amount: 20_000, category: 'alimentacion', date: '2026-10-02' }],
+    buckets: [], debts: [],
+  };
+  const ancla = anchorFromBank(antes, 500_000, '2026-10-02');
+  assert.deepEqual(ancla, { date: '2026-10-01', amount: 520_000 }, 'ayer, sumándole lo que ya salió hoy');
+
+  const conAncla = { ...antes, balanceAnchors: [{ id: 'x', ...ancla }] };
+  assert.equal(currentBalance(conAncla, '2026-10-02'), 500_000, 'hoy da lo que dijo el banco');
+
+  const despues = {
+    ...conAncla,
+    transactions: [...antes.transactions,
+      { id: 'b', type: 'gasto', amount: 15_000, category: 'transporte', date: '2026-10-02' }],
+  };
+  assert.equal(currentBalance(despues, '2026-10-02'), 485_000, 'y lo que registras después sí baja');
+});
+
+test('un reintegro con su movimiento no sube el saldo dos veces', () => {
+  const cena = {
+    transactions: [
+      { id: 'c', type: 'gasto', amount: 120_000, category: 'alimentacion', date: '2026-09-25',
+        shares: [{ id: 'r1', personId: 'sofi', amount: 40_000, collectedAt: '2026-09-27' }] },
+      { id: 'reintegro-r1', type: 'ingreso', amount: 40_000, category: 'reintegro', date: '2026-09-27' },
+    ],
+    buckets: [], debts: [],
+    balanceAnchors: [{ id: 'a', date: '2026-09-24', amount: 500_000 }],
+  };
+  assert.equal(currentBalance(cena, '2026-09-28'), 420_000);
 });
